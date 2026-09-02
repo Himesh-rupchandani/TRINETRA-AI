@@ -1,0 +1,225 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   TRINETRA AI — Modern Government Command Center design tokens
+   Neutral, high-density, readable at control-room distance.
+   ------------------------------------------------------------------ */
+@layer base {
+  :root {
+    /* Light operational theme (default) */
+    --surface-0: 243 246 250;
+    --surface-1: 255 255 255;
+    --surface-2: 248 250 253;
+    --surface-3: 241 244 249;
+    --line: 226 232 240;
+    --line-strong: 148 163 184;
+    --ink: 15 23 42;
+    --ink-muted: 71 85 105;
+    --ink-faint: 100 116 139;
+    --brand: 37 99 235;
+    --brand-soft: 219 234 254;
+  }
+
+  .dark {
+    /* Dark control-room theme (toggle) */
+    --surface-0: 9 13 20;
+    --surface-1: 16 22 32;
+    --surface-2: 22 30 42;
+    --surface-3: 30 41 56;
+    --line: 41 54 72;
+    --line-strong: 63 82 107;
+    --ink: 226 236 246;
+    --ink-muted: 148 168 190;
+    --ink-faint: 108 128 150;
+    --brand: 96 165 250;
+    --brand-soft: 30 58 138;
+  }
+
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface-0 text-ink antialiased;
+    font-feature-settings: 'tnum' 1, 'cv05' 1;
+  }
+
+  /* Visible focus everywhere — accessibility requirement */
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgb(var(--surface-0));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line));
+    border-radius: 6px;
+    border: 2px solid rgb(var(--surface-0));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--line-strong));
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-surface-1 border border-line rounded-2xl shadow-panel;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between gap-3 px-4 h-12 border-b border-line shrink-0;
+  }
+
+  .panel-title {
+    @apply text-sm font-semibold text-ink;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold
+           tracking-normal px-3.5 h-9 transition-colors select-none
+           disabled:opacity-45 disabled:pointer-events-none whitespace-nowrap;
+  }
+  .btn-primary {
+    @apply btn bg-brand border-brand text-white shadow-sm hover:bg-brand/90;
+  }
+  .btn-solid {
+    @apply btn bg-brand border-brand text-white hover:opacity-90;
+  }
+  .btn-tint {
+    @apply btn bg-brand/10 border-brand/25 text-brand hover:bg-brand/15;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent border-line text-ink-muted hover:bg-surface-2 hover:text-ink;
+  }
+  .btn-danger {
+    @apply btn bg-critical/10 border-critical/30 text-critical hover:bg-critical/15;
+  }
+  .btn-xs {
+    @apply h-7 px-2.5 text-2xs gap-1 rounded-md;
+  }
+
+  .input {
+    @apply w-full h-9 rounded-lg border border-line bg-surface-1 px-3 text-sm text-ink
+           placeholder:text-ink-faint focus:border-brand focus:outline-none
+           focus-visible:outline-none focus:ring-2 focus:ring-brand/25;
+  }
+  .select {
+    @apply input pr-8 appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2394a3b8'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 14px;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-ink-faint mb-1.5;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-semibold
+           leading-4 whitespace-nowrap;
+  }
+
+  .kv-label {
+    @apply text-2xs font-medium text-ink-faint;
+  }
+  .kv-value {
+    @apply text-xs font-medium text-ink;
+  }
+
+  .data-table {
+    @apply w-full text-xs border-collapse;
+  }
+  .data-table thead th {
+    @apply sticky top-0 z-10 bg-surface-2 text-left text-xs font-semibold
+           text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3 border-b border-line/60 align-middle whitespace-nowrap;
+  }
+  .data-table tbody tr:hover {
+    @apply bg-surface-2;
+  }
+
+  .plate {
+    @apply font-mono font-bold tracking-wider;
+  }
+
+  .link-btn {
+    @apply inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline;
+  }
+
+  .scanline {
+    background-image: repeating-linear-gradient(
+      0deg,
+      rgb(255 255 255 / 0.03) 0px,
+      rgb(255 255 255 / 0.03) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded bg-surface-3;
+  }
+}
+
+/* ---------------- Leaflet theming ---------------- */
+/* Sit the Esri canvas slightly deeper in the dark theme without hurting label contrast. */
+.dark .leaflet-tile-pane {
+  filter: brightness(0.68) contrast(1.08);
+}
+
+.leaflet-container {
+  background: rgb(var(--surface-0));
+  font-family: inherit;
+  outline: none;
+}
+.leaflet-bar,
+.leaflet-control-attribution,
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgb(var(--surface-1)) !important;
+  color: rgb(var(--ink)) !important;
+  border-color: rgb(var(--line)) !important;
+}
+.leaflet-bar a {
+  background: rgb(var(--surface-1)) !important;
+  color: rgb(var(--ink)) !important;
+  border-bottom-color: rgb(var(--line)) !important;
+}
+.leaflet-bar a:hover {
+  background: rgb(var(--surface-3)) !important;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 4px !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35) !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+  min-width: 210px;
+}
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  opacity: 0.65;
+}
+.leaflet-marker-icon.trinetra-marker {
+  background: transparent;
+  border: 0;
+}
