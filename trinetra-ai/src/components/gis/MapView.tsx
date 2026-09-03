@@ -201,7 +201,7 @@ export function MapView({
           <Marker
             key={`${p.eventId}-${p.sequence}`}
             position={[p.latitude, p.longitude]}
-            icon={routeIcon(p.sequence, 'HIGH', p.sequence === activeRouteSequence)}
+            icon={routeIcon(p.sequence, 'HIGH', p.sequence === activeRouteSequence, '#2563eb')}
             eventHandlers={{ click: () => onSelectRoutePoint?.(p) }}
             zIndexOffset={500}
             title={`Sighting ${p.sequence} — ${p.cameraName}`}

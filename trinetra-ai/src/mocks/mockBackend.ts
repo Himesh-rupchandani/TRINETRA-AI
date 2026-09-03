@@ -28,6 +28,7 @@ import { buildMockHealth } from './health';
 import { haversineKm, minutesBetween, normalisePlate, sleep } from '@/lib/utils';
 import { config } from '@/lib/config';
 import { syntheticPoster } from '@/utils/syntheticEvidence';
+import { cameraStill } from '@/utils/mediaAssets';
 
 /* ------------------------------ mutable store ------------------------------ */
 
@@ -115,7 +116,7 @@ export async function getCameraStream(id: string): Promise<CameraStreamTicket> {
     streamType: live ? 'WEBRTC' : (cam.streamType ?? 'HLS'),
     streamUrl: live ? `${config.streamBasePath}/${cam.id}/whep` : '',
     expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
-    poster: syntheticPoster(cam.name, cam.status),
+    poster: cam.status === 'OFFLINE' ? syntheticPoster(cam.name, cam.status) : cameraStill(cam.id),
   };
 }
 

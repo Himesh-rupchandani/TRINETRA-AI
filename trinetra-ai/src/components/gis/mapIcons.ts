@@ -9,33 +9,34 @@ import type { CameraStatus, Severity } from '@/types';
 
 export function cameraIcon(status: CameraStatus, selected = false): L.DivIcon {
   const color = cameraStatusHex[status];
-  const size = selected ? 30 : 24;
+  const size = selected ? 18 : 14;
   return L.divIcon({
     className: 'trinetra-marker',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
-    html: `<div style="width:${size}px;height:${size}px;display:grid;place-items:center;">
-      <span style="position:absolute;width:${size}px;height:${size}px;border-radius:50%;background:${color};opacity:${selected ? 0.28 : 0.16};"></span>
-      <svg width="${size * 0.62}" height="${size * 0.62}" viewBox="0 0 24 24" fill="none"
-           stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
-           style="position:relative;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">
-        <path d="M2 7.5 17 4l1.6 6.2L3.6 13.7 2 7.5Z"/><path d="M6 13.2V20h9"/><circle cx="19" cy="17" r="3"/>
-      </svg>
-      ${selected ? `<span style="position:absolute;width:${size + 10}px;height:${size + 10}px;border-radius:50%;border:2px solid ${color};"></span>` : ''}
+    html: `<div style="position:relative;width:${size}px;height:${size}px;">
+      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};
+        border:2px solid #ffffff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>
+      ${selected ? `<div style="position:absolute;inset:-6px;border-radius:50%;border:2px solid ${color}"></div>` : ''}
     </div>`,
   });
 }
 
-export function routeIcon(sequence: number, severity: Severity = 'HIGH', active = false): L.DivIcon {
-  const color = severityHex[severity];
+export function routeIcon(
+  sequence: number,
+  severity: Severity = 'HIGH',
+  active = false,
+  color?: string,
+): L.DivIcon {
+  const fill = color ?? severityHex[severity];
   const size = active ? 30 : 25;
   return L.divIcon({
     className: 'trinetra-marker',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${fill};
       border:2px solid ${active ? '#ffffff' : 'rgba(255,255,255,.75)'};display:grid;place-items:center;
       box-shadow:0 2px 6px rgba(0,0,0,.55);font:700 ${size * 0.46}px/1 ui-monospace,monospace;color:#0b0f14;">
       ${sequence}</div>`,
