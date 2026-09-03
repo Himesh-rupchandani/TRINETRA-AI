@@ -4,6 +4,7 @@ import type { VehicleEvent } from '@/types';
 import { PlateLink } from '@/components/common/Links';
 import { EmptyState } from '@/components/common/Panel';
 import { cn, relativeTime, confidenceClass } from '@/lib/utils';
+import { hideBrokenImage, vehicleStill } from '@/utils/mediaAssets';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 
 export const EventRow = memo(function EventRow({ event }: { event: VehicleEvent }) {
@@ -17,12 +18,18 @@ export const EventRow = memo(function EventRow({ event }: { event: VehicleEvent 
     >
       <span
         className={cn(
-          'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
-          watch ? 'bg-rose-500/12 text-rose-500' : 'bg-slate-500/10 text-slate-400 dark:text-slate-500',
+          'relative grid h-9 w-14 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-surface-2 text-ink-faint',
+          watch && 'ring-1 ring-critical/70',
         )}
-        aria-hidden
       >
-        <Car size={14} />
+        <Car size={14} aria-hidden />
+        <img
+          src={vehicleStill(event.vehicleClass)}
+          alt=""
+          onError={hideBrokenImage}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">

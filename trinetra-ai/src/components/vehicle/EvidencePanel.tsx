@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { FileImage, ImageOff, MapPin, ScanLine } from 'lucide-react';
 import type { VehicleEvent } from '@/types';
 import { cn, formatDateTime, prettyPlate, prettyVehicleClass } from '@/lib/utils';
+import { hideBrokenImage, trackId, vehicleStill } from '@/utils/mediaAssets';
 import { ConfidenceBar } from '@/components/common/Links';
 import { EmptyState } from '@/components/common/Panel';
 
@@ -36,7 +37,50 @@ export function EvidencePanel({
   return (
     <div className={cn('flex flex-col gap-3.5 p-4', className)}>
       <figure className="overflow-hidden rounded border border-line bg-black">
-        {ev?.frameUrl ? (
+        {ev?.synthetic ? (
+          /* Demo frame: realistic per-class image + drawn ANPR overlay */
+          <div className="relative aspect-video w-full overflow-hidden bg-black">
+            <div className="absolute inset-0 grid place-items-center bg-surface-2 text-2xs text-ink-faint">
+              <span className="flex items-center gap-1.5">
+                <ScanLine size={12} aria-hidden />
+                CCTV frame · image not available
+              </span>
+            </div>
+            <img
+              src={vehicleStill(event.vehicleClass)}
+              alt={`CCTV frame from ${event.cameraName ?? event.cameraId} at ${formatDateTime(event.timestamp)}`}
+              onError={hideBrokenImage}
+              className="absolute inset-0 h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
+            {/* detection box */}
+            <div
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[54%] w-[46%] -translate-x-1/2 -translate-y-[53%] border-2 border-sky-400/90"
+              aria-hidden
+            />
+            {/* detection label */}
+            <div className="pointer-events-none absolute left-1/2 top-[25%] -translate-x-1/2 whitespace-nowrap bg-sky-400 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-900">
+              {prettyVehicleClass(event.vehicleClass)} · TRACK {trackId(event.id)}
+            </div>
+            {/* plate on the vehicle */}
+            <div className="pointer-events-none absolute left-1/2 top-[62%] -translate-x-1/2 rounded-sm bg-white px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-900 shadow">
+              {event.plate}
+            </div>
+            {/* top OSD */}
+            <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 bg-black/55 px-2 py-1 font-mono text-[10px] text-slate-200">
+              <span className="truncate">
+                {event.cameraName ?? event.cameraId.toUpperCase()} · {event.location}
+              </span>
+              <span className="shrink-0 tabular-nums">{formatDateTime(event.timestamp)}</span>
+            </div>
+            {/* bottom OSD */}
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-black/55 px-2 py-1 font-mono text-[10px]">
+              <span className="text-slate-400">TRINETRA AI · ANPR PIPELINE</span>
+              <span className="font-bold text-amber-400">DEMO / SYNTHETIC FRAME</span>
+            </div>
+          </div>
+        ) : ev?.frameUrl ? (
           <img
             src={ev.frameUrl}
             alt={`CCTV frame from ${event.cameraName ?? event.cameraId} at ${formatDateTime(event.timestamp)}`}

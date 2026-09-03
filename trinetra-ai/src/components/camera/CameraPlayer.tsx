@@ -5,6 +5,7 @@ import { cameraService } from '@/services/cameraService';
 import { useWhepStream } from '@/hooks/useWhepStream';
 import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
+import { config } from '@/lib/config';
 import { StatusChip } from '@/components/common/Chips';
 
 /**
@@ -89,6 +90,9 @@ export function CameraPlayer({
   const showVideo = wanted && Boolean(ticket?.streamUrl);
   const onAir = phase === 'LIVE' || phase === 'STALLED';
   const showPoster = ticket?.poster ?? poster;
+  /** Demo mode with no reachable gateway: show a clean demo frame, not an error. */
+  const demoFeed =
+    config.useMocks && !onAir && (noSource || Boolean(ticketError) || phase === 'UNAVAILABLE');
 
   // Measured values win over catalogue metadata; fall back only when unknown.
   const shownRes =
@@ -169,9 +173,38 @@ export function CameraPlayer({
           </span>
         </div>
 
-        {/* Idle / connecting / error overlay */}
+        {/* Idle / connecting / error overlay — or a clean demo frame in mock mode */}
         {!onAir && (
-          <div className="absolute inset-0 z-20 grid place-items-center bg-black/60 px-4 text-center">
+          <div
+            className={cn(
+              'absolute inset-0 z-20 px-4',
+              demoFeed
+                ? 'flex flex-col justify-end'
+                : 'grid place-items-center bg-black/60 text-center',
+            )}
+          >
+            {demoFeed ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-lg bg-black/55 px-3 py-2">
+                <span className="flex items-center gap-2">
+                  <span className="chip border-amber-400/50 bg-black/40 text-amber-300">
+                    <CircleDot size={9} className="animate-pulse" aria-hidden /> DEMO FEED
+                  </span>
+                  <span className="text-2xs text-white/75">
+                    Showing a demo frame — live camera not reachable from here.
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="btn-ghost btn-xs border-white/30 text-white/85"
+                  onClick={() => {
+                    if (ticket?.streamUrl) retryNow();
+                    else void requestStream();
+                  }}
+                >
+                  Try live
+                </button>
+              </div>
+            ) : (
             <div className="max-w-md">
               {connecting ? (
                 <div>
@@ -272,6 +305,7 @@ export function CameraPlayer({
                 </>
               )}
             </div>
+            )}
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@ import type { Camera } from '@/types';
 import { StatusChip } from '@/components/common/Chips';
 import { cn, formatTime, relativeTime } from '@/lib/utils';
 import { config } from '@/lib/config';
-import { syntheticScene } from '@/utils/syntheticEvidence';
+import { cameraStill, hideBrokenImage } from '@/utils/mediaAssets';
 
 interface Props {
   camera: Camera;
@@ -22,8 +22,8 @@ interface Props {
  */
 export const CameraCard = memo(function CameraCard({ camera, onView, compact, selected, variant = 'card' }: Props) {
   const preview = useMemo(
-    () => (config.useMocks ? syntheticScene(camera.name, camera.location) : null),
-    [camera.name, camera.location],
+    () => (config.useMocks ? cameraStill(camera.id) : null),
+    [camera.id],
   );
 
   if (variant === 'list') {
@@ -35,13 +35,18 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
           selected && 'border-brand/50 ring-1 ring-brand/20',
         )}
       >
-        {preview ? (
-          <img src={preview} alt="" className="h-12 w-[76px] shrink-0 rounded-lg border border-line object-cover" loading="lazy" />
-        ) : (
-          <span className="grid h-12 w-[76px] shrink-0 place-items-center rounded-lg border border-line bg-surface-2 text-ink-faint">
-            <Video size={16} aria-hidden />
-          </span>
-        )}
+        <span className="relative grid h-12 w-[76px] shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-surface-2 text-ink-faint">
+          <Video size={16} aria-hidden />
+          {preview && (
+            <img
+              src={preview}
+              alt=""
+              onError={hideBrokenImage}
+              className="absolute inset-0 h-full w-full object-cover"
+              loading="lazy"
+            />
+          )}
+        </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-mono text-xs font-bold text-ink">{camera.name}</p>
           <p className="mt-0.5 flex items-center gap-1 truncate text-2xs text-ink-faint">
@@ -62,13 +67,25 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
       )}
     >
       {!compact && (
-        preview ? (
-          <img src={preview} alt="" className="aspect-video w-full border-b border-line object-cover" loading="lazy" />
-        ) : (
+        <div className="relative">
           <div className="grid aspect-video w-full place-items-center border-b border-line bg-surface-2 text-ink-faint">
             <Video size={18} aria-hidden />
           </div>
-        )
+          {preview && (
+            <img
+              src={preview}
+              alt=""
+              onError={hideBrokenImage}
+              className="absolute inset-0 aspect-video w-full border-b border-line object-cover"
+              loading="lazy"
+            />
+          )}
+          {preview && (
+            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-amber-300">
+              DEMO
+            </span>
+          )}
+        </div>
       )}
 
       <div className="flex items-start justify-between gap-2.5 px-4 py-3">
