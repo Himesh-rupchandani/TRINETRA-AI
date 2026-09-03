@@ -1,0 +1,37 @@
+# TRINETRA AI — CV engine dependencies (Python >= 3.11).
+#
+# Install:
+#   python -m venv .venv && . .venv/bin/activate
+#   pip install -r cv-engine/requirements.txt
+#   bash cv-engine/scripts/install_dev_env.sh        # convenience wrapper
+#
+# NOTE on OpenCV: ultralytics transitively installs the *GUI* opencv-python,
+# which needs system libGL. On headless/servers keep the headless build:
+#   pip uninstall -y opencv-python opencv-contrib-python
+#   pip install opencv-python-headless
+# (install_dev_env.sh handles this ordering for you.)
+
+numpy>=1.24
+opencv-python-headless>=4.9
+requests>=2.31
+psutil>=5.9
+
+# Detection + tracking (YOLO11 + ByteTrack). ByteTrack needs lap.
+torch>=2.1
+torchvision>=0.16
+ultralytics>=8.3
+lap>=0.5.12
+
+# OCR. rapidocr ships the PP-OCR (PaddleOCR) models in the wheel -> works with
+# no network access (default engine). easyocr is optional; its weights are
+# fetched from GitHub on first use, so only enable it on a normal network.
+onnxruntime>=1.16
+rapidocr-onnxruntime>=1.4
+easyocr>=1.7 ; python_version >= "3.8"
+
+# Optional: true demuxer PTS + per-stream codec info (auto-used when present).
+av>=12.0 ; platform_system != "Windows"
+
+# Tests
+pytest>=8.0
+pytest-timeout>=2.2
