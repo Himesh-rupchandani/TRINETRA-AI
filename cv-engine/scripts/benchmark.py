@@ -38,6 +38,7 @@ def main():
     src.add_argument("--camera", help="Sentinel camera id (live)")
     ap.add_argument("--frames", type=int, default=300)
     ap.add_argument("--imgsz", type=int, default=None)
+    ap.add_argument("--model", default=None, help="model path (overrides MODEL_PATH)")
     args = ap.parse_args()
 
     from config.settings import Settings
@@ -49,6 +50,8 @@ def main():
     settings = Settings.from_env()
     if args.imgsz:
         settings.inference_imgsz = args.imgsz
+    if args.model:
+        settings.model_path = args.model
 
     # --- source ---------------------------------------------------------
     if args.video:
