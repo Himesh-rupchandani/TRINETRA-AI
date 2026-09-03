@@ -1,0 +1,4 @@
+# TRINETRA reference backend (bridges CV engine -> control-room UI).
+fastapi>=0.110
+uvicorn[standard]>=0.29
+# The CV engine itself (see cv-engine/requirements.txt) runs in-process.
