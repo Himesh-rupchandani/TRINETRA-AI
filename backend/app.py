@@ -43,12 +43,52 @@ _EVENTS: list[dict] = []          # camelCase VehicleEvent (frontend shape)
 _ALERTS: list[dict] = []
 _SUBSCRIBERS: list[queue.Queue] = []
 
-CAMERA = {
-    "id": "cam04", "name": "Paldi Circle", "location": "Paldi, Ahmedabad",
-    "latitude": 23.0126, "longitude": 72.5647, "department": "Police",
-    "status": "ONLINE", "codec": "H264", "width": 1920, "height": 1080,
-    "fps": 25, "streamType": "RTSP", "zone": "Central",
-}
+# Model-1 CCTV registry (mirrors what the Sentinel gateway publishes). The *grid*
+# comes from here; which cameras actually produce AI events is live CV data.
+_SEEDS = [
+    ("CAM01", "Law Garden Circle", 23.0225, 72.5595, "Traffic Police", "Central", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM02", "Ellis Bridge", 23.0234, 72.5714, "Traffic Police", "Central", "ONLINE", "H264", 2560, 1440, 25),
+    ("CAM03", "Anjali Cross Roads", 22.995, 72.548, "Municipal (AMC)", "South", "ONLINE", "H264", 1280, 720, 20),
+    ("CAM04", "Paldi Circle", 23.0126, 72.5647, "Police", "Central", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM05", "Navrangpura Circle", 23.0367, 72.56, "Police", "West", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM06", "Gujarat University Junction", 23.0395, 72.545, "Traffic Police", "West", "ONLINE", "H265", 1280, 720, 15),
+    ("CAM07", "Panjrapole Cross Road", 23.029, 72.548, "Traffic Police", "West", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM08", "Lal Darwaja Terminus", 23.025, 72.58, "Police", "Central", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM09", "Kalupur Railway Station", 23.0272, 72.6014, "Railway Police", "East", "ONLINE", "H264", 2560, 1440, 30),
+    ("CAM10", "Jamalpur Gate", 23.013, 72.582, "Police", "Central", "ONLINE", "H264", 1280, 720, 20),
+    ("CAM11", "Delhi Darwaja", 23.04, 72.59, "Municipal (AMC)", "Central", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM12", "Kankaria Lake Circle", 22.999, 72.602, "Police", "South", "ONLINE", "H265", 1920, 1080, 25),
+    ("CAM13", "CTM Cross Road", 22.99, 72.625, "Traffic Police", "South", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM14", "Isanpur Cross Road", 22.97, 72.6, "Traffic Police", "South", "ONLINE", "H264", 1280, 720, 20),
+    ("CAM15", "Vatva GIDC Gate", 22.96, 72.63, "Industrial Security", "South", "ONLINE", "H264", 1280, 720, 12),
+    ("CAM16", "Narol Circle", 22.955, 72.585, "Highway Authority", "South", "ONLINE", "H264", 2560, 1440, 30),
+    ("CAM17", "Odhav Ring Road", 23.028, 72.665, "Highway Authority", "East", "ONLINE", "H265", 1920, 1080, 30),
+    ("CAM18", "Nikol Circle", 23.045, 72.665, "Police", "East", "ONLINE", "H265", 1920, 1080, 25),
+    ("CAM19", "Bapunagar Char Rasta", 23.04, 72.64, "Police", "East", "ONLINE", "H264", 1280, 720, 20),
+    ("CAM20", "Naroda Patiya", 23.07, 72.66, "Traffic Police", "East", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM21", "Airport Circle Hansol", 23.073, 72.626, "Airport Security", "North", "ONLINE", "H264", 2560, 1440, 30),
+    ("CAM22", "Riverfront West Promenade", 23.05, 72.575, "Municipal (AMC)", "Central", "ONLINE", "H265", 1920, 1080, 25),
+    ("CAM23", "Gandhi Ashram Gate", 23.06, 72.58, "Police", "North", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM24", "RTO Circle Subhash Bridge", 23.055, 72.586, "Transport Dept", "North", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM25", "Motera Stadium Approach", 23.092, 72.597, "Police", "North", "ONLINE", "H264", 2560, 1440, 30),
+    ("CAM26", "Chandkheda Circle", 23.11, 72.59, "Traffic Police", "North", "OFFLINE", "H265", 1280, 720, 20),
+    ("CAM27", "Vastrapur Lake Junction", 23.0395, 72.529, "Police", "West", "ONLINE", "H264", 1920, 1080, 25),
+    ("CAM28", "Iskcon Cross Roads", 23.027, 72.507, "Traffic Police", "West", "DEGRADED", "H264", 2560, 1440, 30),
+    ("CAM29", "S.G. Highway Bopal", 23.03, 72.47, "Highway Authority", "West", "OFFLINE", "H264", 2560, 1440, 30),
+    ("CAM30", "Sarkhej Circle", 22.98, 72.5, "Highway Authority", "West", "DEGRADED", "H264", 1920, 1080, 25),
+]
+REGISTRY = [
+    {
+        "id": s[0].lower(), "name": s[0], "location": s[1], "latitude": s[2],
+        "longitude": s[3], "department": s[4], "zone": s[5], "status": s[6],
+        "codec": s[7], "width": s[8], "height": s[9], "fps": s[10], "streamType": "WEBRTC",
+    }
+    for s in _SEEDS
+]
+CAMERA_BY_ID = {c["id"]: c for c in REGISTRY}
+CAMERA = CAMERA_BY_ID["cam04"]
+#: Cameras the CV engine is actually processing right now (real AI).
+CV_ACTIVE = {"cam04"}
 
 WATCHLIST = [
     {
