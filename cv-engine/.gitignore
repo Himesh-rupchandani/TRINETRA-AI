@@ -1,0 +1,8 @@
+# model weights & dev artifacts — never commit
+*.pt
+*.onnx
+*.engine
+models_dev/
+evidence/
+__pycache__/
+*.pyc
