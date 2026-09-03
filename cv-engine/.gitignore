@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment / secrets — never commit a .env
+.env
+.venv/
+venv/
+
+# Model weights: fetched by scripts/fetch_models.sh, not versioned (5.4 MB binaries)
+models/
+
+# Runtime output: evidence frames, dead-letter events, benchmarks
+var/
+*.mp4
+!tests/fixtures/*.mp4
