@@ -24,6 +24,7 @@ def build_event(
     plate: Optional[dict] = None, # PlateMemory.best() result or None
     evidence_ref: Optional[str] = None,
     event_time: Optional[datetime] = None,
+    pts_ms: Optional[float] = None,  # authoritative packet PTS fallback
 ) -> dict:
     """
     Build a validated backend event dict.
@@ -33,13 +34,19 @@ def build_event(
     """
     ts = event_time or datetime.now(timezone.utc)
 
+    # Tracks not matched on the current frame can carry a sentinel (-1) PTS;
+    # the capture packet's PTS is the authoritative timing source (spec §10).
+    pts = track.last_pts_ms
+    if pts is None or pts < 0:
+        pts = pts_ms
+
     event = {
         "camera_id": camera.camera_id,
         "vehicle_id": int(track.track_id),
         "plate_raw": plate.get("plate_raw") if plate else None,
         "plate": plate.get("plate") if plate else None,
         "plate_confidence": float(plate["confidence"]) if plate else None,
-        "timestamp_pts": float(track.last_pts_ms) if track.last_pts_ms is not None else None,
+        "timestamp_pts": float(pts) if pts is not None else None,
         "event_time": ts.isoformat().replace("+00:00", "Z"),
         "latitude": camera.latitude if camera.has_location() else None,
         "longitude": camera.longitude if camera.has_location() else None,

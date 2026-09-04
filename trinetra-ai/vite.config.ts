@@ -43,6 +43,12 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: true,
     proxy: {
       '/sentinel': sentinelProxy,
+      // CV engine's annotated MJPEG preview (live detection boxes).
+      '/cvfeed': {
+        target: process.env.CV_FEED_ORIGIN ?? 'http://localhost:8555',
+        changeOrigin: true,
+        secure: false,
+      },
       ...(mode === 'development' && process.env.BACKEND_ORIGIN
         ? {
             '/api': {
@@ -61,7 +67,14 @@ export default defineConfig(({ mode }) => ({
     host: '0.0.0.0',
     port: 4173,
     allowedHosts: true,
-    proxy: { '/sentinel': sentinelProxy },
+    proxy: {
+      '/sentinel': sentinelProxy,
+      '/cvfeed': {
+        target: process.env.CV_FEED_ORIGIN ?? 'http://localhost:8555',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   build: {
     target: 'es2020',

@@ -7,3 +7,6 @@ models_dev/
 evidence_out/
 __pycache__/
 *.pyc
+
+# local demo feed videos (large binaries — place manually, see scripts/run_feed_demo.py)
+feeds/

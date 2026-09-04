@@ -265,6 +265,15 @@ class CameraStream:
                         if self.source_type == "file":
                             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                             ok_loop, frame_loop = self.cap.read()
+                            if not (ok_loop and frame_loop is not None and frame_loop.size > 0):
+                                # Some containers cannot seek backwards reliably
+                                # (e.g. AVI) — reopen the source from scratch.
+                                try:
+                                    self.cap.release()
+                                except Exception:
+                                    pass
+                                self.cap = cv2.VideoCapture(self.source)
+                                ok_loop, frame_loop = self.cap.read()
                             if ok_loop and frame_loop is not None and frame_loop.size > 0:
                                 self.frame_count += 1
                                 self.sequence_number += 1

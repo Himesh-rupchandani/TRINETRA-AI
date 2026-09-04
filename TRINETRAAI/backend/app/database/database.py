@@ -56,6 +56,9 @@ def _auto_migrate(target_engine=None):
             ("codec", "VARCHAR(50) DEFAULT 'H264'"),
             ("width", "INTEGER DEFAULT 1920"),
             ("height", "INTEGER DEFAULT 1080"),
+            ("department", "VARCHAR(100)"),
+            ("zone", "VARCHAR(50)"),
+            ("fps", "INTEGER"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE cameras ADD COLUMN {col} {col_def}"))

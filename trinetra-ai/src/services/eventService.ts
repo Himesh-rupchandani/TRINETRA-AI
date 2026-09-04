@@ -18,7 +18,7 @@ interface PaginatedEventsDto {
 function toParams(f: EventFilters, page: number, pageSize: number) {
   const p: Record<string, string | number> = { page, size: pageSize };
   if (f.plate) p.plate_number = normalisePlate(f.plate);
-  if (f.cameraId && f.cameraId !== 'ALL') p.camera_id = f.cameraId;
+  if (f.cameraId && f.cameraId !== 'ALL') p.camera_id = f.cameraId.toUpperCase();
   if (f.watchlistOnly) p.watchlist_match = 'true';
   if (f.dateFrom) p.from_time = f.timeFrom ? `${f.dateFrom}T${f.timeFrom}` : `${f.dateFrom}T00:00:00`;
   if (f.dateTo) p.to_time = f.timeTo ? `${f.dateTo}T${f.timeTo}` : `${f.dateTo}T23:59:59`;
@@ -69,7 +69,8 @@ export const eventService = {
     if (isMockMode) return mock.getEventsByCamera(cameraId, limit);
     const [res, dir] = await Promise.all([
       get<PaginatedEventsDto>('/events', {
-        params: { camera_id: cameraId, page: 1, size: Math.min(limit, 100) },
+        // Backend stores the registry's canonical (uppercase) camera id.
+        params: { camera_id: cameraId.toUpperCase(), page: 1, size: Math.min(limit, 100) },
       }),
       cameraDirectory().catch(() => null),
     ]);
