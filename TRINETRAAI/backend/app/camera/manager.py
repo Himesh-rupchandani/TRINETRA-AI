@@ -196,6 +196,7 @@ class CameraManager:
             "last_pts_ms": stream.last_pts_ms,
             "last_seen": stream.last_seen,
             "last_error": stream.last_error,
+            "is_demo_feed": stream.is_demo_feed,
         }
 
     def update_annotated_frame(self, camera_id: str, frame: np.ndarray):

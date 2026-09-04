@@ -163,6 +163,8 @@ export interface CameraDto {
   stream_type?: string | null;
   stream_url?: string | null;
   last_seen?: string | null;
+  is_demo_feed?: boolean;
+  last_error?: string | null;
 }
 
 export function toCamera(dto: CameraDto): Camera {
@@ -182,6 +184,8 @@ export function toCamera(dto: CameraDto): Camera {
     height: num(dto.height),
     streamType: (upper(dto.stream_type) as StreamType) ?? undefined,
     lastSeen: toIso(dto.last_seen),
+    isDemoFeed: dto.is_demo_feed === true,
+    lastError: dto.last_error ?? undefined,
   };
 }
 

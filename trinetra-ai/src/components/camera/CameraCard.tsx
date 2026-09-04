@@ -102,6 +102,20 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
         <StatusChip status={camera.status} />
       </div>
 
+      {/*
+        Honesty about the feed (spec Phase 4 / 35): when the real source is
+        unreachable the backend serves synthetic frames. Say so plainly rather
+        than letting the operator read it as a live camera.
+      */}
+      {camera.isDemoFeed && (
+        <p
+          className="mx-4 mb-2 rounded border border-degraded/40 bg-degraded/10 px-2 py-1 text-2xs text-degraded"
+          title={camera.lastError ?? undefined}
+        >
+          Synthetic demo feed — live source unreachable
+        </p>
+      )}
+
       {!compact && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 pb-3 text-2xs">
           <dt className="text-ink-faint">Department</dt>

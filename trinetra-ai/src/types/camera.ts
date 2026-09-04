@@ -22,6 +22,13 @@ export interface Camera {
   /** Short-lived, backend-signed playback URL. Absent until requested. */
   streamUrl?: string;
   lastSeen?: string;
+  /**
+   * True when the backend is serving synthetic frames because the real source
+   * is unreachable. Such a camera is NOT a live feed and must be labelled.
+   */
+  isDemoFeed?: boolean;
+  /** Why the live source failed, when the backend reports it. */
+  lastError?: string;
   /** ISO timestamp of the most recent AI event on this camera. */
   lastEventAt?: string;
   eventCount24h?: number;

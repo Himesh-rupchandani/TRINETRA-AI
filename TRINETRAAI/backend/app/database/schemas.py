@@ -69,6 +69,10 @@ class CameraItem(BaseModel):
     stream_type: str = "HLS"
     stream_url: str
     last_seen: Optional[datetime] = None
+    # True when the backend is serving synthetic frames because the real
+    # source is unreachable — the UI must label this, never show it as live.
+    is_demo_feed: bool = False
+    last_error: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

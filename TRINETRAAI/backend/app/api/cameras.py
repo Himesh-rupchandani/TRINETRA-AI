@@ -62,6 +62,8 @@ def _serialize_camera(cam: Camera) -> CameraItem:
         stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
         stream_url=cam.stream_url,
         last_seen=last_seen,
+        is_demo_feed=bool(stream_status.get("is_demo_feed")) if stream_status else False,
+        last_error=stream_status.get("last_error") if stream_status else None,
     )
 
 

@@ -74,6 +74,11 @@ class CameraStream:
         # Discontinuity Detection (Rule 7)
         self._just_reconnected: bool = True
         self.last_error: Optional[str] = None
+
+        # True when this camera is serving synthetic DEMO frames because the
+        # real source is unreachable. Such a camera must never be reported as
+        # a healthy ONLINE live feed (spec Phase 4 / 35).
+        self.is_demo_feed: bool = False
         
         # Failure & Degraded State Tracking (Rules 4 & 6)
         self._consecutive_read_failures: int = 0
@@ -106,6 +111,7 @@ class CameraStream:
         """Internal connection routine applying Rule 1 (RTSP over TCP) and HLS fallback."""
         self.state = CameraState.CONNECTING
         self.last_error = None
+        self.is_demo_feed = False
         logger.info(f"[{self.camera_id}] Connecting to {self.source_type.upper()} source: {self.source}")
 
         # Clean up existing capture if any
@@ -183,7 +189,13 @@ class CameraStream:
                 logger.warning(
                     f"[{self.camera_id}] Live stream unreachable. Activating DEMO synthetic feed (DEMO_MODE=True)."
                 )
-                self.state = CameraState.ONLINE
+                # DEGRADED, not ONLINE: frames are synthetic, so the control
+                # room must not show this as a healthy live camera.
+                self.is_demo_feed = True
+                self.last_error = (
+                    f"Live source unreachable ({self.source}); serving DEMO synthetic feed."
+                )
+                self.state = CameraState.DEGRADED
                 self.last_seen = utc_now()
                 self._last_successful_read_mono = time.monotonic()
                 self._stream_start_mono = time.monotonic()
@@ -204,7 +216,11 @@ class CameraStream:
             logger.error(f"[{self.camera_id}] Exception during connect: {e}")
 
             if settings.DEMO_MODE:
-                self.state = CameraState.ONLINE
+                # Synthetic frames after a connect exception: DEGRADED, and the
+                # original error is preserved for the operator.
+                self.is_demo_feed = True
+                self.last_error = f"{e} — serving DEMO synthetic feed."
+                self.state = CameraState.DEGRADED
                 self.last_seen = utc_now()
                 self._last_successful_read_mono = time.monotonic()
                 self._stream_start_mono = time.monotonic()
@@ -323,7 +339,10 @@ class CameraStream:
                     self.frame_count += 1
                     self.sequence_number += 1
                     self.last_seen = utc_now()
-                    self.state = CameraState.ONLINE
+                    # Synthetic frames keep the camera DEGRADED, never ONLINE:
+                    # producing frames is not the same as having a live feed.
+                    self.is_demo_feed = True
+                    self.state = CameraState.DEGRADED
                     pts_ms = float((time.time() - self._stream_start_mono) * 1000.0) if self._stream_start_mono > 0 else float(time.time() * 1000)
                     is_discontinuity = self._detect_discontinuity(pts_ms)
                     self.last_pts_ms = pts_ms
