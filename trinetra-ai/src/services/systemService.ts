@@ -1,6 +1,7 @@
 import type { DashboardKpis, SystemSummary } from '@/types';
 import { get, isMockMode } from './api';
 import * as mock from '@/mocks/mockBackend';
+import { mapHealth, mapKpis } from './adapters';
 import { config } from '@/lib/config';
 
 /**
@@ -77,7 +78,9 @@ async function probeSentinelGrid(): Promise<GridProbe> {
 
 export const systemService = {
   async health(): Promise<SystemSummary> {
-    const summary = isMockMode ? await mock.getHealth() : await get<SystemSummary>('/health');
+    const summary = isMockMode
+      ? await mock.getHealth()
+      : mapHealth(await get<Record<string, unknown>>('/health'));
     if (!config.liveStreams) return summary;
 
     const probe = await probeSentinelGrid();
@@ -97,7 +100,8 @@ export const systemService = {
     return { ...summary, services, generatedAt: new Date().toISOString() };
   },
 
-  kpis(): Promise<DashboardKpis> {
-    return isMockMode ? mock.getKpis() : get<DashboardKpis>('/stats/kpis');
+  async kpis(): Promise<DashboardKpis> {
+    if (isMockMode) return mock.getKpis();
+    return mapKpis(await get<Record<string, unknown>>('/stats/kpis'));
   },
 };

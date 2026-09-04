@@ -2,24 +2,35 @@ import type { VehicleEvent, VehicleProfile, VehicleRoute, WatchlistRecord } from
 import { get, isMockMode } from './api';
 import * as mock from '@/mocks/mockBackend';
 import { normalisePlate } from '@/lib/utils';
+import { mapEvent, mapRoute, mapVehicleProfile, mapWatchlist, unwrapList } from './adapters';
 
 export const vehicleService = {
-  events(plate: string): Promise<VehicleEvent[]> {
+  async events(plate: string): Promise<VehicleEvent[]> {
     const p = normalisePlate(plate);
-    return isMockMode ? mock.getVehicleEvents(p) : get<VehicleEvent[]>(`/vehicles/${p}/events`);
+    if (isMockMode) return mock.getVehicleEvents(p);
+    // Chronological, newest-last: the trace is an ordered sighting sequence.
+    const events = unwrapList(
+      await get<unknown>(`/vehicles/${encodeURIComponent(p)}/events`, { params: { size: 100, page: 1 } }),
+    ).map(mapEvent);
+    return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   },
 
-  route(plate: string): Promise<VehicleRoute> {
+  async route(plate: string): Promise<VehicleRoute> {
     const p = normalisePlate(plate);
-    return isMockMode ? mock.getVehicleRoute(p) : get<VehicleRoute>(`/vehicles/${p}/route`);
+    if (isMockMode) return mock.getVehicleRoute(p);
+    return mapRoute(await get<unknown>(`/vehicles/${encodeURIComponent(p)}/route`));
   },
 
-  profile(plate: string): Promise<VehicleProfile | null> {
+  async profile(plate: string): Promise<VehicleProfile | null> {
     const p = normalisePlate(plate);
-    return isMockMode ? mock.getVehicleProfile(p) : get<VehicleProfile | null>(`/vehicles/${p}`);
+    if (isMockMode) return mock.getVehicleProfile(p);
+    return mapVehicleProfile(await get<unknown>(`/vehicles/${encodeURIComponent(p)}`));
   },
 
-  watchlist(): Promise<WatchlistRecord[]> {
-    return isMockMode ? mock.getWatchlist() : get<WatchlistRecord[]>('/watchlist');
+  async watchlist(): Promise<WatchlistRecord[]> {
+    if (isMockMode) return mock.getWatchlist();
+    return unwrapList(await get<unknown>('/watchlist', { params: { size: 100, page: 1 } })).map(
+      mapWatchlist,
+    );
   },
 };

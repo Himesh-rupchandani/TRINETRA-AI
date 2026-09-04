@@ -41,6 +41,8 @@ export interface VehicleProfile {
   firstSeen?: string;
   lastSeen?: string;
   totalSightings: number;
+  /** Distinct cameras that have recorded this plate. */
+  camerasTouched?: number;
   watchlist?: WatchlistRecord | null;
 }
 
