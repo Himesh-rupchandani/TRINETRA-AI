@@ -5,6 +5,7 @@ import { mockCameras } from '@/mocks/cameras';
 import { watchlistByPlate } from '@/mocks/watchlist';
 import { pushMockEvent, setMockCameraStatus } from '@/mocks/mockBackend';
 import { syntheticFrame, syntheticPlateCrop } from '@/utils/syntheticEvidence';
+import { mapRealtimeMessages } from './adapters';
 
 /* ------------------------------ message model ------------------------------ */
 
@@ -138,19 +139,18 @@ function connectSimulator(onMessage: Handler, onState: StateHandler): RealtimeCh
 
 /* ------------------------------- SSE / WS ------------------------------- */
 
+/**
+ * Server-sent events.
+ *
+ * The backend currently publishes the realtime feed over WebSocket only
+ * (`/ws/events`); there is no SSE route. Rather than opening a stream that
+ * would sit in a permanent error state, say so and fall back to WS.
+ */
 function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel {
-  onState('CONNECTING');
-  const es = new EventSource(realtimeUrl('/stream'), { withCredentials: true });
-  es.onopen = () => onState('LIVE');
-  es.onerror = () => onState('OFFLINE');
-  es.onmessage = (e) => {
-    try {
-      onMessage(JSON.parse(e.data) as RealtimeMessage);
-    } catch {
-      /* ignore malformed frame */
-    }
-  };
-  return { close: () => es.close() };
+  console.warn(
+    '[trinetra] VITE_REALTIME_TRANSPORT=sse but the backend publishes WebSocket only — falling back to ws.',
+  );
+  return connectWs(onMessage, onState);
 }
 
 function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
@@ -160,11 +160,14 @@ function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   let retry: number;
 
   const open = () => {
-    ws = new WebSocket(realtimeUrl('/ws', 'ws'));
+    // The engine's realtime feed lives at /ws/events.
+    ws = new WebSocket(realtimeUrl('/ws/events', 'ws'));
     ws.onopen = () => onState('LIVE');
     ws.onmessage = (e) => {
       try {
-        onMessage(JSON.parse(e.data) as RealtimeMessage);
+        // One wire frame can imply several UI updates (a watchlist hit is
+        // both a sighting and an alert). Protocol frames yield none.
+        mapRealtimeMessages(JSON.parse(e.data)).forEach(onMessage);
       } catch {
         /* ignore malformed frame */
       }

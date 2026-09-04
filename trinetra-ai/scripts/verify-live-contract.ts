@@ -15,6 +15,7 @@ import {
   mapEvent,
   mapHealth,
   mapKpis,
+  mapRealtimeMessages,
   mapRoute,
   mapVehicleProfile,
   mapWatchlist,
@@ -157,6 +158,70 @@ async function main() {
   check('service statuses valid', health.services.every((s) => ['HEALTHY', 'DEGRADED', 'OFFLINE'].includes(s.status)),
     health.services.map((s) => s.status).join('/'));
   check('no NaN in health', !hasNaN(health));
+
+  /* ----------------------------- realtime ---------------------------- */
+  section('Realtime channel (WebSocket)');
+  const wsUrl = `${API.replace(/^http/, 'ws')}/ws/events`;
+  const received: unknown[] = [];
+  const ws = new WebSocket(wsUrl);
+  const opened = await new Promise<boolean>((resolve) => {
+    const t = setTimeout(() => resolve(false), 5000);
+    ws.onopen = () => { clearTimeout(t); resolve(true); };
+    ws.onerror = () => { clearTimeout(t); resolve(false); };
+  });
+  check('WebSocket connects at /api/ws/events', opened, wsUrl);
+
+  if (opened) {
+    ws.onmessage = (e) => received.push(JSON.parse(String(e.data)));
+
+    // Use a freshly minted watchlist plate rather than the demo one: alert
+    // deduplication would (correctly) suppress a second alert for a plate that
+    // already raised one, and this check must be repeatable.
+    const probePlate = `GJ99ZZ${String(Date.now()).slice(-4)}`;
+    await fetch(`${API}/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plate_number: probePlate,
+        category: 'stolen vehicle',
+        description: 'Contract verification probe',
+        active: true,
+      }),
+    });
+
+    await fetch(`${API}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        camera_id: 'CAM08',
+        vehicle_id: 900,
+        plate_raw: probePlate,
+        plate: probePlate,
+        plate_confidence: 0.95,
+        event_time: new Date().toISOString(),
+        vehicle_class: 'car',
+        evidence_ref: 'verify/realtime.jpg',
+      }),
+    });
+
+    await new Promise((r) => setTimeout(r, 1500));
+    check('backend pushed at least one frame', received.length > 0, `${received.length} frames`);
+
+    const translated = received.flatMap(mapRealtimeMessages);
+    check('frames translate to typed UI messages', translated.length > 0,
+      translated.map((m) => m.type).join('/'));
+    const alertMsg = translated.find((m) => m.type === 'ALERT');
+    check('watchlist hit arrives as an ALERT', !!alertMsg);
+    if (alertMsg && alertMsg.type === 'ALERT') {
+      check('alert carries the probe plate', alertMsg.payload.plate === probePlate, alertMsg.payload.plate);
+      check('alert has a camera + severity', !!alertMsg.payload.cameraId && !!alertMsg.payload.severity,
+        `${alertMsg.payload.cameraId} ${alertMsg.payload.severity}`);
+    }
+    const eventMsg = translated.find((m) => m.type === 'EVENT');
+    check('detection arrives as an EVENT', !!eventMsg);
+    check('no NaN in realtime payloads', !hasNaN(translated));
+    ws.close();
+  }
 
   /* ------------------------------ result ----------------------------- */
   console.log(`\n${failures === 0 ? 'PASS' : 'FAIL'} — ${checks - failures}/${checks} checks passed`);

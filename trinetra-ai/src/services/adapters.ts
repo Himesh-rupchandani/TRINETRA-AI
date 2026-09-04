@@ -400,3 +400,75 @@ export function mapHealth(raw: Raw): SystemSummary {
     generatedAt,
   };
 }
+
+/* ------------------------------ realtime ------------------------------ */
+
+/**
+ * Translate the WebSocket wire format onto the UI's message model.
+ *
+ * The engine broadcasts VEHICLE_DETECTED / WATCHLIST_MATCH / ALERT_CREATED /
+ * CAMERA_STATUS_CHANGED with snake_case data; the UI consumes
+ * EVENT / ALERT / CAMERA_STATUS with typed payloads. Returns null for
+ * protocol frames (CONNECTED, PONG) that carry no operator-facing content.
+ */
+export type RealtimeUiMessage =
+  | { type: 'EVENT'; payload: VehicleEvent }
+  | { type: 'ALERT'; payload: Alert }
+  | { type: 'CAMERA_STATUS'; payload: { cameraId: string; status: CameraStatus } };
+
+/**
+ * Translate one wire frame into the UI messages it implies.
+ *
+ * A watchlist hit is broadcast as a single ALERT_CREATED frame, but the
+ * operator needs it in two places at once — the alert list and the live event
+ * feed. The alert payload already carries every event field, so both are
+ * derived here instead of asking the backend to send the sighting twice.
+ */
+export function mapRealtimeMessages(raw: unknown): RealtimeUiMessage[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const frame = raw as Raw;
+  const data = (frame.payload ?? frame.data ?? {}) as Raw;
+  const kind = String(frame.type ?? '').toUpperCase();
+
+  const asEvent = (): RealtimeUiMessage => ({
+    type: 'EVENT',
+    payload: mapEvent({ ...data, id: data.event_id ?? data.id }),
+  });
+
+  switch (kind) {
+    case 'VEHICLE_DETECTED':
+    case 'WATCHLIST_MATCH':
+      return [asEvent()];
+
+    case 'ALERT_CREATED':
+      return [
+        asEvent(),
+        {
+          type: 'ALERT',
+          payload: mapAlert({
+            ...data,
+            // A broadcast alert is by definition new, and this one came from a
+            // watchlist hit — the wire format repeats neither fact.
+            alert_type: data.alert_type ?? 'WATCHLIST_MATCH',
+            status: data.status ?? 'NEW',
+            timestamp: data.timestamp ?? frame.timestamp,
+          }),
+        },
+      ];
+
+    case 'CAMERA_STATUS_CHANGED': {
+      const cameraId = str(data.camera_id) ?? str(data.cameraId) ?? '';
+      if (!cameraId) return [];
+      return [
+        {
+          type: 'CAMERA_STATUS',
+          payload: { cameraId: cameraId.toLowerCase(), status: toCameraStatus(data.status) },
+        },
+      ];
+    }
+
+    default:
+      // CONNECTED / PONG / unknown future types: nothing to render.
+      return [];
+  }
+}
