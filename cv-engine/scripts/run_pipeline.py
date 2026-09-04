@@ -153,12 +153,13 @@ def run_demo(args, settings: Settings):
 
     scenario = DemoScenario.default()
     scenario.n_frames = args.demo_frames
+    # No coordinates are invented here. The backend resolves the sighting's
+    # position from the camera registry, so a demo event lands on the same map
+    # point as a live one from the same camera.
     camera = Camera(
         camera_id=scenario.camera_id,
         name="Demo Camera (scripted)",
-        latitude=23.0225,
-        longitude=72.5714,
-        location="Demo",
+        location=None,
     )
 
     demo_ocr = DemoOcr()

@@ -163,6 +163,11 @@ async def ingest_event(
 
     # --- Step 5: Persist VehicleEvent ---
     event_ts = event_time or datetime.now(timezone.utc)
+    # A sighting with no coordinates must still land on the map at the camera
+    # that saw it, not at a generic city centre. The registry is authoritative
+    # for camera position, so fall back to it rather than storing NULL.
+    event_latitude = latitude if latitude is not None else camera.latitude
+    event_longitude = longitude if longitude is not None else camera.longitude
     event = VehicleEvent(
         camera_id=canonical_camera_id,
         vehicle_track_id=vehicle_track_id,
@@ -171,8 +176,8 @@ async def ingest_event(
         plate_confidence=plate_confidence,
         vehicle_class=vehicle_class or "car",
         event_time=event_ts,
-        latitude=latitude,
-        longitude=longitude,
+        latitude=event_latitude,
+        longitude=event_longitude,
         evidence_ref=evidence_ref,
         watchlist_match=False,
     )
