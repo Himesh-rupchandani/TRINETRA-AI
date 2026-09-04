@@ -325,12 +325,17 @@ def start_camera(camera_id: str, db: Session = Depends(get_db)):
             detail=f"Camera '{camera_id}' not found.",
         )
 
+    # Sentinel cameras ingest over authenticated RTSP built at connect time
+    # from env credentials — the authenticated URL is never stored or returned.
+    from ..services.sentinel_stream_service import resolve_ingest_source
+
+    source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
     stream = camera_manager.get_camera(camera_id)
     if not stream:
         camera_manager.add_camera(
             camera_id=cam.camera_id,
-            source=cam.stream_url,
-            source_type=cam.stream_type,
+            source=source,
+            source_type="rtsp" if source != cam.stream_url else cam.stream_type,
             auto_start=True,
         )
     else:

@@ -106,7 +106,11 @@ class CameraStream:
         """Internal connection routine applying Rule 1 (RTSP over TCP) and HLS fallback."""
         self.state = CameraState.CONNECTING
         self.last_error = None
-        logger.info(f"[{self.camera_id}] Connecting to {self.source_type.upper()} source: {self.source}")
+        from ..services.sentinel_stream_service import redact
+
+        logger.info(
+            f"[{self.camera_id}] Connecting to {self.source_type.upper()} source: {redact(self.source)}"
+        )
 
         # Clean up existing capture if any
         if self.cap is not None:

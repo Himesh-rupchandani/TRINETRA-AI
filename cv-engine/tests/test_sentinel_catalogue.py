@@ -147,3 +147,26 @@ def test_select_test_subset_covers_diversity():
                 status="ONLINE" if i % 3 else "OFFLINE") for i in range(8)], 4)
     assert [c.camera_id for c in again] == [c.camera_id for c in subset]
     assert select_test_subset([], 3) == []
+
+
+def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
+    from config.settings import Settings
+    from capture.sentinel_catalogue import sentinel_stream_urls, redact_url
+
+    s = Settings.from_env()
+    monkeypatch.setattr(s, "sentinel_email", "officer@gujaratpolice.gov.in", raising=False)
+    monkeypatch.setattr(s, "sentinel_password", "p@ss", raising=False)
+    urls = sentinel_stream_urls("cam04", s)
+    assert urls["rtsp"].startswith("rtsp://officer%40gujaratpolice.gov.in:p%40ss@")
+    assert urls["rtsp"].endswith("@103.250.160.189:8554/stream/cam04")
+    assert urls["hls"] == "https://cctv.corp8.cloud/cam04/index.m3u8"
+    assert redact_url(urls["rtsp"]) == "rtsp://103.250.160.189:8554/stream/cam04"
+
+    # without credentials: HLS only, no authenticated URL is produced
+    monkeypatch.setattr(s, "sentinel_email", "", raising=False)
+    monkeypatch.setattr(s, "sentinel_password", "", raising=False)
+    urls2 = sentinel_stream_urls("cam04", s)
+    assert urls2["rtsp"] is None and urls2["hls"].endswith("index.m3u8")
+
+    # invalid ids are rejected
+    assert sentinel_stream_urls("../etc", s) == {"rtsp": None, "hls": None}

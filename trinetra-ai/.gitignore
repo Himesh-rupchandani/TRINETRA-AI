@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local secret overrides (e.g. credentials) — never commit
+.env.local
+.env.*.local

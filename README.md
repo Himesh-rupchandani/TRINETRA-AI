@@ -77,6 +77,39 @@ Every emitted event also stores a **cropped vehicle photo** (evidence) under
 `/api/evidence/<ref>` — the Events page shows the crop plus full details
 (class, track ID, camera, GPS, timestamps) in its evidence drawer.
 
+## Official Sentinel Camera Grid integration
+
+The backend reads the official catalogue (`https://cctv.corp8.cloud/cameras.json`)
+via `POST /api/internal/sentinel/catalogue/sync` — camera IDs are NEVER
+hard-coded; names/locations/coordinates come from the payload and are
+normalized into the internal registry (graceful fallback to the existing
+registry when the network is down).
+
+**Credentials live only in `TRINETRAAI/backend/.env`** (gitignored; see
+`.env.example` for placeholders):
+
+```env
+SENTINEL_EMAIL=you@example.com     # '@' is auto-encoded as %40 in URLs
+SENTINEL_PASSWORD=changeme
+SENTINEL_CATALOGUE_URL=https://cctv.corp8.cloud/cameras.json
+SENTINEL_HLS_BASE_URL=https://cctv.corp8.cloud
+SENTINEL_RTSP_HOST=103.250.160.189
+SENTINEL_RTSP_PORT=8554
+```
+
+Flow (all URLs with credentials are built at connect time, backend-only,
+never stored in the DB, never returned by any API, never logged unredacted):
+
+- **AI ingestion**: `POST /api/cameras/cam04/start` resolves the
+  authenticated RTSP URL (TCP transport forced, reconnect 2s→30s backoff)
+  and feeds the existing YOLO11 → ByteTrack → ANPR → events pipeline.
+- **Browser viewing**: HLS/WHEP through same-origin paths only
+  (`/api/cameras/{id}/live`, `/sentinel/stream/{id}/whep` via the dev
+  proxy). The frontend never sees a credential.
+- **CV engine live mode**: `python scripts/run_pipeline.py --mode live
+  --camera cam04` — synthesizes the same authenticated RTSP URL from env
+  when the catalogue lists only camera IDs.
+
 ## Connecting a REAL live camera (e.g. authorized Ahmedabad CCTV)
 
 No authorized public Ahmedabad CCTV feed exists today — the city's ANPR/CCTV

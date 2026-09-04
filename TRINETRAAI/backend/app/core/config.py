@@ -60,6 +60,15 @@ class Settings(BaseSettings):
     # Sentinel CCTV catalogue sync URL
     SENTINEL_CATALOGUE_URL: str = "https://cctv.corp8.cloud/cameras.json"
 
+    # Sentinel credentials & stream hosts (NEVER hard-code real values here;
+    # set them in backend/.env — see .env.example. The @ in the registered
+    # email is percent-encoded as %40 when URLs are built at connect time.)
+    SENTINEL_EMAIL: str = ""
+    SENTINEL_PASSWORD: str = ""
+    SENTINEL_HLS_BASE_URL: str = "https://cctv.corp8.cloud"
+    SENTINEL_RTSP_HOST: str = "103.250.160.189"
+    SENTINEL_RTSP_PORT: int = 8554
+
     # CORS
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",
