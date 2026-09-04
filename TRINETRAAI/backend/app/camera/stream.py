@@ -181,7 +181,8 @@ class CameraStream:
             # Demo fallback if enabled
             if settings.DEMO_MODE:
                 logger.warning(
-                    f"[{self.camera_id}] Live stream unreachable. Activating DEMO synthetic feed (DEMO_MODE=True)."
+                    f"[{self.camera_id}] Live stream unreachable. Activating DEMO synthetic feed "
+                    f"(DEMO_MODE={settings.DEMO_MODE}) — NOT a live picture."
                 )
                 self.state = CameraState.ONLINE
                 self.last_seen = utc_now()

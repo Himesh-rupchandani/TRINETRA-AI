@@ -1,33 +1,28 @@
 import type { EventFilters, Paginated, VehicleEvent } from '@/types';
 import { get, isMockMode } from './api';
 import * as mock from '@/mocks/mockBackend';
-import { mapEvent, unwrapList, unwrapPaginated } from './adapters';
+import { cameraDirectory, toPaginated, toVehicleEvent, type VehicleEventDto } from './adapters';
+import { normalisePlate } from '@/lib/utils';
 
-/**
- * Translate the UI's filter vocabulary onto the query parameters the events
- * endpoint actually accepts. Filters the API cannot express (event type,
- * severity, time-of-day) are applied client-side after the page is fetched,
- * rather than being silently dropped.
- */
-function toParams(f: EventFilters, page: number, pageSize: number) {
-  const p: Record<string, string | number | boolean> = { page, size: pageSize };
-  if (f.plate) p.plate_number = f.plate;
-  if (f.cameraId && f.cameraId !== 'ALL') p.camera_id = f.cameraId;
-  if (f.watchlistOnly) p.watchlist_match = true;
-  const from = [f.dateFrom, f.timeFrom].filter(Boolean).join(f.timeFrom ? 'T' : '');
-  const to = [f.dateTo, f.timeTo].filter(Boolean).join(f.timeTo ? 'T' : '');
-  if (from) p.from_time = from;
-  if (to) p.to_time = to;
-  return p;
+interface PaginatedEventsDto {
+  items: VehicleEventDto[];
+  total: number;
+  page: number;
+  size: number;
 }
 
-/** Client-side pass for the filters the REST endpoint does not support. */
-function applyLocalFilters(events: VehicleEvent[], f: EventFilters): VehicleEvent[] {
-  return events.filter((e) => {
-    if (f.eventType && f.eventType !== 'ALL' && e.eventType !== f.eventType) return false;
-    if (f.severity && f.severity !== 'ALL' && e.severity !== f.severity) return false;
-    return true;
-  });
+/**
+ * Map frontend filter names onto the backend query contract
+ * (camera_id / plate_number / watchlist_match / from_time / to_time / size).
+ */
+function toParams(f: EventFilters, page: number, pageSize: number) {
+  const p: Record<string, string | number> = { page, size: pageSize };
+  if (f.plate) p.plate_number = normalisePlate(f.plate);
+  if (f.cameraId && f.cameraId !== 'ALL') p.camera_id = f.cameraId;
+  if (f.watchlistOnly) p.watchlist_match = 'true';
+  if (f.dateFrom) p.from_time = f.timeFrom ? `${f.dateFrom}T${f.timeFrom}` : `${f.dateFrom}T00:00:00`;
+  if (f.dateTo) p.to_time = f.timeTo ? `${f.dateTo}T${f.timeTo}` : `${f.dateTo}T23:59:59`;
+  return p;
 }
 
 export const eventService = {
@@ -37,31 +32,56 @@ export const eventService = {
     pageSize = 25,
   ): Promise<Paginated<VehicleEvent>> {
     if (isMockMode) return mock.getEvents(filters, page, pageSize);
-    const result = unwrapPaginated(await get<unknown>('/events', {
-      params: toParams(filters, page, pageSize),
-    }), mapEvent);
-    return { ...result, items: applyLocalFilters(result.items, filters) };
+
+    const [res, dir] = await Promise.all([
+      get<PaginatedEventsDto>('/events', { params: toParams(filters, page, pageSize) }),
+      cameraDirectory().catch(() => null),
+    ]);
+    let result = toPaginated(res, (dto) => toVehicleEvent(dto, dir));
+    // eventType/severity are UI-level facets over the same rows — applied
+    // client-side so live and demo filtering behave identically.
+    if (filters.eventType && filters.eventType !== 'ALL') {
+      result = {
+        ...result,
+        items: result.items.filter((e) => e.eventType === filters.eventType),
+        total: result.items.length,
+      };
+    }
+    if (filters.severity && filters.severity !== 'ALL') {
+      const keep = result.items.filter((e) => (e.severity ?? 'INFO') === filters.severity);
+      result = { ...result, items: keep, total: keep.length };
+    }
+    return result;
   },
 
   async recent(limit = 20): Promise<VehicleEvent[]> {
     if (isMockMode) return mock.getRecentEvents(limit);
-    // The list endpoint is newest-first by default.
-    return unwrapList(await get<unknown>('/events', { params: { size: limit, page: 1 } }))
-      .map(mapEvent)
-      .slice(0, limit);
+    // The backend rejects size > 100 — clamp instead of erroring the dashboard.
+    const size = Math.min(limit, 100);
+    const [res, dir] = await Promise.all([
+      get<PaginatedEventsDto>('/events', { params: { page: 1, size } }),
+      cameraDirectory().catch(() => null),
+    ]);
+    return (res.items ?? []).map((dto) => toVehicleEvent(dto, dir));
   },
 
   async byCamera(cameraId: string, limit = 25): Promise<VehicleEvent[]> {
     if (isMockMode) return mock.getEventsByCamera(cameraId, limit);
-    return unwrapList(await get<unknown>('/events', {
-      params: { camera_id: cameraId, size: limit, page: 1 },
-    }))
-      .map(mapEvent)
-      .slice(0, limit);
+    const [res, dir] = await Promise.all([
+      get<PaginatedEventsDto>('/events', {
+        params: { camera_id: cameraId, page: 1, size: Math.min(limit, 100) },
+      }),
+      cameraDirectory().catch(() => null),
+    ]);
+    return (res.items ?? []).map((dto) => toVehicleEvent(dto, dir));
   },
 
   async byId(id: string): Promise<VehicleEvent> {
     if (isMockMode) return mock.getEvent(id);
-    return mapEvent(await get<Record<string, unknown>>(`/events/${encodeURIComponent(id)}`));
+    const [dto, dir] = await Promise.all([
+      get<VehicleEventDto>(`/events/${encodeURIComponent(id)}`),
+      cameraDirectory().catch(() => null),
+    ]);
+    return toVehicleEvent(dto, dir);
   },
 };

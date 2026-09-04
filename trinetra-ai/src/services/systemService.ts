@@ -1,8 +1,8 @@
 import type { DashboardKpis, SystemSummary } from '@/types';
 import { get, isMockMode } from './api';
 import * as mock from '@/mocks/mockBackend';
-import { mapHealth, mapKpis } from './adapters';
 import { config } from '@/lib/config';
+import { toKpis, toSystemSummary, type HealthDto, type KpiDto } from './adapters';
 
 /**
  * Live reachability probe against the Sentinel media gateway.
@@ -80,7 +80,7 @@ export const systemService = {
   async health(): Promise<SystemSummary> {
     const summary = isMockMode
       ? await mock.getHealth()
-      : mapHealth(await get<Record<string, unknown>>('/health'));
+      : toSystemSummary(await get<HealthDto>('/health'));
     if (!config.liveStreams) return summary;
 
     const probe = await probeSentinelGrid();
@@ -100,8 +100,7 @@ export const systemService = {
     return { ...summary, services, generatedAt: new Date().toISOString() };
   },
 
-  async kpis(): Promise<DashboardKpis> {
-    if (isMockMode) return mock.getKpis();
-    return mapKpis(await get<Record<string, unknown>>('/stats/kpis'));
+  kpis(): Promise<DashboardKpis> {
+    return isMockMode ? mock.getKpis() : get<KpiDto>('/stats/kpis').then(toKpis);
   },
 };

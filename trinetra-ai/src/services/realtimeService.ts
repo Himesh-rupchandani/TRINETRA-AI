@@ -5,7 +5,7 @@ import { mockCameras } from '@/mocks/cameras';
 import { watchlistByPlate } from '@/mocks/watchlist';
 import { pushMockEvent, setMockCameraStatus } from '@/mocks/mockBackend';
 import { syntheticFrame, syntheticPlateCrop } from '@/utils/syntheticEvidence';
-import { mapRealtimeMessages } from './adapters';
+import { cameraDirectory, toAlert, toVehicleEvent, type AlertDto, type CameraMeta, type VehicleEventDto } from './adapters';
 
 /* ------------------------------ message model ------------------------------ */
 
@@ -140,34 +140,135 @@ function connectSimulator(onMessage: Handler, onState: StateHandler): RealtimeCh
 /* ------------------------------- SSE / WS ------------------------------- */
 
 /**
- * Server-sent events.
+ * The backend broadcasts a typed envelope:
+ *   { type: 'VEHICLE_DETECTED'|'WATCHLIST_MATCH'|'ALERT_CREATED'
+ *       |'CAMERA_STATUS_CHANGED'|'CONNECTED'|'PONG',
+ *     timestamp, payload: { event_id, camera_id, plate_number, confidence, … } }
  *
- * The backend currently publishes the realtime feed over WebSocket only
- * (`/ws/events`); there is no SSE route. Rather than opening a stream that
- * would sit in a permanent error state, say so and fall back to WS.
+ * This maps it onto the frontend message model, enriching with canonical
+ * camera metadata from the shared registry directory.
  */
+type CameraDir = Map<string, CameraMeta> | null;
+
+let liveCameraDir: CameraDir = null;
+let dirLoading = false;
+function primeCameraDir(): void {
+  if (dirLoading) return;
+  dirLoading = true;
+  cameraDirectory()
+    .then((d) => {
+      liveCameraDir = d;
+    })
+    .catch(() => undefined);
+}
+
+function mapBackendEventPayload(raw: Record<string, unknown>): VehicleEvent {
+  const dto = {
+    id: Number(raw.event_id ?? raw.id ?? 0),
+    camera_id: String(raw.camera_id ?? ''),
+    vehicle_track_id: raw.vehicle_track_id != null ? Number(raw.vehicle_track_id) : undefined,
+    plate_raw: raw.plate_raw as string | undefined,
+    plate_number: (raw.plate_number ?? raw.plate) as string | undefined,
+    plate_confidence: raw.plate_confidence != null
+      ? Number(raw.plate_confidence)
+      : raw.confidence != null
+        ? Number(raw.confidence)
+        : undefined,
+    vehicle_class: raw.vehicle_class as string | undefined,
+    event_time: (raw.event_time ?? new Date().toISOString()) as string,
+    latitude: raw.latitude as number | undefined,
+    longitude: raw.longitude as number | undefined,
+    watchlist_match: Boolean(raw.watchlist_match),
+  } satisfies VehicleEventDto;
+  return toVehicleEvent(dto, liveCameraDir);
+}
+
+/**
+ * One wire frame can imply several UI updates.
+ *
+ * The backend broadcasts a single ALERT_CREATED for a watchlist hit, but the
+ * operator needs it in two places at once — the alert list and the live event
+ * feed. The payload already carries every event field, so both are derived
+ * here instead of asking the backend to send the sighting twice.
+ */
+export function mapBackendMessages(raw: unknown): RealtimeMessage[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const envelope = raw as { type?: string; payload?: Record<string, unknown>; data?: Record<string, unknown> };
+  const body = (envelope.payload ?? envelope.data ?? {}) as Record<string, unknown>;
+
+  switch (envelope.type) {
+    case 'VEHICLE_DETECTED':
+    case 'WATCHLIST_MATCH':
+      return [{ type: 'EVENT', payload: mapBackendEventPayload(body) }];
+    case 'ALERT_CREATED': {
+      const event = mapBackendEventPayload(body);
+      const dto = {
+        id: Number(body.alert_id ?? body.id ?? body.event_id ?? 0),
+        event_id: Number(body.event_id ?? 0) || null,
+        camera_id: String(body.camera_id ?? ''),
+        plate_number: (body.plate_number ?? body.plate) as string | null,
+        alert_type: 'WATCHLIST_MATCH',
+        severity: String(body.severity ?? 'CRITICAL'),
+        message: String(body.message ?? `Watchlist match on ${body.camera_id ?? 'camera'}`),
+        status: 'NEW',
+        confidence:
+          body.plate_confidence != null
+            ? Number(body.plate_confidence)
+            : body.confidence != null
+              ? Number(body.confidence)
+              : null,
+        timestamp: new Date().toISOString(),
+      } satisfies AlertDto;
+      const alert = toAlert(dto, liveCameraDir);
+      return [
+        { type: 'EVENT', payload: event },
+        { type: 'ALERT', payload: { ...alert, eventId: event.id } },
+      ];
+    }
+    case 'CAMERA_STATUS_CHANGED':
+      return [
+        {
+          type: 'CAMERA_STATUS',
+          payload: {
+            cameraId: String(body.camera_id ?? body.cameraId ?? '').toLowerCase(),
+            status: String(body.status ?? 'OFFLINE').toUpperCase() as Camera['status'],
+          },
+        },
+      ];
+    default:
+      return []; // CONNECTED / PONG / unknown — ignored
+  }
+}
+
 function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel {
-  console.warn(
-    '[trinetra] VITE_REALTIME_TRANSPORT=sse but the backend publishes WebSocket only — falling back to ws.',
-  );
-  return connectWs(onMessage, onState);
+  onState('CONNECTING');
+  primeCameraDir();
+  const es = new EventSource(realtimeUrl('/stream'), { withCredentials: true });
+  es.onopen = () => onState('LIVE');
+  es.onerror = () => onState('OFFLINE');
+  es.onmessage = (e) => {
+    try {
+      mapBackendMessages(JSON.parse(e.data)).forEach(onMessage);
+    } catch {
+      /* ignore malformed frame */
+    }
+  };
+  return { close: () => es.close() };
 }
 
 function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('CONNECTING');
+  primeCameraDir();
   let closed = false;
   let ws: WebSocket;
   let retry: number;
 
   const open = () => {
-    // The engine's realtime feed lives at /ws/events.
     ws = new WebSocket(realtimeUrl('/ws/events', 'ws'));
     ws.onopen = () => onState('LIVE');
     ws.onmessage = (e) => {
       try {
-        // One wire frame can imply several UI updates (a watchlist hit is
-        // both a sighting and an alert). Protocol frames yield none.
-        mapRealtimeMessages(JSON.parse(e.data)).forEach(onMessage);
+        mapBackendMessages(JSON.parse(e.data)).forEach(onMessage);
       } catch {
         /* ignore malformed frame */
       }

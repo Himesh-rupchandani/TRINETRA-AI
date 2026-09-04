@@ -33,10 +33,20 @@ python scripts/run_pipeline.py --mode live --camera cam04
 python scripts/run_pipeline.py --mode demo
 ```
 
+## Frontend modes
+
+| Mode | How | Data source |
+|---|---|---|
+| **DEMO** (repo default) | `VITE_USE_MOCKS=true` | In-browser synthetic dataset incl. the scripted `GJ01AB1234` journey |
+| **LIVE** | `VITE_USE_MOCKS=false VITE_BACKEND_ORIGIN=http://localhost:8000 npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
+
+Run the backend with `DEMO_MODE=false` in LIVE mode so unreachable cameras stay
+honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
+
 ## Tests
 
 ```bash
-cd TRINETRAAI/backend && pytest          # 91 tests
+cd TRINETRAAI/backend && pytest          # 97 tests
 cd cv-engine && pytest                   # 79 offline tests (live-feed tests opt-in)
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
 ```

@@ -175,6 +175,50 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.get(
+    "/{camera_id}/stream",
+    response_model=CameraStreamTicket,
+    summary="Issue a playback ticket for one camera",
+    description=(
+        "Returns safe, short-lived playback info. Browsers receive a same-origin "
+        "WebRTC/WHEP signalling path served by the reverse proxy — RTSP URLs and "
+        "Sentinel credentials never reach the client."
+    ),
+)
+def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
+    """Resolve the browser-playable stream for a camera.
+
+    - ONLINE camera -> WEBRTC ticket on the same-origin WHEP path.
+    - anything else -> unplayable ticket; the UI shows its offline state.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    cam = (
+        db.query(Camera)
+        .filter(func.upper(Camera.camera_id) == camera_id.strip().upper())
+        .first()
+    )
+    if not cam:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera '{camera_id}' not found.",
+        )
+
+    stream_status = camera_manager.get_camera_status(cam.camera_id)
+    status_value = (stream_status["status"] if stream_status else (cam.status or "OFFLINE")).upper()
+    playable = status_value == "ONLINE"
+    slug = cam.camera_id.lower()
+
+    return CameraStreamTicket(
+        camera_id=slug,
+        stream_type="WEBRTC" if playable else (cam.stream_type or "hls").upper(),
+        stream_url=f"/sentinel/{slug}/whep" if playable else "",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        playable=playable,
+        reason=None if playable else f"Camera is {status_value}",
+    )
+
+
 @router.put("/{camera_id}", response_model=CameraResponse)
 def update_camera(camera_id: str, payload: CameraUpdate, db: Session = Depends(get_db)):
     """Update camera configuration and restart stream if URL changed."""
@@ -272,40 +316,6 @@ def restart_camera(camera_id: str):
     """Restart stream ingestion for a camera."""
     success = camera_manager.restart_camera(camera_id)
     return {"status": "restarted", "camera_id": camera_id, "success": success}
-
-
-@router.get("/{camera_id}/stream", response_model=CameraStreamTicket,
-            summary="Playback ticket for a camera")
-def camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
-    """Resolve playback details server-side.
-
-    The frontend calls this instead of building a stream URL itself, so no
-    Sentinel credential or gateway origin is ever compiled into the bundle.
-    """
-    cam = db.query(Camera).filter(Camera.camera_id == camera_id).first()
-    if not cam:
-        # Accept the lowercase id form the UI uses ("cam04" for "CAM04").
-        cam = (
-            db.query(Camera)
-            .filter(func.lower(Camera.camera_id) == camera_id.strip().lower())
-            .first()
-        )
-    if not cam:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Camera '{camera_id}' not found.",
-        )
-
-    stream_status = camera_manager.get_camera_status(cam.camera_id)
-    return CameraStreamTicket(
-        camera_id=cam.camera_id,
-        stream_type=(cam.stream_type or "hls").upper(),
-        stream_url=cam.stream_url or "",
-        codec=cam.codec,
-        width=cam.width,
-        height=cam.height,
-        status=stream_status["status"] if stream_status else (cam.status or "OFFLINE"),
-    )
 
 
 @router.get("/{camera_id}/live")

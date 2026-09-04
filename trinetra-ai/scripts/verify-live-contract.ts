@@ -6,21 +6,28 @@
  * This is the guard for the class of bug where the UI silently renders
  * `undefined` because the API shape drifted.
  *
- *   BACKEND=http://127.0.0.1:8000 node --experimental-strip-types \
- *     scripts/verify-live-contract.ts
+ *   BACKEND=http://127.0.0.1:8000 npm run verify:live
  */
 import {
-  mapAlert,
-  mapCamera,
-  mapEvent,
-  mapHealth,
-  mapKpis,
-  mapRealtimeMessages,
-  mapRoute,
-  mapVehicleProfile,
-  mapWatchlist,
-  unwrapList,
-} from '../src/services/adapters.ts';
+  cameraDirectory,
+  toAlert,
+  toCamera,
+  toKpis,
+  toSystemSummary,
+  toVehicleEvent,
+  toVehicleProfile,
+  toVehicleRoute,
+  toWatchlistRecord,
+  unwrapItems,
+  type AlertDto,
+  type CameraItemDto,
+  type HealthDto,
+  type KpiDto,
+  type ProfileDto,
+  type RouteDto,
+  type VehicleEventDto,
+  type WatchlistDto,
+} from '@/services/adapters';
 
 const BACKEND = process.env.BACKEND ?? 'http://127.0.0.1:8000';
 const API = `${BACKEND.replace(/\/$/, '')}/api`;
@@ -48,103 +55,122 @@ async function fetchJson(path: string): Promise<unknown> {
 const hasNaN = (o: unknown): boolean =>
   JSON.stringify(o, (_k, v) => (typeof v === 'number' && Number.isNaN(v) ? 'NaN' : v))!.includes('"NaN"');
 
-function section(title: string) {
-  console.log(`\n${title}`);
-}
+const section = (title: string) => console.log(`\n${title}`);
 
 async function main() {
   console.log(`TRINETRA live contract check against ${API}`);
 
   /* ----------------------------- cameras ----------------------------- */
   section('Camera registry (Model 1)');
-  const cameras = unwrapList(await fetchJson('/cameras')).map(mapCamera);
+  // GET /cameras wraps its payload as { data: [...] } — the same unwrap
+  // cameraService performs.
+  const cameraPayload = (await fetchJson('/cameras')) as { data?: CameraItemDto[] } | CameraItemDto[];
+  const rawCameras = Array.isArray(cameraPayload) ? cameraPayload : (cameraPayload.data ?? []);
+  const cameras = rawCameras.map(toCamera);
   check('cameras returned', cameras.length > 0, `${cameras.length} cameras`);
-  check(
-    'every camera has id/name/location/status',
-    cameras.every((c) => c.id && c.name && c.location && c.status),
-  );
+  check('every camera has id/name/location/status', cameras.every((c) => c.id && c.name && c.location && c.status));
   check(
     'status is within the 3-state contract',
     cameras.every((c) => ['ONLINE', 'OFFLINE', 'DEGRADED'].includes(c.status)),
     [...new Set(cameras.map((c) => c.status))].join('/'),
   );
-  check('coordinates present for GIS', cameras.every((c) => Number.isFinite(c.latitude) && Number.isFinite(c.longitude)));
-  check('no NaN anywhere in the camera payload', !hasNaN(cameras));
+  check(
+    'coordinates present for GIS',
+    cameras.every((c) => Number.isFinite(c.latitude) && Number.isFinite(c.longitude)),
+  );
+  check('no NaN in the camera payload', !hasNaN(cameras));
 
   const cam04 = cameras.find((c) => c.id === 'cam04');
   check('CAM04 exists', !!cam04);
   if (cam04) {
     check('CAM04 exposes department', !!cam04.department, `department=${cam04.department}`);
     check('CAM04 has a real location', cam04.location !== '—', cam04.location);
-  }
 
-  // Single-source-of-truth: list and detail must agree.
-  if (cam04) {
-    const detail = mapCamera((await fetchJson('/cameras/cam04')) as Record<string, unknown>);
+    // Single source of truth: list and detail must agree.
+    const detail = toCamera((await fetchJson('/cameras/cam04')) as CameraItemDto);
     check(
       'GET /cameras/cam04 matches the list entry',
-      detail.location === cam04.location && detail.department === cam04.department && detail.status === cam04.status,
+      detail.location === cam04.location &&
+        detail.department === cam04.department &&
+        detail.status === cam04.status,
       `${detail.name} @ ${detail.location}`,
     );
   }
 
+  // The shared directory every screen resolves camera metadata through.
+  const dir = await cameraDirectory();
+  check('shared camera directory is populated', dir.size === cameras.length, `${dir.size} entries`);
+
   /* ------------------------------- KPIs ------------------------------ */
   section('Command Center KPIs');
-  const kpis = mapKpis((await fetchJson('/stats/kpis')) as Record<string, unknown>);
+  const kpis = toKpis((await fetchJson('/stats/kpis')) as KpiDto);
   check('totalCameras equals registry size', kpis.totalCameras === cameras.length, `${kpis.totalCameras}`);
-  check('online + degraded + offline reconciles', kpis.camerasOnline + kpis.camerasDegraded + kpis.camerasOffline === kpis.totalCameras);
+  check(
+    'online + degraded + offline reconciles',
+    kpis.camerasOnline + kpis.camerasDegraded + kpis.camerasOffline === kpis.totalCameras,
+  );
   check('no NaN in KPIs', !hasNaN(kpis));
   check('24h detections are non-zero (demo timeline is recent)', kpis.vehicleDetections24h > 0, `${kpis.vehicleDetections24h}`);
 
   /* --------------------------- vehicle trace ------------------------- */
   section(`Vehicle trace — ${DEMO_PLATE}`);
-  const profile = mapVehicleProfile(await fetchJson(`/vehicles/${DEMO_PLATE}`));
-  check('profile resolves', profile !== null);
-  check('profile plate normalised', profile?.plate === DEMO_PLATE, profile?.plate ?? 'null');
-  check('profile is a watchlist match', profile?.watchlist === undefined || profile?.watchlist !== null,
-    profile?.watchlist ? `${profile.watchlist.category}` : 'no record');
-  check('profile sighting count > 0', (profile?.totalSightings ?? 0) > 0, `${profile?.totalSightings}`);
+  const profile = toVehicleProfile((await fetchJson(`/vehicles/${DEMO_PLATE}`)) as ProfileDto);
+  check('profile plate normalised', profile.plate === DEMO_PLATE, profile.plate);
+  check('profile carries the watchlist record', profile.watchlist !== null, profile.watchlist?.category ?? 'none');
+  check('profile sighting count > 0', profile.totalSightings > 0, `${profile.totalSightings}`);
+  check('profile camerasTouched mapped', (profile.camerasTouched ?? 0) > 0, `${profile.camerasTouched}`);
 
-  const events = unwrapList(await fetchJson(`/vehicles/${DEMO_PLATE}/events?size=100`)).map(mapEvent);
+  const rawEvents = unwrapItems(
+    (await fetchJson(`/vehicles/${DEMO_PLATE}/events?size=100`)) as never,
+  ) as VehicleEventDto[];
+  const events = rawEvents.map((e) => toVehicleEvent(e, dir));
   check('sightings returned', events.length > 0, `${events.length} sightings`);
   check(
     'sightings are chronological',
     events.every((e, i) => i === 0 || new Date(events[i - 1].timestamp) <= new Date(e.timestamp)),
   );
-  check('every sighting has plate + confidence + camera', events.every((e) => e.plate && e.cameraId && Number.isFinite(e.plateConfidence)));
+  check(
+    'every sighting has plate + confidence + camera',
+    events.every((e) => e.plate && e.cameraId && Number.isFinite(e.plateConfidence)),
+  );
   check('no NaN in events', !hasNaN(events));
 
-  const route = mapRoute(await fetchJson(`/vehicles/${DEMO_PLATE}/route`));
+  const route = toVehicleRoute((await fetchJson(`/vehicles/${DEMO_PLATE}/route`)) as RouteDto, dir);
   const seq = route.points.map((p) => p.cameraId).join(' -> ');
   check('route has points', route.points.length > 0, seq || 'none');
-  // Assert the canonical trace appears in order, not that it is the only trace:
-  // a freshly ingested sighting is legitimately part of the same journey.
-  const EXPECTED = ['CAM04', 'CAM08', 'CAM12', 'CAM17'];
-  const seen = route.points.map((p) => p.cameraId);
+  // The canonical trace must appear in order — not be the only trace, since a
+  // freshly ingested sighting is legitimately part of the same journey.
+  const EXPECTED = ['cam04', 'cam08', 'cam12', 'cam17'];
   let cursor = 0;
-  for (const cam of seen) if (cursor < EXPECTED.length && cam === EXPECTED[cursor]) cursor += 1;
+  for (const cam of route.points.map((p) => p.cameraId.toLowerCase())) {
+    if (cursor < EXPECTED.length && cam === EXPECTED[cursor]) cursor += 1;
+  }
+  check('route contains the cross-camera trace in chronological order', cursor === EXPECTED.length, seq);
   check(
-    'route contains the cross-camera trace in chronological order',
-    cursor === EXPECTED.length,
-    seq,
+    'route points carry a location',
+    route.points.every((p) => !!p.location),
+    route.points.map((p) => p.location).join(', '),
   );
-  check('route points carry a location', route.points.every((p) => !!p.location), route.points.map((p) => p.location).join(', '));
-  check('camerasTouched matches distinct cameras', route.camerasTouched === new Set(route.points.map((p) => p.cameraId)).size, `${route.camerasTouched}`);
   check('no NaN in route', !hasNaN(route));
 
   /* ----------------------------- alerts ------------------------------ */
   section('Alerts');
-  const alerts = unwrapList(await fetchJson('/alerts?size=100')).map(mapAlert);
+  const rawAlerts = unwrapItems((await fetchJson('/alerts?size=100')) as never) as AlertDto[];
+  const alerts = rawAlerts.map((a) => toAlert(a, dir));
   check('alerts returned', alerts.length > 0, `${alerts.length} alerts`);
-  check('alert status within lifecycle', alerts.every((a) => ['NEW', 'ACKNOWLEDGED', 'RESOLVED'].includes(a.status)),
-    [...new Set(alerts.map((a) => a.status))].join('/'));
+  check(
+    'alert status within lifecycle',
+    alerts.every((a) => ['NEW', 'ACKNOWLEDGED', 'RESOLVED'].includes(a.status)),
+    [...new Set(alerts.map((a) => a.status))].join('/'),
+  );
   check('alert severity valid', alerts.every((a) => ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].includes(a.severity)));
-  check('watchlist alerts carry a plate', alerts.filter((a) => a.category.includes('WATCHLIST')).every((a) => !!a.plate));
+  check('alerts resolve a location from the registry', alerts.every((a) => !!a.location), alerts[0]?.location ?? 'none');
   check('no NaN in alerts', !hasNaN(alerts));
 
   /* ---------------------------- watchlist ---------------------------- */
   section('Watchlist');
-  const watchlist = unwrapList(await fetchJson('/watchlist?size=100')).map(mapWatchlist);
+  const rawWatchlist = unwrapItems((await fetchJson('/watchlist?size=100')) as never) as WatchlistDto[];
+  const watchlist = rawWatchlist.map(toWatchlistRecord);
   check('watchlist returned', watchlist.length > 0, `${watchlist.length} records`);
   const demo = watchlist.find((w) => w.plate === DEMO_PLATE);
   check(`${DEMO_PLATE} is on the watchlist`, !!demo);
@@ -153,42 +179,58 @@ async function main() {
 
   /* ------------------------------ health ----------------------------- */
   section('System health');
-  const health = mapHealth((await fetchJson('/health')) as Record<string, unknown>);
+  const health = toSystemSummary((await fetchJson('/health')) as HealthDto);
   check('health reports services', health.services.length > 0, `${health.services.length} services`);
-  check('service statuses valid', health.services.every((s) => ['HEALTHY', 'DEGRADED', 'OFFLINE'].includes(s.status)),
-    health.services.map((s) => s.status).join('/'));
+  check(
+    'service statuses valid',
+    health.services.every((s) => ['HEALTHY', 'DEGRADED', 'OFFLINE'].includes(s.status)),
+    health.services.map((s) => s.status).join('/'),
+  );
   check('no NaN in health', !hasNaN(health));
 
   /* ----------------------------- realtime ---------------------------- */
-  section('Realtime channel (WebSocket)');
-  const wsUrl = `${API.replace(/^http/, 'ws')}/ws/events`;
-  const received: unknown[] = [];
-  const ws = new WebSocket(wsUrl);
+  section('Realtime channel');
+  for (const [label, path] of [
+    ['SSE /api/stream', '/stream'],
+    ['WebSocket /api/ws/events', '/ws/events'],
+  ] as const) {
+    if (path === '/stream') {
+      const res = await fetch(`${API}${path}`, { headers: { Accept: 'text/event-stream' } });
+      const type = res.headers.get('content-type') ?? '';
+      check('SSE channel is served as text/event-stream', res.ok && type.includes('text/event-stream'), `HTTP ${res.status} ${type}`);
+      // Do not hold the stream open.
+      await res.body?.cancel();
+    } else {
+      const opened = await new Promise<boolean>((resolve) => {
+        const ws = new WebSocket(`${API.replace(/^http/, 'ws')}${path}`);
+        const t = setTimeout(() => { ws.close(); resolve(false); }, 5000);
+        ws.onopen = () => { clearTimeout(t); ws.close(); resolve(true); };
+        ws.onerror = () => { clearTimeout(t); resolve(false); };
+      });
+      check('WebSocket channel accepts a handshake', opened, label);
+    }
+  }
+
+  // End-to-end: a fresh watchlist plate ingested over HTTP must be broadcast.
+  // A new plate avoids alert deduplication, which would (correctly) suppress a
+  // second alert for one that already raised one, keeping this repeatable.
+  const probePlate = `GJ99ZZ${String(Date.now()).slice(-4)}`;
+  const frames: Array<{ type?: string; payload?: Record<string, unknown> }> = [];
+  const ws = new WebSocket(`${API.replace(/^http/, 'ws')}/ws/events`);
   const opened = await new Promise<boolean>((resolve) => {
     const t = setTimeout(() => resolve(false), 5000);
     ws.onopen = () => { clearTimeout(t); resolve(true); };
     ws.onerror = () => { clearTimeout(t); resolve(false); };
   });
-  check('WebSocket connects at /api/ws/events', opened, wsUrl);
+  check('WebSocket connects for broadcast capture', opened);
 
   if (opened) {
-    ws.onmessage = (e) => received.push(JSON.parse(String(e.data)));
-
-    // Use a freshly minted watchlist plate rather than the demo one: alert
-    // deduplication would (correctly) suppress a second alert for a plate that
-    // already raised one, and this check must be repeatable.
-    const probePlate = `GJ99ZZ${String(Date.now()).slice(-4)}`;
+    ws.onmessage = (e) => frames.push(JSON.parse(String(e.data)));
     await fetch(`${API}/watchlist`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        plate_number: probePlate,
-        category: 'stolen vehicle',
-        description: 'Contract verification probe',
-        active: true,
-      }),
+      body: JSON.stringify({ plate_number: probePlate, category: 'stolen vehicle', description: 'Contract probe', active: true }),
     });
-
     await fetch(`${API}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -203,23 +245,18 @@ async function main() {
         evidence_ref: 'verify/realtime.jpg',
       }),
     });
-
     await new Promise((r) => setTimeout(r, 1500));
-    check('backend pushed at least one frame', received.length > 0, `${received.length} frames`);
 
-    const translated = received.flatMap(mapRealtimeMessages);
-    check('frames translate to typed UI messages', translated.length > 0,
-      translated.map((m) => m.type).join('/'));
-    const alertMsg = translated.find((m) => m.type === 'ALERT');
-    check('watchlist hit arrives as an ALERT', !!alertMsg);
-    if (alertMsg && alertMsg.type === 'ALERT') {
-      check('alert carries the probe plate', alertMsg.payload.plate === probePlate, alertMsg.payload.plate);
-      check('alert has a camera + severity', !!alertMsg.payload.cameraId && !!alertMsg.payload.severity,
-        `${alertMsg.payload.cameraId} ${alertMsg.payload.severity}`);
+    const created = frames.find((f) => f.type === 'ALERT_CREATED');
+    check('watchlist hit broadcast as ALERT_CREATED', !!created, frames.map((f) => f.type).join('/'));
+    if (created?.payload) {
+      const p = created.payload;
+      check('broadcast carries the probe plate', String(p.plate_number ?? p.plate) === probePlate, String(p.plate_number ?? p.plate));
+      check('broadcast carries camera + severity', !!p.camera_id && !!p.severity, `${p.camera_id} ${p.severity}`);
+      // The UI derives both a sighting and an alert from this one frame, so it
+      // must carry the event fields as well as the alert fields.
+      check('broadcast carries event fields for the live feed', p.event_id != null && p.confidence != null, `event_id=${p.event_id}`);
     }
-    const eventMsg = translated.find((m) => m.type === 'EVENT');
-    check('detection arrives as an EVENT', !!eventMsg);
-    check('no NaN in realtime payloads', !hasNaN(translated));
     ws.close();
   }
 

@@ -79,6 +79,16 @@ class CameraListResponse(BaseModel):
     data: List[CameraItem]
 
 
+class CameraStreamTicket(BaseModel):
+    """Browser-safe playback ticket. Contains no credentials and no RTSP URLs."""
+    camera_id: str
+    stream_type: str = "WEBRTC"
+    stream_url: str = ""
+    expires_at: datetime
+    playable: bool = False
+    reason: Optional[str] = None
+
+
 class CameraStreamInfo(BaseModel):
     camera_id: str
     status: str
@@ -259,6 +269,18 @@ class VehicleRouteResponse(BaseModel):
     route: List[RoutePoint]
 
 
+class VehicleProfileResponse(BaseModel):
+    """Investigation profile for one plate: sighting stats + watchlist state."""
+    plate_number: str
+    vehicle_class: Optional[str] = None
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    total_sightings: int = 0
+    cameras_touched: int = 0
+    watchlist_match: bool = False
+    watchlist: Optional[WatchlistResponse] = None
+
+
 # --- System Health Schema ---
 class HealthResponse(BaseModel):
     status: str
@@ -274,35 +296,7 @@ class HealthResponse(BaseModel):
 
 
 # --- Camera stream ticket ----------------------------------------------------
-class CameraStreamTicket(BaseModel):
-    """Playback ticket handed to the browser.
-
-    Resolved server-side so the frontend never holds Sentinel credentials and
-    never constructs an authenticated stream URL itself.
-    """
-    camera_id: str
-    stream_type: str
-    stream_url: str
-    codec: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    status: str
-    expires_at: Optional[datetime] = None
-    poster: Optional[str] = None
-
-
 # --- Vehicle profile (investigation header) ----------------------------------
-class VehicleProfileResponse(BaseModel):
-    plate_number: str
-    vehicle_class: Optional[str] = None
-    total_sightings: int
-    cameras_touched: int
-    first_seen: Optional[datetime] = None
-    last_seen: Optional[datetime] = None
-    watchlist_match: bool = False
-    watchlist: Optional["WatchlistResponse"] = None
-
-
 # --- Dashboard KPIs ----------------------------------------------------------
 class KpisResponse(BaseModel):
     total_cameras: int

@@ -1,72 +1,73 @@
 """
-Stats API — dashboard KPI aggregates.
+Stats API — live Command Center KPIs.
 
-GET /api/stats/kpis — the numbers the Command Center header shows.
-
-Everything here is computed from the database rather than returned from a
-fixture, so in LIVE mode a KPI is never a fabricated value.
+GET /api/stats/kpis  — dashboard counters computed from the real database.
+No fabricated values: every number is derived from cameras/alerts/events rows.
 """
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone, timedelta
 
 from ..database.database import get_db
-from ..database.models import Alert, Camera, VehicleEvent
-from ..database.schemas import KpisResponse
+from ..database.models import Camera, Alert, VehicleEvent
+from ..camera.manager import camera_manager
 
 router = APIRouter(prefix="/stats", tags=["Stats"])
 
 
-@router.get("/kpis", response_model=KpisResponse, summary="Command Center KPIs")
-def get_kpis(db: Session = Depends(get_db)):
-    now = datetime.now(timezone.utc)
-    window = now - timedelta(hours=24)
+class DashboardKpis(BaseModel):
+    total_cameras: int
+    cameras_online: int
+    cameras_degraded: int
+    cameras_offline: int
+    active_alerts: int
+    vehicle_detections_24h: int
+    anpr_reads_24h: int
+    watchlist_matches_24h: int
+    generated_at: datetime
 
-    total_cameras = db.query(func.count(Camera.id)).scalar() or 0
-    online = db.query(func.count(Camera.id)).filter(Camera.status == "ONLINE").scalar() or 0
-    degraded = db.query(func.count(Camera.id)).filter(Camera.status == "DEGRADED").scalar() or 0
-    offline = max(total_cameras - online - degraded, 0)
+
+@router.get("/kpis", response_model=DashboardKpis, summary="Command Center KPIs")
+def get_kpis(db: Session = Depends(get_db)):
+    """Aggregate KPI counters for the Command Center dashboard.
+
+    Camera status follows the same precedence as GET /cameras: live stream
+    status when the manager knows the camera, otherwise the registry value.
+    """
+    cameras = db.query(Camera).all()
+
+    online = degraded = offline = 0
+    for cam in cameras:
+        stream_status = camera_manager.get_camera_status(cam.camera_id)
+        status = (stream_status["status"] if stream_status else (cam.status or "OFFLINE")).upper()
+        if status == "ONLINE":
+            online += 1
+        elif status in ("DEGRADED", "CONNECTING", "ERROR"):
+            degraded += 1
+        else:
+            offline += 1
 
     active_alerts = (
-        db.query(func.count(Alert.id))
-        .filter(Alert.status.in_(["NEW", "ACKNOWLEDGED"]))
-        .scalar()
-        or 0
+        db.query(Alert)
+        .filter(Alert.status.notin_(["RESOLVED", "DISMISSED"]))
+        .count()
     )
 
-    detections_24h = (
-        db.query(func.count(VehicleEvent.id))
-        .filter(VehicleEvent.event_time >= window)
-        .scalar()
-        or 0
-    )
-    # An ANPR read is a sighting that actually produced a plate.
-    anpr_24h = (
-        db.query(func.count(VehicleEvent.id))
-        .filter(
-            VehicleEvent.event_time >= window,
-            VehicleEvent.plate_number.isnot(None),
-            VehicleEvent.plate_number != "",
-        )
-        .scalar()
-        or 0
-    )
-    watchlist_24h = (
-        db.query(func.count(VehicleEvent.id))
-        .filter(VehicleEvent.event_time >= window, VehicleEvent.watchlist_match == True)  # noqa: E712
-        .scalar()
-        or 0
-    )
+    day_ago = datetime.now(timezone.utc) - timedelta(hours=24)
+    base_24h = db.query(VehicleEvent).filter(VehicleEvent.event_time >= day_ago)
+    detections_24h = base_24h.count()
+    anpr_24h = base_24h.filter(VehicleEvent.plate_number.isnot(None)).count()
+    matches_24h = base_24h.filter(VehicleEvent.watchlist_match.is_(True)).count()
 
-    return KpisResponse(
-        total_cameras=total_cameras,
+    return DashboardKpis(
+        total_cameras=len(cameras),
         cameras_online=online,
         cameras_degraded=degraded,
         cameras_offline=offline,
         active_alerts=active_alerts,
         vehicle_detections_24h=detections_24h,
         anpr_reads_24h=anpr_24h,
-        watchlist_matches_24h=watchlist_24h,
+        watchlist_matches_24h=matches_24h,
+        generated_at=datetime.now(timezone.utc),
     )
