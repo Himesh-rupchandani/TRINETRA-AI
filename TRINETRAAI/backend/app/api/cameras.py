@@ -13,12 +13,13 @@ if __name__ == "__main__" and not __package__:
     __package__ = "backend.app.api"
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.logging_config import logger
 from ..utils.timestamps import utc_now
 from ..database.database import get_db
+import cv2
 from sqlalchemy import func
 from ..database.models import Camera, VehicleEvent
 from ..database.schemas import (
@@ -299,6 +300,31 @@ def restart_camera(camera_id: str):
     """Restart stream ingestion for a camera."""
     success = camera_manager.restart_camera(camera_id)
     return {"status": "restarted", "camera_id": camera_id, "success": success}
+
+
+@router.get("/{camera_id}/snapshot")
+def camera_snapshot(camera_id: str):
+    """Single annotated JPEG frame.
+
+    The grid renders 30 cards at once; holding 30 open multipart MJPEG
+    connections would pin a socket and an encoder per card. A cheap polled
+    snapshot gives the same "it's moving" signal at a fraction of the cost,
+    and the full MJPEG stream stays for the detail view.
+    """
+    frame = camera_manager.get_latest_frame(camera_id, annotated=True)
+    if frame is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No frame available for camera {camera_id}",
+        )
+    ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode frame")
+    return Response(
+        content=buf.tobytes(),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @router.get("/{camera_id}/live")

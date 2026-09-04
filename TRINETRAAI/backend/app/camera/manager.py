@@ -199,18 +199,33 @@ class CameraManager:
             "is_demo_feed": stream.is_demo_feed,
         }
 
+    #: An annotated frame older than this is considered stale, and the live
+    #: raw frame is preferred over it. The AI pipeline only runs on a subset of
+    #: frames, so without this the preview freezes on the last annotated frame.
+    ANNOTATION_TTL_SECONDS = 2.0
+
     def update_annotated_frame(self, camera_id: str, frame: np.ndarray):
         """Update the latest annotated frame with AI overlays for display."""
         with self._lock:
-            self._latest_annotated_frames[camera_id] = frame
+            self._latest_annotated_frames[camera_id] = (frame, time.monotonic())
 
     def get_latest_frame(self, camera_id: str, annotated: bool = True) -> Optional[np.ndarray]:
-        """Get latest frame for a camera (annotated or raw)."""
+        """Get latest frame for a camera (annotated or raw).
+
+        Prefers a *fresh* annotated frame so overlays are visible, but falls
+        back to the live raw frame once the annotation goes stale. Returning a
+        stale annotation unconditionally made the preview look frozen.
+        """
         with self._lock:
-            if annotated and camera_id in self._latest_annotated_frames:
-                return self._latest_annotated_frames[camera_id].copy()
+            entry = self._latest_annotated_frames.get(camera_id)
+            if annotated and entry is not None:
+                frame, stamped = entry
+                if (time.monotonic() - stamped) <= self.ANNOTATION_TTL_SECONDS:
+                    return frame.copy()
             if camera_id in self._latest_packets:
                 return self._latest_packets[camera_id].frame.copy()
+            if entry is not None:
+                return entry[0].copy()
             return None
 
     def get_latest_packet(self, camera_id: str) -> Optional[FramePacket]:
@@ -278,9 +293,12 @@ class CameraManager:
                     with self._lock:
                         self._latest_packets[camera_id] = packet
 
-                        # If no annotated frame is present yet, mirror raw frame
-                        if camera_id not in self._latest_annotated_frames:
-                            self._latest_annotated_frames[camera_id] = packet.frame
+                        # Mirror the raw frame so the preview always advances.
+                        # A fresher annotated frame still wins in
+                        # get_latest_frame; this only prevents a freeze.
+                        self._latest_annotated_frames.setdefault(
+                            camera_id, (packet.frame, 0.0)
+                        )
 
                     # Rule 14: Subsample frames while strictly preserving packet PTS
                     if packet.sequence_number % process_every_n == 0:

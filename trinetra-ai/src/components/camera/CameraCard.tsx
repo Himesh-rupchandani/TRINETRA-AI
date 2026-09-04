@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Car, MapPin, Maximize2, Video } from 'lucide-react';
 import type { Camera } from '@/types';
@@ -21,10 +21,22 @@ interface Props {
  * In demo mode a clearly-labelled synthetic preview is shown instead.
  */
 export const CameraCard = memo(function CameraCard({ camera, onView, compact, selected, variant = 'card' }: Props) {
-  const preview = useMemo(
-    () => (config.useMocks ? cameraStill(camera.id) : null),
-    [camera.id],
-  );
+  // Refresh token for the live snapshot. Cards poll a single JPEG rather than
+  // holding 30 open MJPEG connections; the full stream is on the detail page.
+  const [tick, setTick] = useState(0);
+  const canSnapshot = !config.useMocks && camera.status !== 'OFFLINE';
+
+  useEffect(() => {
+    if (!canSnapshot) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 2000);
+    return () => window.clearInterval(id);
+  }, [canSnapshot]);
+
+  const preview = useMemo(() => {
+    if (config.useMocks) return cameraStill(camera.id);
+    if (!canSnapshot) return null;
+    return `${config.apiBaseUrl}/cameras/${camera.id.toUpperCase()}/snapshot?t=${tick}`;
+  }, [camera.id, canSnapshot, tick]);
 
   if (variant === 'list') {
     return (
