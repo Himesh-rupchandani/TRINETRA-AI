@@ -66,8 +66,10 @@ FEEDS = {
         "longitude": 72.5570,
     },
     "camd02": {
-        "video": CV_ROOT / "feeds" / "cctv.avi",
-        "name": "DEMO FEED — City Arterial",
+        # Plate-legible close-up footage: rear plates are readable at this
+        # angle/resolution, so the ANPR stage (plate detect + OCR) can fire.
+        "video": CV_ROOT / "feeds" / "city_cctv.mp4",
+        "name": "DEMO FEED — City Arterial (ANPR Lane)",
         "location": "Local Demo Arterial",
         "latitude": 23.0405,
         "longitude": 72.5301,
@@ -257,11 +259,17 @@ def run_feed(camera_id: str, cfg: dict, settings: Settings, annotate_feed: bool)
         if ok:
             STORE.publish(camera_id, buf.tobytes())
 
+    ocr_engine = None
+    if settings.anpr_enabled:
+        from anpr.ocr import RapidOcrEngine  # offline ONNX OCR (models in wheel)
+
+        ocr_engine = RapidOcrEngine()
+
     pipeline = CameraPipeline(
         camera,
         settings,
         detector=detector,
-        ocr_engine=None,           # real detection + tracking; ANPR stays off (no plate reader in this env)
+        ocr_engine=ocr_engine,     # real detection + tracking; ANPR via RapidOCR when --anpr
         backend_client=backend,
         evidence_writer=EvidenceWriter(settings.evidence_dir, settings.evidence_jpeg_quality),
         emit_plateless_sightings=True,   # genuine vehicle sightings without OCR
