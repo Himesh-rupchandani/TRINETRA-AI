@@ -17,7 +17,17 @@ import sys
 from pathlib import Path
 
 FEEDS_DIR = Path(__file__).resolve().parents[3] / "cv-engine" / "feeds"
-CANDIDATE_FEEDS = ["los_angeles.mp4", "cctv.avi", "driving1.mp4", "highway.mp4"]
+CANDIDATE_FEEDS = [
+    "highway2.mp4",  # real highway CCTV, dense traffic
+    "city_cctv.mp4",  # real city CCTV footage
+    "city_traffic.mp4",  # dense urban arterial
+    "intersection_a.mp4",  # fixed intersection cam (multi-cam set)
+    "intersection_b.mp4",  # second angle of the intersection set
+    "crosswalk.avi",  # pedestrians + cars (OpenCV classic vtest)
+    "night_traffic.mp4",  # night-time traffic
+    "los_angeles.mp4",  # 1080p highway aerial
+    "cctv.avi",  # small CCTV clip
+]
 # Cameras with dedicated detection feeds (managed by run_feed_demo.py).
 KEEP_AS_IS = {"CAMD01", "CAMD02"}
 
@@ -34,9 +44,11 @@ def main() -> int:
         return 1
 
     conn = sqlite3.connect(args.db)
+    # Idempotent: re-map every non-demo camera so the registry always tracks
+    # the current CANDIDATE_FEEDS list (handles removed/renamed clips too).
     rows = conn.execute(
-        "SELECT camera_id FROM cameras WHERE lower(stream_type) != 'file' "
-        "AND camera_id NOT IN (%s)" % ",".join("?" * len(KEEP_AS_IS)),
+        "SELECT camera_id FROM cameras WHERE camera_id NOT IN (%s)"
+        % ",".join("?" * len(KEEP_AS_IS)),
         sorted(KEEP_AS_IS),
     ).fetchall()
 

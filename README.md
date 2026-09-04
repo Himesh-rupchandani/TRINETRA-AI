@@ -24,7 +24,9 @@ cd TRINETRAAI/backend && pip install -r requirements.txt
 python -m scripts.seed_demo
 # Point every registry camera at a local traffic clip (offline demo) —
 # video is then decoded ON DEMAND when an operator opens a camera:
-python -m scripts.point_cameras_at_local_feeds
+python -m scripts.point_cameras_at_local_feeds   # cycles 9 REAL traffic clips
+# (highway CCTV, city CCTV, 2 intersection cams, crosswalk w/ pedestrians,
+#  night traffic, aerial highway, and a small CCTV clip — see the script)
 # EVIDENCE_ROOT serves the CV engine's detection crops at /api/evidence/...
 EVIDENCE_ROOT=../../cv-engine/evidence uvicorn app.main:app --host 0.0.0.0 --port 8000
 # (AUTO_START_CAMERAS=true is only for REAL RTSP/HLS deployments — it starts
