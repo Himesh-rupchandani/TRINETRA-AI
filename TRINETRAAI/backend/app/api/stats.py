@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 
 from ..database.database import get_db
 from ..database.models import Camera, Alert, VehicleEvent
-from ..camera.manager import camera_manager
+from .cameras import _resolve_camera_status
 
 router = APIRouter(prefix="/stats", tags=["Stats"])
 
@@ -32,18 +32,18 @@ class DashboardKpis(BaseModel):
 def get_kpis(db: Session = Depends(get_db)):
     """Aggregate KPI counters for the Command Center dashboard.
 
-    Camera status follows the same precedence as GET /cameras: live stream
-    status when the manager knows the camera, otherwise the registry value.
+    Camera status is resolved by the SAME helper GET /cameras uses, so the
+    Command Center counter can never disagree with the camera grid about how
+    many units are online.
     """
     cameras = db.query(Camera).all()
 
     online = degraded = offline = 0
     for cam in cameras:
-        stream_status = camera_manager.get_camera_status(cam.camera_id)
-        status = (stream_status["status"] if stream_status else (cam.status or "OFFLINE")).upper()
+        status, _ = _resolve_camera_status(cam)
         if status == "ONLINE":
             online += 1
-        elif status in ("DEGRADED", "CONNECTING", "ERROR"):
+        elif status == "DEGRADED":
             degraded += 1
         else:
             offline += 1

@@ -150,6 +150,44 @@ def test_stats_kpis_real_counts(client):
     assert k["watchlist_matches_24h"] == 2
 
 
+def test_kpi_camera_counters_agree_with_camera_grid(client):
+    """The Command Center counters and the camera grid must never disagree.
+
+    Both read camera status, but they used to read it differently: the grid
+    resolved it through the registry fallback while the KPI aggregate took the
+    ingestion manager's word for it. With no stream workers running the manager
+    reports every camera OFFLINE, so the dashboard showed "0 online" above a
+    grid of green tiles. Both now share one resolver.
+    """
+    grid = client.get("/api/cameras").json()["data"]
+    k = client.get("/api/stats/kpis").json()
+
+    online = sum(1 for c in grid if c["status"] == "ONLINE")
+    degraded = sum(1 for c in grid if c["status"] == "DEGRADED")
+    offline = sum(1 for c in grid if c["status"] == "OFFLINE")
+
+    assert k["total_cameras"] == len(grid)
+    assert k["cameras_online"] == online
+    assert k["cameras_degraded"] == degraded
+    assert k["cameras_offline"] == offline
+
+
+def test_camera_grid_exposes_registry_metadata(client):
+    """Phase 3/19: the registry — not individual components — owns camera identity."""
+    cam = client.get("/api/cameras/cam04").json()
+    assert cam["camera_id"] == "CAM04"
+    assert cam["location"] == "Paldi Circle"
+    assert cam["latitude"] == 23.0338
+    assert cam["longitude"] == 72.585
+    assert cam["status"] == "ONLINE"
+
+    listing = next(c for c in client.get("/api/cameras").json()["data"] if c["id"] == "cam04")
+    assert listing["location"] == cam["location"]
+    assert listing["status"] == cam["status"]
+    assert listing["latitude"] == cam["latitude"]
+    assert listing["longitude"] == cam["longitude"]
+
+
 def test_camera_stream_ticket(client):
     r = client.get("/api/cameras/cam04/stream")
     assert r.status_code == 200
