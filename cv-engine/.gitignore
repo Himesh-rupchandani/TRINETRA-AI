@@ -3,6 +3,8 @@
 *.onnx
 *.engine
 models_dev/
-evidence/
+# CV evidence OUTPUT (runtime frames) — the evidence/ *source package* is tracked.
+/evidence/*/
+evidence_out/
 __pycache__/
 *.pyc

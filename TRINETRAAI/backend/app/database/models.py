@@ -31,6 +31,8 @@ class Camera(Base):
     latitude = Column(Float, nullable=True, default=23.0225)
     longitude = Column(Float, nullable=True, default=72.5714)
     location = Column(String(200), nullable=True)
+    # Owning agency/department for this camera (Model 1 registry attribute).
+    department = Column(String(100), nullable=True)
     codec = Column(String(50), nullable=True, default="H264")
     width = Column(Integer, nullable=True, default=1920)
     height = Column(Integer, nullable=True, default=1080)

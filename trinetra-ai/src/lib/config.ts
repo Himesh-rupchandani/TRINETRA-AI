@@ -10,7 +10,7 @@ export const config = {
   tagline: 'Intelligent Vision. Faster Response.',
   useMocks: (env.VITE_USE_MOCKS ?? 'true') !== 'false',
   apiBaseUrl: env.VITE_API_BASE_URL ?? '/api',
-  realtimeTransport: (env.VITE_REALTIME_TRANSPORT ?? 'sse') as 'sse' | 'ws' | 'off',
+  realtimeTransport: (env.VITE_REALTIME_TRANSPORT ?? 'ws') as 'sse' | 'ws' | 'off',
   /**
    * Same-origin path the UI posts WHEP offers to. A server-side proxy maps it
    * onto the Sentinel media gateway, so the browser never sees the gateway

@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # Alert deduplication cooldown window (seconds)
     ALERT_DEDUP_COOLDOWN_SECONDS: int = 180
 
+    # Sighting idempotency window (seconds). A repeat POST for the same
+    # (camera, track, plate) inside this window is treated as a retry of the
+    # same physical sighting, not a new one, so a network retry from the CV
+    # engine can never inflate a vehicle's cross-camera trace.
+    SIGHTING_DEDUP_WINDOW_SECONDS: int = 30
+
     # Sentinel CCTV catalogue sync URL
     SENTINEL_CATALOGUE_URL: str = "https://cctv.corp8.cloud/cameras.json"
 

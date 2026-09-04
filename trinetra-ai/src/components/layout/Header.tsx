@@ -83,9 +83,23 @@ export function Header({
       </form>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        {config.useMocks && (
-          <span className="chip hidden border-brand/25 bg-brand/10 font-semibold text-brand xl:inline-flex">
+        {/*
+          Operating mode must never be ambiguous (spec Phase 4 / 35): DEMO shows
+          synthetic data, LIVE SENTINEL shows only real backend/CV output.
+        */}
+        {config.useMocks ? (
+          <span
+            className="chip hidden border-brand/25 bg-brand/10 font-semibold text-brand xl:inline-flex"
+            title="Synthetic demo data — no backend required"
+          >
             Demo Data
+          </span>
+        ) : (
+          <span
+            className="chip hidden border-online/30 bg-online/10 font-semibold text-online xl:inline-flex"
+            title="Live Sentinel: every value shown comes from the backend and CV pipeline"
+          >
+            Live Sentinel
           </span>
         )}
 

@@ -41,6 +41,43 @@ def match_watchlist(db: Session, plate_number: str) -> Optional[Watchlist]:
 # Alert Deduplication
 # ---------------------------------------------------------------------------
 
+def _find_duplicate_sighting(
+    db: Session,
+    camera_id: str,
+    vehicle_track_id: Optional[int],
+    plate_number: Optional[str],
+    event_time: datetime,
+) -> Optional[VehicleEvent]:
+    """Return an existing event that represents this same physical sighting.
+
+    Keyed on (camera, track, plate) within SIGHTING_DEDUP_WINDOW_SECONDS.
+    A different camera is never deduplicated against another — cross-camera
+    sightings are exactly what the investigation flow depends on.
+    """
+    window = getattr(settings, "SIGHTING_DEDUP_WINDOW_SECONDS", 30)
+    if window <= 0 or vehicle_track_id is None or not plate_number:
+        # Without a stable track id + plate we cannot safely call it a duplicate.
+        return None
+
+    if event_time.tzinfo is None:
+        event_time = event_time.replace(tzinfo=timezone.utc)
+    earliest = event_time - timedelta(seconds=window)
+    latest = event_time + timedelta(seconds=window)
+
+    return (
+        db.query(VehicleEvent)
+        .filter(
+            VehicleEvent.camera_id == camera_id,
+            VehicleEvent.vehicle_track_id == vehicle_track_id,
+            VehicleEvent.plate_number == plate_number,
+            VehicleEvent.event_time >= earliest.replace(tzinfo=None),
+            VehicleEvent.event_time <= latest.replace(tzinfo=None),
+        )
+        .order_by(VehicleEvent.id.asc())
+        .first()
+    )
+
+
 def _is_duplicate_alert(db: Session, plate_number: str, camera_id: str, cooldown_seconds: int) -> bool:
     """
     Returns True if an alert for the same plate+camera was already created
@@ -163,6 +200,27 @@ async def ingest_event(
 
     # --- Step 5: Persist VehicleEvent ---
     event_ts = event_time or datetime.now(timezone.utc)
+
+    # Sighting idempotency (spec §25): the CV engine already suppresses
+    # per-frame duplicates, but a retried POST after a network blip must not
+    # create a second sighting — that would corrupt the cross-camera trace and
+    # the GIS route. Same camera + track + plate inside the window == same event.
+    existing = _find_duplicate_sighting(
+        db,
+        camera_id=canonical_camera_id,
+        vehicle_track_id=vehicle_track_id,
+        plate_number=plate_number,
+        event_time=event_ts,
+    )
+    if existing is not None:
+        logger.info(
+            f"[SIGHTING DEDUP] Ignored duplicate sighting for plate={plate_number} "
+            f"cam={canonical_camera_id} track={vehicle_track_id}; "
+            f"returning existing event #{existing.id}."
+        )
+        watchlist_entry = match_watchlist(db, plate_number) if plate_number else None
+        return existing, watchlist_entry, None
+
     event = VehicleEvent(
         camera_id=canonical_camera_id,
         vehicle_track_id=vehicle_track_id,

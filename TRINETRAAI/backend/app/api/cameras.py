@@ -32,33 +32,44 @@ from ..camera.manager import camera_manager
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
 
+def _serialize_camera(cam: Camera) -> CameraItem:
+    """Single source of truth for the camera contract (spec Phase 3 / 39).
+
+    Every endpoint returns cameras through this function so the registry, the
+    grid, the map and the detail page can never disagree about a camera's
+    status, department, codec or resolution. Live ingestion state (from the
+    CameraManager) always wins over the last value persisted in the DB.
+    """
+    stream_status = camera_manager.get_camera_status(cam.camera_id)
+    current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
+    last_seen = (
+        stream_status["last_seen"]
+        if stream_status and stream_status.get("last_seen")
+        else cam.last_seen
+    )
+    return CameraItem(
+        id=cam.camera_id.lower(),
+        camera_id=cam.camera_id,
+        name=cam.name,
+        location=cam.location or cam.name,
+        latitude=cam.latitude,
+        longitude=cam.longitude,
+        department=cam.department,
+        status=current_status,
+        codec=cam.codec or "H264",
+        width=cam.width or 1920,
+        height=cam.height or 1080,
+        stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
+        stream_url=cam.stream_url,
+        last_seen=last_seen,
+    )
+
+
 @router.get("", response_model=CameraListResponse, summary="List cameras", description="Returns normalized list of all registered CCTV cameras.")
 def list_cameras(db: Session = Depends(get_db)):
     """List all registered CCTV cameras normalized for frontend and analytics."""
-    cameras = db.query(Camera).all()
-    items = []
-    for cam in cameras:
-        stream_status = camera_manager.get_camera_status(cam.camera_id)
-        current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-        last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
-        items.append(
-            CameraItem(
-                id=cam.camera_id.lower(),
-                camera_id=cam.camera_id,
-                name=cam.name,
-                location=cam.location or cam.name,
-                latitude=cam.latitude,
-                longitude=cam.longitude,
-                status=current_status,
-                codec=cam.codec or "H264",
-                width=cam.width or 1920,
-                height=cam.height or 1080,
-                stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
-                stream_url=cam.stream_url,
-                last_seen=last_seen,
-            )
-        )
-    return CameraListResponse(data=items)
+    cameras = db.query(Camera).order_by(Camera.camera_id).all()
+    return CameraListResponse(data=[_serialize_camera(c) for c in cameras])
 
 
 @router.get("/active-streams", response_model=List[CameraStreamInfo])
@@ -123,24 +134,7 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Camera '{camera_id}' not found.",
         )
-    stream_status = camera_manager.get_camera_status(cam.camera_id)
-    current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-    last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
-    return CameraItem(
-        id=cam.camera_id.lower(),
-        camera_id=cam.camera_id,
-        name=cam.name,
-        location=cam.location or cam.name,
-        latitude=cam.latitude,
-        longitude=cam.longitude,
-        status=current_status,
-        codec=cam.codec or "H264",
-        width=cam.width or 1920,
-        height=cam.height or 1080,
-        stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
-        stream_url=cam.stream_url,
-        last_seen=last_seen,
-    )
+    return _serialize_camera(cam)
 
 
 @router.put("/{camera_id}", response_model=CameraResponse)

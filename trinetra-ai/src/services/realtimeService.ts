@@ -1,6 +1,8 @@
 import type { Alert, Camera, VehicleEvent } from '@/types';
 import { config } from '@/lib/config';
 import { isMockMode, realtimeUrl } from './api';
+import { cameraService } from './cameraService';
+import { toCameraStatus, toIso } from './adapters';
 import { mockCameras } from '@/mocks/cameras';
 import { watchlistByPlate } from '@/mocks/watchlist';
 import { pushMockEvent, setMockCameraStatus } from '@/mocks/mockBackend';
@@ -138,14 +140,138 @@ function connectSimulator(onMessage: Handler, onState: StateHandler): RealtimeCh
 
 /* ------------------------------- SSE / WS ------------------------------- */
 
+/**
+ * Wire contract published by the backend WebSocket
+ * (`WS /api/ws/events`, see app/api/websocket.py):
+ *
+ *   { type: "VEHICLE_DETECTED" | "WATCHLIST_MATCH" | "ALERT_CREATED"
+ *           | "CAMERA_STATUS_CHANGED" | "CONNECTED" | "PONG",
+ *     timestamp: ISO8601,
+ *     payload: {...}, data: {...} }
+ *
+ * Translating it here keeps the message model the UI consumes stable, and is
+ * the only place that knows the backend's event names.
+ */
+interface WirePayload {
+  event_id?: number | string;
+  alert_id?: number | string;
+  id?: number | string;
+  camera_id?: string;
+  plate?: string | null;
+  plate_number?: string | null;
+  vehicle_class?: string | null;
+  confidence?: number | null;
+  severity?: string | null;
+  message?: string | null;
+  event_time?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  watchlist_match?: boolean | null;
+  status?: string | null;
+}
+
+interface WireMessage {
+  type?: string;
+  timestamp?: string;
+  payload?: WirePayload;
+  data?: WirePayload;
+}
+
+/**
+ * Translate one backend frame into zero or more UI messages.
+ * Camera metadata (name/location) is resolved from the registry cache, so a
+ * live event never displays a fabricated location.
+ */
+function translate(raw: WireMessage, cameras: Map<string, Camera>): RealtimeMessage[] {
+  const type = (raw.type ?? '').toUpperCase();
+  const d = raw.payload ?? raw.data;
+  if (!d) return [];
+
+  if (type === 'CONNECTED' || type === 'PONG') return [];
+
+  const cameraId = (d.camera_id ?? '').toUpperCase();
+  const cam = cameras.get(cameraId);
+
+  if (type === 'CAMERA_STATUS_CHANGED') {
+    return [
+      {
+        type: 'CAMERA_STATUS',
+        payload: { cameraId, status: toCameraStatus(d.status) },
+      },
+    ];
+  }
+
+  if (!['VEHICLE_DETECTED', 'WATCHLIST_MATCH', 'ALERT_CREATED'].includes(type)) return [];
+
+  const timestamp = toIso(d.event_time) ?? toIso(raw.timestamp) ?? new Date().toISOString();
+  const plate = d.plate ?? d.plate_number ?? '';
+  const watchlistMatch = d.watchlist_match === true || type !== 'VEHICLE_DETECTED';
+  const confidence = typeof d.confidence === 'number' ? d.confidence : 0;
+
+  const event: VehicleEvent = {
+    id: String(d.event_id ?? `${cameraId}-${timestamp}`),
+    cameraId,
+    cameraName: cam?.name,
+    plate: plate || '—',
+    plateConfidence: confidence,
+    timestamp,
+    latitude: d.latitude ?? cam?.latitude ?? 0,
+    longitude: d.longitude ?? cam?.longitude ?? 0,
+    location: cam?.location,
+    vehicleClass: (d.vehicle_class?.toUpperCase() as VehicleEvent['vehicleClass']) ?? undefined,
+    eventType: watchlistMatch ? 'WATCHLIST_MATCH' : plate ? 'ANPR_READ' : 'VEHICLE_DETECTION',
+    severity: watchlistMatch ? 'CRITICAL' : 'INFO',
+    watchlistMatch,
+  };
+
+  const out: RealtimeMessage[] = [{ type: 'EVENT', payload: event }];
+
+  if (type === 'ALERT_CREATED') {
+    out.push({
+      type: 'ALERT',
+      payload: {
+        id: String(d.id ?? d.alert_id ?? ''),
+        eventId: String(d.event_id ?? ''),
+        plate: plate || '—',
+        cameraId,
+        cameraName: cam?.name,
+        location: cam?.location ?? '—',
+        latitude: cam?.latitude,
+        longitude: cam?.longitude,
+        severity: (d.severity?.toUpperCase() as Alert['severity']) ?? 'HIGH',
+        status: 'NEW',
+        category: 'WATCHLIST_MATCH',
+        createdAt: timestamp,
+        confidence,
+        note: d.message ?? undefined,
+      },
+    });
+  }
+
+  return out;
+}
+
+/** Camera registry cache so each live frame does not trigger a refetch. */
+function cameraCache(): { get: () => Map<string, Camera> } {
+  let cameras = new Map<string, Camera>();
+  cameraService
+    .index()
+    .then((m) => {
+      cameras = m;
+    })
+    .catch(() => undefined);
+  return { get: () => cameras };
+}
+
 function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('CONNECTING');
-  const es = new EventSource(realtimeUrl('/stream'), { withCredentials: true });
+  const cache = cameraCache();
+  const es = new EventSource(realtimeUrl('/stream'));
   es.onopen = () => onState('LIVE');
   es.onerror = () => onState('OFFLINE');
   es.onmessage = (e) => {
     try {
-      onMessage(JSON.parse(e.data) as RealtimeMessage);
+      translate(JSON.parse(e.data) as WireMessage, cache.get()).forEach(onMessage);
     } catch {
       /* ignore malformed frame */
     }
@@ -155,24 +281,42 @@ function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel 
 
 function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('CONNECTING');
+  const cache = cameraCache();
   let closed = false;
-  let ws: WebSocket;
+  let ws: WebSocket | undefined;
   let retry: number;
+  let keepAlive: number;
+  let attempt = 0;
 
   const open = () => {
-    ws = new WebSocket(realtimeUrl('/ws', 'ws'));
-    ws.onopen = () => onState('LIVE');
+    ws = new WebSocket(realtimeUrl('/ws/events', 'ws'));
+
+    ws.onopen = () => {
+      attempt = 0;
+      onState('LIVE');
+      // The server keeps the socket alive off client traffic; ping periodically
+      // so idle proxies do not drop the connection.
+      keepAlive = window.setInterval(() => ws?.readyState === WebSocket.OPEN && ws.send('ping'), 25_000);
+    };
+
     ws.onmessage = (e) => {
       try {
-        onMessage(JSON.parse(e.data) as RealtimeMessage);
+        translate(JSON.parse(e.data) as WireMessage, cache.get()).forEach(onMessage);
       } catch {
         /* ignore malformed frame */
       }
     };
+
     ws.onclose = () => {
+      window.clearInterval(keepAlive);
       onState('OFFLINE');
-      if (!closed) retry = window.setTimeout(open, 4000); // simple backoff
+      if (closed) return;
+      // Exponential backoff, capped — survives a backend restart (spec Phase 38).
+      const delay = Math.min(30_000, 1_000 * 2 ** attempt++);
+      retry = window.setTimeout(open, delay);
     };
+
+    ws.onerror = () => ws?.close();
   };
   open();
 
@@ -180,6 +324,7 @@ function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
     close: () => {
       closed = true;
       window.clearTimeout(retry);
+      window.clearInterval(keepAlive);
       ws?.close();
     },
   };

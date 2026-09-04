@@ -61,6 +61,7 @@ class CameraItem(BaseModel):
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    department: Optional[str] = None
     status: str
     codec: Optional[str] = "H264"
     width: Optional[int] = 1920

@@ -1,3 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Local SQLite runtime DB (regenerate with: python -m scripts.seed_demo)
+TRINETRAAI/backend/trinetra.db
