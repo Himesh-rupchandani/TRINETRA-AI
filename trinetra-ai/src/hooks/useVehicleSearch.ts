@@ -41,7 +41,24 @@ export function useVehicleSearch() {
         vehicleService.events(plate),
         vehicleService.route(plate),
       ]);
-      const next: TraceResult = { plate, profile, events, route };
+      // LIVE routes carry no event ids (the backend route DTO omits them) —
+      // correlate each hop with its sighting by camera + timestamp.
+      const correlated =
+        route && route.points.some((p) => !p.eventId)
+          ? {
+              ...route,
+              points: route.points.map((p) => ({
+                ...p,
+                eventId:
+                  events.find(
+                    (e) =>
+                      e.cameraId.toLowerCase() === p.cameraId.toLowerCase() &&
+                      new Date(e.timestamp).getTime() === new Date(p.timestamp).getTime(),
+                  )?.id ?? p.eventId,
+              })),
+            }
+          : route;
+      const next: TraceResult = { plate, profile, events, route: correlated };
       setResult(next);
       setSearched(true);
       return next;

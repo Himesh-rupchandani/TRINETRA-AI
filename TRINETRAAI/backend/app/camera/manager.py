@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 import threading
@@ -217,35 +218,123 @@ class CameraManager:
         with self._lock:
             return self._latest_packets.get(camera_id)
 
+    # Stream types openable on demand for a live view. Files are local
+    # recordings (stamped as demo footage); rtsp/hls are real network cams.
+    _ONDEMAND_TYPES = {"file", "rtsp", "hls"}
+
+    def _ondemand_source(self, camera_id: str):
+        """Return (source, is_file) if this camera can be opened on demand."""
+        with self._lock:
+            stream = self._streams.get(camera_id) or self._streams.get(camera_id.upper())
+            if stream is None:
+                return None
+            stype = (getattr(stream, "source_type", "") or "").lower()
+            if stype not in self._ONDEMAND_TYPES:
+                return None
+            source = (stream.source or "").strip()
+        if not source:
+            return None
+        if stype == "file":
+            return (source, True) if os.path.exists(source) else None
+        return (source, False)  # real network camera URL
+
+    @staticmethod
+    def _stamp_source_osd(frame, is_file: bool):
+        """Burn an honest source label into on-demand live-view frames.
+
+        Recorded clips are explicitly marked NOT LIVE so demo footage can
+        never be mistaken for a real camera; real network streams are
+        marked LIVE.
+        """
+        label = "RECORDED DEMO FOOTAGE - NOT LIVE" if is_file else "LIVE SOURCE"
+        h, w = frame.shape[:2]
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+        x2, y2 = w - 10, h - 12
+        cv2.rectangle(frame, (x2 - tw - 10, y2 - th - 8), (x2 + 2, y2 + 4), (15, 18, 24), -1)
+        color = (0, 200, 255) if is_file else (0, 255, 0)
+        cv2.putText(frame, label, (x2 - tw - 5, y2), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55, color, 1, cv2.LINE_AA)
+        return frame
+
+    @staticmethod
+    def _read_ondemand_frame(cap: "cv2.VideoCapture", source: str):
+        """Read one frame for an on-demand live view, looping the file safely."""
+        ok, frame = cap.read()
+        if not (ok and frame is not None and frame.size > 0):
+            # Some containers cannot seek backwards reliably — reopen instead.
+            try:
+                cap.release()
+            except Exception:
+                pass
+            cap.open(source)
+            ok, frame = cap.read()
+        if not (ok and frame is not None and frame.size > 0):
+            return None
+        h, w = frame.shape[:2]
+        if w > 1280:  # keep on-demand views cheap to decode and stream
+            scale = 1280.0 / w
+            frame = cv2.resize(frame, (1280, int(round(h * scale))), interpolation=cv2.INTER_AREA)
+        return frame
+
     def generate_mjpeg_stream(self, camera_id: str):
-        """Yield multipart MJPEG stream frames for HTTP live view."""
-        while True:
-            frame = self.get_latest_frame(camera_id, annotated=True)
-            if frame is None:
-                placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
-                placeholder[:] = (20, 24, 30)
-                cv2.putText(
-                    placeholder,
-                    f"NO SIGNAL - {camera_id}",
-                    (180, 240),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (100, 100, 255),
-                    2,
+        """Yield multipart MJPEG stream frames for HTTP live view.
+
+        When no resident worker is running for the camera (e.g. file-backed
+        demo cameras with AUTO_START_CAMERAS off), the source file is decoded
+        on demand for the lifetime of this HTTP connection only.
+        """
+        ondemand_cap = None
+        ondemand_source = None
+        ondemand_is_file = True
+        try:
+            while True:
+                frame = self.get_latest_frame(camera_id, annotated=True)
+                if frame is None:
+                    frame = self.get_latest_frame(camera_id.upper(), annotated=True)
+                if frame is None and ondemand_source is None and ondemand_cap is None:
+                    resolved = self._ondemand_source(camera_id)
+                    if resolved is not None:
+                        ondemand_source, ondemand_is_file = resolved
+                        ondemand_cap = cv2.VideoCapture(ondemand_source)
+                        kind = "local recording" if ondemand_is_file else "real network stream"
+                        logger.info(
+                            f"[{camera_id.upper()}] On-demand live view decoding {kind}: {ondemand_source}"
+                        )
+                if frame is None and ondemand_cap is not None:
+                    frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)
+                    if frame is not None:
+                        frame = self._stamp_source_osd(frame, ondemand_is_file)
+                if frame is None:
+                    placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+                    placeholder[:] = (20, 24, 30)
+                    cv2.putText(
+                        placeholder,
+                        f"NO SIGNAL - {camera_id}",
+                        (180, 240),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8,
+                        (100, 100, 255),
+                        2,
+                    )
+                    frame = placeholder
+
+                ret, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if not ret:
+                    time.sleep(0.04)
+                    continue
+
+                frame_bytes = buffer.tobytes()
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
                 )
-                frame = placeholder
-
-            ret, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-            if not ret:
-                time.sleep(0.04)
-                continue
-
-            frame_bytes = buffer.tobytes()
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-            )
-            time.sleep(0.04)  # ~25 FPS live preview pacing
+                time.sleep(0.08)  # ~12 FPS on-demand live preview pacing
+        finally:
+            if ondemand_cap is not None:
+                try:
+                    ondemand_cap.release()
+                except Exception:
+                    pass
 
     def _camera_worker(self, camera_id: str, stream: CameraStream, stop_event: threading.Event):
         """

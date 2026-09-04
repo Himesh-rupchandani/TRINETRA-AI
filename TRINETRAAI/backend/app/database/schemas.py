@@ -61,10 +61,13 @@ class CameraItem(BaseModel):
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    department: Optional[str] = None
+    zone: Optional[str] = None
     status: str
     codec: Optional[str] = "H264"
     width: Optional[int] = 1920
     height: Optional[int] = 1080
+    fps: Optional[int] = None
     stream_type: str = "HLS"
     stream_url: str
     last_seen: Optional[datetime] = None
@@ -74,6 +77,16 @@ class CameraItem(BaseModel):
 
 class CameraListResponse(BaseModel):
     data: List[CameraItem]
+
+
+class CameraStreamTicket(BaseModel):
+    """Browser-safe playback ticket. Contains no credentials and no RTSP URLs."""
+    camera_id: str
+    stream_type: str = "WEBRTC"
+    stream_url: str = ""
+    expires_at: datetime
+    playable: bool = False
+    reason: Optional[str] = None
 
 
 class CameraStreamInfo(BaseModel):
@@ -240,6 +253,13 @@ class VehicleEventIngestResponse(BaseModel):
 class RoutePoint(BaseModel):
     sequence: int
     camera_id: str
+    # The sighting behind this hop, so a GIS route point can deep-link to its
+    # evidence / detection detail without client-side guesswork.
+    event_id: Optional[int] = None
+    # Registry metadata is joined here so a GIS route point can render
+    # "camera / location / timestamp / confidence" without a second round trip.
+    camera_name: Optional[str] = None
+    location: Optional[str] = None
     event_time: datetime
     latitude: Optional[float]
     longitude: Optional[float]
@@ -250,6 +270,18 @@ class VehicleRouteResponse(BaseModel):
     plate_number: str
     total_sightings: int
     route: List[RoutePoint]
+
+
+class VehicleProfileResponse(BaseModel):
+    """Investigation profile for one plate: sighting stats + watchlist state."""
+    plate_number: str
+    vehicle_class: Optional[str] = None
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    total_sightings: int = 0
+    cameras_touched: int = 0
+    watchlist_match: bool = False
+    watchlist: Optional[WatchlistResponse] = None
 
 
 # --- System Health Schema ---
@@ -264,3 +296,20 @@ class HealthResponse(BaseModel):
     demo_mode: bool
     timestamp: datetime
     components: Optional[Dict[str, Any]] = None
+
+
+# --- Camera stream ticket ----------------------------------------------------
+# --- Vehicle profile (investigation header) ----------------------------------
+# --- Dashboard KPIs ----------------------------------------------------------
+class KpisResponse(BaseModel):
+    total_cameras: int
+    cameras_online: int
+    cameras_degraded: int
+    cameras_offline: int
+    active_alerts: int
+    vehicle_detections_24h: int
+    anpr_reads_24h: int
+    watchlist_matches_24h: int
+
+
+VehicleProfileResponse.model_rebuild()

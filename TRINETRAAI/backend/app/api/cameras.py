@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -24,6 +25,7 @@ from ..database.schemas import (
     CameraCreate,
     CameraUpdate,
     CameraStreamInfo,
+    CameraStreamTicket,
     CameraItem,
     CameraListResponse,
 )
@@ -32,15 +34,50 @@ from ..camera.manager import camera_manager
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
 
+
+# The API contract exposes exactly three camera states (ONLINE / OFFLINE /
+# DEGRADED). The ingestion engine has a richer lifecycle, so map it down rather
+# than leaking CONNECTING/RECONNECTING/STOPPED into the UI.
+_LIVE_TO_API_STATUS = {
+    "ONLINE": "ONLINE",
+    "DEGRADED": "DEGRADED",
+    "CONNECTING": "ONLINE",
+    "RECONNECTING": "DEGRADED",
+    "OFFLINE": "OFFLINE",
+    "STOPPED": "OFFLINE",
+}
+
+
+def _resolve_camera_status(cam: "Camera") -> tuple:
+    """Return (status, last_seen) for a camera.
+
+    A live worker only overrides the registry status when it is actually
+    delivering frames. Otherwise the registry value stands, so a camera whose
+    stream has simply not been opened yet is not misreported as OFFLINE.
+    """
+    # No source configured at all (e.g. the env-driven live camera slot
+    # before an authorized URL is provided): never pretend it is online.
+    if not (cam.stream_url or "").strip():
+        return "NOT_CONFIGURED", cam.last_seen
+    stream_status = camera_manager.get_camera_status(cam.camera_id)
+    if stream_status and stream_status.get("is_alive"):
+        mapped = _LIVE_TO_API_STATUS.get(stream_status.get("status"), None)
+        if mapped:
+            return mapped, stream_status.get("last_seen") or cam.last_seen
+    # File-backed cameras are playable whenever their media exists on disk:
+    # the live view is decoded on demand, so no permanent worker is required.
+    if (cam.stream_type or "").lower() == "file" and cam.stream_url and os.path.exists(cam.stream_url):
+        return "ONLINE", cam.last_seen
+    return (cam.status or "OFFLINE"), cam.last_seen
+
+
 @router.get("", response_model=CameraListResponse, summary="List cameras", description="Returns normalized list of all registered CCTV cameras.")
 def list_cameras(db: Session = Depends(get_db)):
     """List all registered CCTV cameras normalized for frontend and analytics."""
     cameras = db.query(Camera).all()
     items = []
     for cam in cameras:
-        stream_status = camera_manager.get_camera_status(cam.camera_id)
-        current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-        last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
+        current_status, last_seen = _resolve_camera_status(cam)
         items.append(
             CameraItem(
                 id=cam.camera_id.lower(),
@@ -50,9 +87,12 @@ def list_cameras(db: Session = Depends(get_db)):
                 latitude=cam.latitude,
                 longitude=cam.longitude,
                 status=current_status,
+                department=cam.department,
+                zone=cam.zone,
                 codec=cam.codec or "H264",
                 width=cam.width or 1920,
                 height=cam.height or 1080,
+                fps=cam.fps,
                 stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
                 stream_url=cam.stream_url,
                 last_seen=last_seen,
@@ -123,9 +163,7 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Camera '{camera_id}' not found.",
         )
-    stream_status = camera_manager.get_camera_status(cam.camera_id)
-    current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-    last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
+    current_status, last_seen = _resolve_camera_status(cam)
     return CameraItem(
         id=cam.camera_id.lower(),
         camera_id=cam.camera_id,
@@ -134,12 +172,90 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
         latitude=cam.latitude,
         longitude=cam.longitude,
         status=current_status,
+        department=cam.department,
+        zone=cam.zone,
         codec=cam.codec or "H264",
         width=cam.width or 1920,
         height=cam.height or 1080,
+        fps=cam.fps,
         stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
         stream_url=cam.stream_url,
         last_seen=last_seen,
+    )
+
+
+@router.get(
+    "/{camera_id}/stream",
+    response_model=CameraStreamTicket,
+    summary="Issue a playback ticket for one camera",
+    description=(
+        "Returns safe, short-lived playback info. Browsers receive a same-origin "
+        "WebRTC/WHEP signalling path served by the reverse proxy — RTSP URLs and "
+        "Sentinel credentials never reach the client."
+    ),
+)
+def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
+    """Resolve the browser-playable stream for a camera.
+
+    - ONLINE camera -> WEBRTC ticket on the same-origin WHEP path.
+    - anything else -> unplayable ticket; the UI shows its offline state.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    cam = (
+        db.query(Camera)
+        .filter(func.upper(Camera.camera_id) == camera_id.strip().upper())
+        .first()
+    )
+    if not cam:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera '{camera_id}' not found.",
+        )
+
+    if not (cam.stream_url or "").strip():
+        return CameraStreamTicket(
+            camera_id=cam.camera_id.lower(),
+            stream_type=(cam.stream_type or "rtsp").upper(),
+            stream_url="",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+            playable=False,
+            reason="Camera source not configured — set LIVE_CAMERA_* in TRINETRAAI/backend/.env",
+        )
+
+    stream_status = camera_manager.get_camera_status(cam.camera_id)
+    status_value = (stream_status["status"] if stream_status else (cam.status or "OFFLINE")).upper()
+    # File-backed demo cameras are playable whenever the media exists; the
+    # live view is served by an on-demand decoder, not a resident worker.
+    if (
+        (cam.stream_type or "").lower() == "file"
+        and cam.stream_url
+        and os.path.exists(cam.stream_url)
+        and status_value != "ONLINE"
+    ):
+        status_value = "ONLINE"
+    playable = status_value == "ONLINE"
+    slug = cam.camera_id.lower()
+
+    # File-backed cameras (local demo feeds) play natively in the browser via
+    # the backend's MJPEG live view — no WebRTC gateway involved.
+    if playable and (cam.stream_type or "").lower() == "file":
+        return CameraStreamTicket(
+            camera_id=slug,
+            stream_type="MJPEG",
+            stream_url=f"/api/cameras/{slug}/live",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+            playable=True,
+            reason=None,
+        )
+
+    return CameraStreamTicket(
+        camera_id=slug,
+        stream_type="WEBRTC" if playable else (cam.stream_type or "hls").upper(),
+        stream_url=f"/sentinel/{slug}/whep" if playable else "",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        playable=playable,
+        reason=None if playable else f"Camera is {status_value}",
     )
 
 
@@ -209,12 +325,17 @@ def start_camera(camera_id: str, db: Session = Depends(get_db)):
             detail=f"Camera '{camera_id}' not found.",
         )
 
+    # Sentinel cameras ingest over authenticated RTSP built at connect time
+    # from env credentials — the authenticated URL is never stored or returned.
+    from ..services.sentinel_stream_service import resolve_ingest_source
+
+    source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
     stream = camera_manager.get_camera(camera_id)
     if not stream:
         camera_manager.add_camera(
             camera_id=cam.camera_id,
-            source=cam.stream_url,
-            source_type=cam.stream_type,
+            source=source,
+            source_type="rtsp" if source != cam.stream_url else cam.stream_type,
             auto_start=True,
         )
     else:

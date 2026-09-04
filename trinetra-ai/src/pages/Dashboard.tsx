@@ -327,13 +327,13 @@ export default function Dashboard() {
                 {recentEvents.slice(0, 8).map((e) => (
                   <tr
                     key={e.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/vehicles/${e.plate}`)}
+                    className={e.plate ? 'cursor-pointer' : undefined}
+                    onClick={e.plate ? () => navigate(`/vehicles/${e.plate}`) : undefined}
                   >
                     <td className="font-mono tabular-nums text-ink-muted">{formatTime(e.timestamp)}</td>
                     <td className="font-mono text-ink-muted">{e.cameraName}</td>
                     <td className="max-w-[220px] truncate text-ink-muted">{e.location}</td>
-                    <td className="plate text-ink">{e.plate}</td>
+                    <td className="plate text-ink">{e.plate || '—'}</td>
                     <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>
                     <td className="font-mono tabular-nums text-ink-muted">
                       {e.plateConfidence ? `${e.plateConfidence.toFixed(1)}%` : '—'}

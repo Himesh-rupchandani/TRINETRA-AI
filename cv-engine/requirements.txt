@@ -20,3 +20,4 @@ psutil>=5.9.0
 
 # Tests
 pytest>=8.1.0
+rapidocr-onnxruntime  # offline OCR for the ANPR stage (models bundled in the wheel)

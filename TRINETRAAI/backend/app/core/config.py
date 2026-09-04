@@ -32,12 +32,42 @@ class Settings(BaseSettings):
 
     # Demo Mode
     DEMO_MODE: bool = True
+    # Start stream ingestion for every registered camera at boot? Off by
+    # default: a control room opens the streams it is actually looking at
+    # (POST /cameras/{id}/start). Set true to ingest the whole grid.
+    AUTO_START_CAMERAS: bool = False
+    # Root of the CV engine's evidence crops (served by /api/evidence/...).
+    EVIDENCE_ROOT: str = "../../cv-engine/evidence"
+
+    # ---- REAL live camera source (configure in TRINETRAAI/backend/.env) ----
+    # When LIVE_CAMERA_STREAM_URL is set, the backend registers/updates a real
+    # camera (default id CAMLIVE) in the registry at startup. Supported types:
+    # rtsp | hls | webrtc | file. Leave STREAM_URL empty to keep the slot
+    # visible as "NOT_CONFIGURED" ("Camera source not configured") — a
+    # recorded video is never presented as a live source.
+    LIVE_CAMERA_ID: str = "CAMLIVE"
+    LIVE_CAMERA_NAME: str = "Ahmedabad Live Traffic Camera"
+    LIVE_CAMERA_LOCATION: str = "Ahmedabad, Gujarat"
+    LIVE_CAMERA_STREAM_TYPE: str = ""   # rtsp | hls | webrtc | file
+    LIVE_CAMERA_STREAM_URL: str = ""    # authorized stream URL
+    LIVE_CAMERA_STATUS: str = ""        # optional initial registry status override
+    LIVE_CAMERA_LATITUDE: float = 23.0225
+    LIVE_CAMERA_LONGITUDE: float = 72.5714
 
     # Alert deduplication cooldown window (seconds)
     ALERT_DEDUP_COOLDOWN_SECONDS: int = 180
 
     # Sentinel CCTV catalogue sync URL
     SENTINEL_CATALOGUE_URL: str = "https://cctv.corp8.cloud/cameras.json"
+
+    # Sentinel credentials & stream hosts (NEVER hard-code real values here;
+    # set them in backend/.env — see .env.example. The @ in the registered
+    # email is percent-encoded as %40 when URLs are built at connect time.)
+    SENTINEL_EMAIL: str = ""
+    SENTINEL_PASSWORD: str = ""
+    SENTINEL_HLS_BASE_URL: str = "https://cctv.corp8.cloud"
+    SENTINEL_RTSP_HOST: str = "103.250.160.189"
+    SENTINEL_RTSP_PORT: int = 8554
 
     # CORS
     CORS_ORIGINS: Union[List[str], str] = [

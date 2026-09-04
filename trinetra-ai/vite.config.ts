@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
 // Control-room frontend.
-//  - /api      -> our backend (VITE_API_BASE_URL); dev-proxied when VITE_BACKEND_ORIGIN is set.
+//  - /api      -> our backend (VITE_API_BASE_URL); dev-proxied when BACKEND_ORIGIN is set.
 //  - /sentinel -> Sentinel media gateway (WebRTC/WHEP signalling).
 //
 // The Sentinel origin lives in a NON-VITE_ variable so it is resolved by the dev
@@ -43,12 +43,21 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: true,
     proxy: {
       '/sentinel': sentinelProxy,
-      ...(mode === 'development' && process.env.VITE_BACKEND_ORIGIN
+      // CV engine's annotated MJPEG preview (live detection boxes).
+      '/cvfeed': {
+        target: process.env.CV_FEED_ORIGIN ?? 'http://localhost:8555',
+        changeOrigin: true,
+        secure: false,
+      },
+      ...(mode === 'development' && process.env.BACKEND_ORIGIN
         ? {
             '/api': {
-              target: process.env.VITE_BACKEND_ORIGIN,
+              target: process.env.BACKEND_ORIGIN,
               changeOrigin: true,
               secure: false,
+              // Also proxy WebSocket upgrades (/api/ws/events) when the
+              // realtime transport is configured as `ws`.
+              ws: true,
             },
           }
         : {}),
@@ -58,7 +67,25 @@ export default defineConfig(({ mode }) => ({
     host: '0.0.0.0',
     port: 4173,
     allowedHosts: true,
-    proxy: { '/sentinel': sentinelProxy },
+    proxy: {
+      '/sentinel': sentinelProxy,
+      '/cvfeed': {
+        target: process.env.CV_FEED_ORIGIN ?? 'http://localhost:8555',
+        changeOrigin: true,
+        secure: false,
+      },
+      // Serve the verified production build against a real backend: same-origin
+      // /api so the browser never needs to know where the API lives.
+      ...(process.env.BACKEND_ORIGIN
+        ? {
+            '/api': {
+              target: process.env.BACKEND_ORIGIN,
+              changeOrigin: true,
+              ws: true,
+            },
+          }
+        : {}),
+    },
   },
   build: {
     target: 'es2020',

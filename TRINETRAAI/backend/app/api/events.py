@@ -22,6 +22,23 @@ from ..services.event_service import ingest_event
 router = APIRouter(prefix="/events", tags=["Events"])
 
 
+@router.get(
+    "/{event_id}",
+    response_model=VehicleEventResponse,
+    summary="Get vehicle event by ID",
+    description="Single AI event lookup — used by the frontend evidence / detection-detail panels.",
+)
+def get_event(event_id: int, db: Session = Depends(get_db)):
+    """Return one vehicle event by its integer ID."""
+    event = db.query(VehicleEvent).filter(VehicleEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event #{event_id} not found.",
+        )
+    return event
+
+
 @router.post(
     "",
     response_model=VehicleEventIngestResponse,
@@ -107,3 +124,19 @@ def list_events(
         size=size,
         pages=pages,
     )
+
+
+@router.get(
+    "/{event_id}",
+    response_model=VehicleEventResponse,
+    summary="Get one vehicle event",
+    description="Single sighting by primary key — used by the evidence panel and map popups.",
+)
+def get_event(event_id: int, db: Session = Depends(get_db)):
+    event = db.query(VehicleEvent).filter(VehicleEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vehicle event '{event_id}' not found.",
+        )
+    return VehicleEventResponse.model_validate(event)

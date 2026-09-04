@@ -106,7 +106,11 @@ class CameraStream:
         """Internal connection routine applying Rule 1 (RTSP over TCP) and HLS fallback."""
         self.state = CameraState.CONNECTING
         self.last_error = None
-        logger.info(f"[{self.camera_id}] Connecting to {self.source_type.upper()} source: {self.source}")
+        from ..services.sentinel_stream_service import redact
+
+        logger.info(
+            f"[{self.camera_id}] Connecting to {self.source_type.upper()} source: {redact(self.source)}"
+        )
 
         # Clean up existing capture if any
         if self.cap is not None:
@@ -181,7 +185,8 @@ class CameraStream:
             # Demo fallback if enabled
             if settings.DEMO_MODE:
                 logger.warning(
-                    f"[{self.camera_id}] Live stream unreachable. Activating DEMO synthetic feed (DEMO_MODE=True)."
+                    f"[{self.camera_id}] Live stream unreachable. Activating DEMO synthetic feed "
+                    f"(DEMO_MODE={settings.DEMO_MODE}) — NOT a live picture."
                 )
                 self.state = CameraState.ONLINE
                 self.last_seen = utc_now()
@@ -264,6 +269,15 @@ class CameraStream:
                         if self.source_type == "file":
                             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                             ok_loop, frame_loop = self.cap.read()
+                            if not (ok_loop and frame_loop is not None and frame_loop.size > 0):
+                                # Some containers cannot seek backwards reliably
+                                # (e.g. AVI) — reopen the source from scratch.
+                                try:
+                                    self.cap.release()
+                                except Exception:
+                                    pass
+                                self.cap = cv2.VideoCapture(self.source)
+                                ok_loop, frame_loop = self.cap.read()
                             if ok_loop and frame_loop is not None and frame_loop.size > 0:
                                 self.frame_count += 1
                                 self.sequence_number += 1

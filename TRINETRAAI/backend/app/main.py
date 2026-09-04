@@ -23,6 +23,7 @@ from .database.database import init_db, get_db, SessionLocal
 from .database.models import Camera
 from .database.schemas import HealthResponse
 from .camera.manager import camera_manager
+from .camera.live_source import sync_live_camera
 from .api.cameras import router as cameras_router
 from .api.watchlist import router as watchlist_router
 from .api.alerts import router as alerts_router
@@ -30,6 +31,9 @@ from .api.detections import router as detections_router
 from .api.events import router as events_router
 from .api.vehicles import router as vehicles_router
 from .api.internal import router as internal_router
+from .api.evidence import router as evidence_router
+from .api.stats import router as stats_router
+from .api.stream import router as sse_router
 from .api.websocket import router as ws_router
 
 
@@ -41,17 +45,30 @@ async def lifespan(app: FastAPI):
     # 1. Initialize DB tables (creates vehicle_events + alert ack fields)
     init_db()
 
-    # 2. Register existing cameras into CameraManager
+    # 2. Sync the env-configured REAL live camera (.env -> registry), then
+    # register existing cameras into CameraManager
     db = SessionLocal()
     try:
+        try:
+            sync_live_camera(db)
+        except Exception as e:
+            logger.error(f"Error syncing live camera source: {e}")
         cameras = db.query(Camera).all()
         logger.info(f"Registering {len(cameras)} CCTV cameras into CameraManager...")
         for cam in cameras:
+            # Resident ingest workers are for REAL network cameras only
+            # (rtsp/hls); file-backed demo cameras play on demand, so a
+            # 30-camera demo grid never spawns 30 decoder threads.
+            auto_start = (
+                settings.AUTO_START_CAMERAS
+                and (cam.stream_url or "").strip() != ""
+                and (cam.stream_type or "").lower() != "file"
+            )
             camera_manager.add_camera(
                 camera_id=cam.camera_id,
                 source=cam.stream_url,
                 source_type=cam.stream_type,
-                auto_start=True,
+                auto_start=auto_start,
             )
     except Exception as e:
         logger.error(f"Error initializing cameras from DB: {e}")
@@ -140,6 +157,7 @@ def root():
         "api": "/api",
         "api_v1": "/api/v1",
         "websocket": "/api/ws/events",
+        "sse": "/api/stream",
     }
 
 
@@ -152,7 +170,10 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(detections_router)
     r.include_router(events_router)
     r.include_router(vehicles_router)
+    r.include_router(stats_router)
     r.include_router(internal_router)
+    r.include_router(evidence_router)
+    r.include_router(sse_router)
     app.include_router(r)
     app.include_router(ws_router, prefix=prefix)
 

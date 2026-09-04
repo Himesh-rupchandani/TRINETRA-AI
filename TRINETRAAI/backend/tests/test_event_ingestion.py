@@ -169,3 +169,52 @@ async def test_ingest_event_no_plate(db_session):
     assert event.plate_number is None
     assert event.plate_raw is None
     assert event.watchlist_match is False
+
+
+# ---------------------------------------------------------------------------
+# Coordinate fallback (GIS consistency)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_ingest_without_coordinates_uses_camera_registry_position(db_session):
+    """A sighting with no GPS must land on the camera that saw it.
+
+    CV clients legitimately omit coordinates (the detector reports pixels, not
+    geography). Storing NULL pushed the point off the map; storing a generic
+    city centre put it in the wrong place. The registry is authoritative.
+    """
+    event, _, _ = await ingest_event(
+        db=db_session,
+        camera_id="CAM04",
+        vehicle_track_id=7,
+        plate_raw="GJ 01 AB 1234",
+        plate_confidence=0.93,
+        vehicle_class="car",
+        event_time=None,
+        latitude=None,
+        longitude=None,
+        evidence_ref=None,
+    )
+
+    assert event.latitude == 23.0338
+    assert event.longitude == 72.585
+
+
+@pytest.mark.asyncio
+async def test_ingest_keeps_reported_coordinates_when_present(db_session):
+    """An explicit coordinate from the CV pipeline must not be overwritten."""
+    event, _, _ = await ingest_event(
+        db=db_session,
+        camera_id="CAM04",
+        vehicle_track_id=8,
+        plate_raw="GJ01AB1234",
+        plate_confidence=0.91,
+        vehicle_class="car",
+        event_time=None,
+        latitude=23.1000,
+        longitude=72.6000,
+        evidence_ref=None,
+    )
+
+    assert event.latitude == 23.1000
+    assert event.longitude == 72.6000

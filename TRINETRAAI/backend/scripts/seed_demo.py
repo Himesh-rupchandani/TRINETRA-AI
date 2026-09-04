@@ -5,7 +5,7 @@ Seeds the database with:
   - 30 realistic CCTV cameras across Ahmedabad/Gujarat
   - 10 watchlist entries (including GJ01AB1234 as STOLEN / CRITICAL)
   - 20+ vehicle events including the primary demo journey:
-      GJ01AB1234: CAM04 â†’ CAM08 â†’ CAM12 â†’ CAM17
+      GJ01AB1234: CAM04 → CAM08 → CAM12 → CAM17
   - 5 realistic alerts
 
 Usage:
@@ -43,102 +43,212 @@ from app.database.models import Base, Camera, Watchlist, VehicleEvent, Alert
 Base.metadata.create_all(bind=engine)
 
 
+def demo_base_time():
+    """Anchor the demo timeline to "recently" instead of a fixed date.
+
+    A hard-coded date silently ages out of every 24h window, so the Command
+    Center KPIs read zero on demo day. Anchoring to now keeps the relative
+    gaps between sightings (which is what the trace actually asserts) while
+    making the data look live.
+    """
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    return now - timedelta(minutes=90)
+
+
 def seed_cameras(db):
     if db.query(Camera).count() > 0:
-        print("  â†’ Cameras already seeded, skipping.")
+        print("  → Cameras already seeded, skipping.")
         return
 
+    # Canonical CCTV registry (Model 1 foundation). These 30 rows are the
+    # single source of truth for camera identity/location/department: the
+    # frontend demo seed mirrors this exact table, so DEMO and LIVE modes
+    # never disagree about what CAM04 is.
+    # Canonical CCTV registry (Model 1 foundation). These 30 rows are the
+    # single source of truth for camera identity / location / department:
+    # the frontend demo seed mirrors this exact table, so DEMO and LIVE
+    # modes never disagree about what CAM04 is.
     cameras = [
-        Camera(camera_id="CAM01", name="Central Expressway Toll Plaza",
+        Camera(camera_id="CAM01", name="Law Garden Circle", location="Law Garden Circle",
                stream_url="https://cctv.corp8.cloud/cam01/index.m3u8", stream_type="hls",
-               latitude=23.0225, longitude=72.5714, status="OFFLINE"),
-        Camera(camera_id="CAM02", name="Metro Station Interchange Cam",
+               latitude=23.0225, longitude=72.5595,
+               department="Traffic Police", zone="Central",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM02", name="Ellis Bridge", location="Ellis Bridge",
                stream_url="https://cctv.corp8.cloud/cam02/index.m3u8", stream_type="hls",
-               latitude=23.0410, longitude=72.5620, status="OFFLINE"),
-        Camera(camera_id="CAM03", name="SG Highway Ring Road West",
+               latitude=23.0234, longitude=72.5714,
+               department="Traffic Police", zone="Central",
+               codec="H264", width=2560, height=1440, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM03", name="Anjali Cross Roads", location="Anjali Cross Roads",
                stream_url="https://cctv.corp8.cloud/cam03/index.m3u8", stream_type="hls",
-               latitude=23.0150, longitude=72.5110, status="OFFLINE"),
-        Camera(camera_id="CAM04", name="North Gate Junction",
+               latitude=22.995, longitude=72.548,
+               department="Municipal (AMC)", zone="South",
+               codec="H264", width=1280, height=720, fps=20,
+               status="ONLINE"),
+        Camera(camera_id="CAM04", name="Paldi Circle", location="Paldi Circle",
                stream_url="https://cctv.corp8.cloud/cam04/index.m3u8", stream_type="hls",
-               latitude=23.0338, longitude=72.5850, status="OFFLINE"),
-        Camera(camera_id="CAM05", name="Satellite Road Junction",
+               latitude=23.0126, longitude=72.5647,
+               department="Police", zone="Central",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM05", name="Navrangpura Circle", location="Navrangpura Circle",
                stream_url="https://cctv.corp8.cloud/cam05/index.m3u8", stream_type="hls",
-               latitude=23.0295, longitude=72.5360, status="OFFLINE"),
-        Camera(camera_id="CAM06", name="Vastrapur Lake Entry",
+               latitude=23.0367, longitude=72.56,
+               department="Police", zone="West",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM06", name="Gujarat University Junction", location="Gujarat University Junction",
                stream_url="https://cctv.corp8.cloud/cam06/index.m3u8", stream_type="hls",
-               latitude=23.0412, longitude=72.5264, status="OFFLINE"),
-        Camera(camera_id="CAM07", name="Prahladnagar Square",
+               latitude=23.0395, longitude=72.545,
+               department="Traffic Police", zone="West",
+               codec="H265", width=1280, height=720, fps=15,
+               status="ONLINE"),
+        Camera(camera_id="CAM07", name="Panjrapole Cross Road", location="Panjrapole Cross Road",
                stream_url="https://cctv.corp8.cloud/cam07/index.m3u8", stream_type="hls",
-               latitude=23.0218, longitude=72.5124, status="OFFLINE"),
-        Camera(camera_id="CAM08", name="ISCON Crossroads CCTV",
+               latitude=23.029, longitude=72.548,
+               department="Traffic Police", zone="West",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM08", name="Lal Darwaja Terminus", location="Lal Darwaja Terminus",
                stream_url="https://cctv.corp8.cloud/cam08/index.m3u8", stream_type="hls",
-               latitude=23.0295, longitude=72.5054, status="OFFLINE"),
-        Camera(camera_id="CAM09", name="Bodakdev Police Chowki Cam",
+               latitude=23.025, longitude=72.58,
+               department="Police", zone="Central",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM09", name="Kalupur Railway Station", location="Kalupur Railway Station",
                stream_url="https://cctv.corp8.cloud/cam09/index.m3u8", stream_type="hls",
-               latitude=23.0450, longitude=72.5169, status="OFFLINE"),
-        Camera(camera_id="CAM10", name="S G Highway Overbridge Cam",
+               latitude=23.0272, longitude=72.6014,
+               department="Railway Police", zone="East",
+               codec="H264", width=2560, height=1440, fps=30,
+               status="ONLINE"),
+        Camera(camera_id="CAM10", name="Jamalpur Gate", location="Jamalpur Gate",
                stream_url="https://cctv.corp8.cloud/cam10/index.m3u8", stream_type="hls",
-               latitude=23.0362, longitude=72.5052, status="OFFLINE"),
-        Camera(camera_id="CAM11", name="Maninagar Station Gate",
+               latitude=23.013, longitude=72.582,
+               department="Police", zone="Central",
+               codec="H264", width=1280, height=720, fps=20,
+               status="ONLINE"),
+        Camera(camera_id="CAM11", name="Delhi Darwaja", location="Delhi Darwaja",
                stream_url="https://cctv.corp8.cloud/cam11/index.m3u8", stream_type="hls",
-               latitude=22.9915, longitude=72.6085, status="OFFLINE"),
-        Camera(camera_id="CAM12", name="Naranpura Octroi Post",
+               latitude=23.04, longitude=72.59,
+               department="Municipal (AMC)", zone="Central",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM12", name="Kankaria Lake Circle", location="Kankaria Lake Circle",
                stream_url="https://cctv.corp8.cloud/cam12/index.m3u8", stream_type="hls",
-               latitude=23.0622, longitude=72.5659, status="OFFLINE"),
-        Camera(camera_id="CAM13", name="Gota Crossroad Junction",
+               latitude=22.999, longitude=72.602,
+               department="Police", zone="South",
+               codec="H265", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM13", name="CTM Cross Road", location="CTM Cross Road",
                stream_url="https://cctv.corp8.cloud/cam13/index.m3u8", stream_type="hls",
-               latitude=23.1006, longitude=72.5789, status="OFFLINE"),
-        Camera(camera_id="CAM14", name="Chandkheda Highway Entry",
+               latitude=22.99, longitude=72.625,
+               department="Traffic Police", zone="South",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM14", name="Isanpur Cross Road", location="Isanpur Cross Road",
                stream_url="https://cctv.corp8.cloud/cam14/index.m3u8", stream_type="hls",
-               latitude=23.1168, longitude=72.5918, status="OFFLINE"),
-        Camera(camera_id="CAM15", name="Airport Road Junction",
+               latitude=22.97, longitude=72.6,
+               department="Traffic Police", zone="South",
+               codec="H264", width=1280, height=720, fps=20,
+               status="ONLINE"),
+        Camera(camera_id="CAM15", name="Vatva GIDC Gate", location="Vatva GIDC Gate",
                stream_url="https://cctv.corp8.cloud/cam15/index.m3u8", stream_type="hls",
-               latitude=23.0728, longitude=72.6268, status="OFFLINE"),
-        Camera(camera_id="CAM16", name="Kalupur Railway Station Cam",
+               latitude=22.96, longitude=72.63,
+               department="Industrial Security", zone="South",
+               codec="H264", width=1280, height=720, fps=12,
+               status="ONLINE"),
+        Camera(camera_id="CAM16", name="Narol Circle", location="Narol Circle",
                stream_url="https://cctv.corp8.cloud/cam16/index.m3u8", stream_type="hls",
-               latitude=23.0289, longitude=72.6120, status="OFFLINE"),
-        Camera(camera_id="CAM17", name="Bapunagar Industrial Zone",
+               latitude=22.955, longitude=72.585,
+               department="Highway Authority", zone="South",
+               codec="H264", width=2560, height=1440, fps=30,
+               status="ONLINE"),
+        Camera(camera_id="CAM17", name="Odhav Ring Road", location="Odhav Ring Road",
                stream_url="https://cctv.corp8.cloud/cam17/index.m3u8", stream_type="hls",
-               latitude=23.0487, longitude=72.6303, status="OFFLINE"),
-        Camera(camera_id="CAM18", name="Odhav GIDC Entry Gate",
+               latitude=23.028, longitude=72.665,
+               department="Highway Authority", zone="East",
+               codec="H265", width=1920, height=1080, fps=30,
+               status="ONLINE"),
+        Camera(camera_id="CAM18", name="Nikol Circle", location="Nikol Circle",
                stream_url="https://cctv.corp8.cloud/cam18/index.m3u8", stream_type="hls",
-               latitude=23.0175, longitude=72.6726, status="OFFLINE"),
-        Camera(camera_id="CAM19", name="Vastral Highway Bypass",
+               latitude=23.045, longitude=72.665,
+               department="Police", zone="East",
+               codec="H265", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM19", name="Bapunagar Char Rasta", location="Bapunagar Char Rasta",
                stream_url="https://cctv.corp8.cloud/cam19/index.m3u8", stream_type="hls",
-               latitude=23.0019, longitude=72.6834, status="OFFLINE"),
-        Camera(camera_id="CAM20", name="Naroda Main Gate Cam",
+               latitude=23.04, longitude=72.64,
+               department="Police", zone="East",
+               codec="H264", width=1280, height=720, fps=20,
+               status="ONLINE"),
+        Camera(camera_id="CAM20", name="Naroda Patiya", location="Naroda Patiya",
                stream_url="https://cctv.corp8.cloud/cam20/index.m3u8", stream_type="hls",
-               latitude=23.0703, longitude=72.6548, status="OFFLINE"),
-        Camera(camera_id="CAM21", name="Nikol Junction",
+               latitude=23.07, longitude=72.66,
+               department="Traffic Police", zone="East",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM21", name="Airport Circle Hansol", location="Airport Circle Hansol",
                stream_url="https://cctv.corp8.cloud/cam21/index.m3u8", stream_type="hls",
-               latitude=23.0469, longitude=72.6620, status="OFFLINE"),
-        Camera(camera_id="CAM22", name="Thaltej Signal Cam",
+               latitude=23.073, longitude=72.626,
+               department="Airport Security", zone="North",
+               codec="H264", width=2560, height=1440, fps=30,
+               status="ONLINE"),
+        Camera(camera_id="CAM22", name="Riverfront West Promenade", location="Riverfront West Promenade",
                stream_url="https://cctv.corp8.cloud/cam22/index.m3u8", stream_type="hls",
-               latitude=23.0591, longitude=72.5091, status="OFFLINE"),
-        Camera(camera_id="CAM23", name="Science City Road Junction",
+               latitude=23.05, longitude=72.575,
+               department="Municipal (AMC)", zone="Central",
+               codec="H265", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM23", name="Gandhi Ashram Gate", location="Gandhi Ashram Gate",
                stream_url="https://cctv.corp8.cloud/cam23/index.m3u8", stream_type="hls",
-               latitude=23.0752, longitude=72.5311, status="OFFLINE"),
-        Camera(camera_id="CAM24", name="Sola Road Crossroads",
+               latitude=23.06, longitude=72.58,
+               department="Police", zone="North",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM24", name="RTO Circle Subhash Bridge", location="RTO Circle Subhash Bridge",
                stream_url="https://cctv.corp8.cloud/cam24/index.m3u8", stream_type="hls",
-               latitude=23.0776, longitude=72.5542, status="OFFLINE"),
-        Camera(camera_id="CAM25", name="Nava Vadaj Crossroad",
+               latitude=23.055, longitude=72.586,
+               department="Transport Dept", zone="North",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM25", name="Motera Stadium Approach", location="Motera Stadium Approach",
                stream_url="https://cctv.corp8.cloud/cam25/index.m3u8", stream_type="hls",
-               latitude=23.0540, longitude=72.5734, status="OFFLINE"),
-        Camera(camera_id="CAM26", name="Paldi Bridge Camera",
+               latitude=23.092, longitude=72.597,
+               department="Police", zone="North",
+               codec="H264", width=2560, height=1440, fps=30,
+               status="ONLINE"),
+        Camera(camera_id="CAM26", name="Chandkheda Circle", location="Chandkheda Circle",
                stream_url="https://cctv.corp8.cloud/cam26/index.m3u8", stream_type="hls",
-               latitude=23.0098, longitude=72.5798, status="OFFLINE"),
-        Camera(camera_id="CAM27", name="Akhbarnagar Junction",
+               latitude=23.11, longitude=72.59,
+               department="Traffic Police", zone="North",
+               codec="H265", width=1280, height=720, fps=20,
+               status="OFFLINE"),
+        Camera(camera_id="CAM27", name="Vastrapur Lake Junction", location="Vastrapur Lake Junction",
                stream_url="https://cctv.corp8.cloud/cam27/index.m3u8", stream_type="hls",
-               latitude=23.0659, longitude=72.5813, status="OFFLINE"),
-        Camera(camera_id="CAM28", name="Bopal Crossroads East",
+               latitude=23.0395, longitude=72.529,
+               department="Police", zone="West",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="ONLINE"),
+        Camera(camera_id="CAM28", name="Iskcon Cross Roads", location="Iskcon Cross Roads",
                stream_url="https://cctv.corp8.cloud/cam28/index.m3u8", stream_type="hls",
-               latitude=23.0012, longitude=72.4713, status="OFFLINE"),
-        Camera(camera_id="CAM29", name="Manipur Highway Camera",
+               latitude=23.027, longitude=72.507,
+               department="Traffic Police", zone="West",
+               codec="H264", width=2560, height=1440, fps=30,
+               status="DEGRADED"),
+        Camera(camera_id="CAM29", name="S.G. Highway Bopal", location="S.G. Highway Bopal",
                stream_url="https://cctv.corp8.cloud/cam29/index.m3u8", stream_type="hls",
-               latitude=23.0881, longitude=72.4951, status="OFFLINE"),
-        Camera(camera_id="CAM30", name="Bavla Highway Entry Cam",
+               latitude=23.03, longitude=72.47,
+               department="Highway Authority", zone="West",
+               codec="H264", width=2560, height=1440, fps=30,
+               status="OFFLINE"),
+        Camera(camera_id="CAM30", name="Sarkhej Circle", location="Sarkhej Circle",
                stream_url="https://cctv.corp8.cloud/cam30/index.m3u8", stream_type="hls",
-               latitude=22.9614, longitude=72.3729, status="OFFLINE"),
+               latitude=22.98, longitude=72.5,
+               department="Highway Authority", zone="West",
+               codec="H264", width=1920, height=1080, fps=25,
+               status="DEGRADED"),
     ]
     db.add_all(cameras)
     db.commit()
@@ -183,7 +293,7 @@ def seed_events(db):
         print("  → Vehicle events already seeded, skipping.")
         return
 
-    base_time = datetime(2026, 9, 2, 8, 0, 0, tzinfo=timezone.utc)
+    base_time = demo_base_time()
 
     events = [
         # === PRIMARY DEMO JOURNEY: GJ01AB1234 (STOLEN) across 4 cameras ===
@@ -283,15 +393,15 @@ def seed_events(db):
     ]
     db.add_all(events)
     db.commit()
-    print(f"  â†’ Seeded {len(events)} vehicle events.")
+    print(f"  → Seeded {len(events)} vehicle events.")
 
 
 def seed_alerts(db):
     if db.query(Alert).count() > 0:
-        print("  â†’ Alerts already seeded, skipping.")
+        print("  → Alerts already seeded, skipping.")
         return
 
-    base_time = datetime(2026, 9, 2, 8, 0, 0, tzinfo=timezone.utc)
+    base_time = demo_base_time()
 
     alerts = [
         Alert(camera_id="CAM04", plate_number="GJ01AB1234", alert_type="WATCHLIST_MATCH",
@@ -321,7 +431,47 @@ def seed_alerts(db):
     ]
     db.add_all(alerts)
     db.commit()
-    print(f"  â†’ Seeded {len(alerts)} alerts.")
+
+    # --- Relational integrity backfill (spec: DB consistency) ----------------
+    # An alert must point at the event that produced it, and a watchlist alert
+    # must point at the watchlist record it matched. Seeding them detached made
+    # the alert screen show hits with no evidence trail behind them.
+    linked_events = linked_watchlist = 0
+    for alert in alerts:
+        if alert.plate_number:
+            wl = (
+                db.query(Watchlist)
+                .filter(
+                    Watchlist.plate_number == alert.plate_number,
+                    Watchlist.active == True,  # noqa: E712
+                )
+                .first()
+            )
+            if wl:
+                alert.watchlist_id = wl.id
+                linked_watchlist += 1
+
+        # Nearest sighting of the same plate on the same camera.
+        ev = (
+            db.query(VehicleEvent)
+            .filter(
+                VehicleEvent.camera_id == alert.camera_id,
+                VehicleEvent.plate_number == alert.plate_number,
+            )
+            .order_by(VehicleEvent.event_time.asc())
+            .all()
+        )
+        if ev:
+            best = min(ev, key=lambda e: abs((e.event_time - alert.timestamp).total_seconds()))
+            alert.event_id = best.id
+            if alert.confidence is None:
+                alert.confidence = best.plate_confidence
+            linked_events += 1
+
+    db.commit()
+    print(f"  → Seeded {len(alerts)} alerts.")
+    print(f"    ↳ linked to events: {linked_events}/{len(alerts)}, "
+          f"watchlist records: {linked_watchlist}/{len(alerts)}")
 
 
 def main():

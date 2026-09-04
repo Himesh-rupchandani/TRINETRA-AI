@@ -50,6 +50,7 @@ class CameraPipeline:
         tracker: Optional[VehicleTracker] = None,
         emit_plateless_sightings: bool = False,
         on_packet=None,  # optional hook(packet) called first — demo wiring only
+        on_tracks=None,  # optional hook(packet, tracks) after tracking — annotated preview
     ):
         self.camera = camera
         self.settings = settings
@@ -57,6 +58,7 @@ class CameraPipeline:
         self.ocr_engine = ocr_engine
         self.backend_client = backend_client
         self.evidence_writer = evidence_writer
+        self.on_tracks = on_tracks
 
         self.tracker = tracker or VehicleTracker(
             max_age_sec=settings.track_max_age_sec,
@@ -139,6 +141,14 @@ class CameraPipeline:
 
         # --- Tracking (PTS-driven) ---
         tracks = self.tracker.update(detections, pts_ms=packet.pts_ms)
+
+        # Live annotated preview (used by the local feed runner). Receives every
+        # processed frame with its tracks; no effect on the pipeline by default.
+        if self.on_tracks is not None:
+            try:
+                self.on_tracks(packet, tracks)
+            except Exception:
+                pass
 
         # Record the last frame/PTS where each track was actually seen, so
         # evidence for track-loss events shows the vehicle, not an empty scene.
@@ -245,7 +255,9 @@ class CameraPipeline:
                 store_plate_crop=self.settings.evidence_store_plate_crop,
             )
 
-        event = build_event(self.camera, track, plate=plate, evidence_ref=evidence_ref)
+        event = build_event(
+            self.camera, track, plate=plate, evidence_ref=evidence_ref, pts_ms=pts_ms
+        )
         self.backend_client.submit(event)
         self.stats.events_emitted += 1
         logger.info(
@@ -318,18 +330,19 @@ class CameraPipeline:
         hold_ms = self.settings.event_max_track_hold_sec * 1000.0
         for track in tracks:
             plate = self.plate_memory.best(track.track_id)
-            if not plate:
+            if not plate and not self.emit_plateless_sightings:
                 continue
             last = self._last_hold_emit_pts.get(track.track_id)
             if last is not None and (pts_ms - last) < hold_ms:
                 continue
             st = self.plate_memory.state_for(track.track_id)
-            if st.last_emitted_key == plate["plate"] and last is not None:
+            plate_key = plate["plate"] if plate else None
+            if plate_key is not None and st.last_emitted_key == plate_key and last is not None:
                 continue
             event = self._emit(track, plate, pts_ms)
             if event:
                 self._last_hold_emit_pts[track.track_id] = pts_ms
-                st.last_emitted_key = plate["plate"]
+                st.last_emitted_key = plate_key
                 st.last_emitted_pts = pts_ms
                 st.emitted_count += 1
                 out.append(event)

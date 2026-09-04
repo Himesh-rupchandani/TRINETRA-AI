@@ -174,6 +174,7 @@ export default function VehicleInvestigation() {
         >
           <LazyMap
             route={points}
+            routePlate={result?.plate}
             cameras={[]}
             activeRouteSequence={activeSequence}
             onSelectRoutePoint={selectPoint}

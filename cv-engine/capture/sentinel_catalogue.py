@@ -110,6 +110,41 @@ def _extract_stream_urls(raw: Dict[str, Any], camera_id: str) -> Dict[str, Optio
     return {"rtsp": rtsp_url, "hls": hls_url}
 
 
+def sentinel_stream_urls(camera_id: str, settings) -> Dict[str, Optional[str]]:
+    """Build Sentinel RTSP/HLS URLs for a camera from env credentials.
+
+    - RTSP carries credentials (email '@' -> %40, password URL-quoted) and is
+      used for backend AI ingestion only; never log it unredacted.
+    - HLS is the public playback URL (no credentials).
+    Returns empty strings when credentials are not configured.
+    """
+    from urllib.parse import quote
+
+    cid = str(camera_id).strip().lower()
+    if not re.match(r"^[A-Za-z0-9_-]{1,32}$", cid):
+        return {"rtsp": None, "hls": None}
+    hls = f"{settings.sentinel_hls_base_url.rstrip('/')}/{cid}/index.m3u8"
+    if not (settings.sentinel_email.strip() and settings.sentinel_password.strip()):
+        return {"rtsp": None, "hls": hls}
+    email = quote(settings.sentinel_email.strip(), safe="")
+    password = quote(settings.sentinel_password.strip(), safe="")
+    rtsp = (
+        f"rtsp://{email}:{password}@{settings.sentinel_rtsp_host.strip()}:"
+        f"{int(settings.sentinel_rtsp_port)}/stream/{cid}"
+    )
+    return {"rtsp": rtsp, "hls": hls}
+
+
+def redact_url(url: Optional[str]) -> Optional[str]:
+    """Strip userinfo for safe logging: rtsp://u:p@h/x -> rtsp://h/x."""
+    if not url or "://" not in url:
+        return url
+    scheme, rest = url.split("://", 1)
+    if "@" in rest:
+        rest = rest.split("@", 1)[1]
+    return f"{scheme}://{rest}"
+
+
 def parse_camera(raw: Dict[str, Any]) -> Optional[Camera]:
     """Parse one catalogue entry. Returns None if the entry has no usable ID."""
     if not isinstance(raw, dict):
@@ -123,6 +158,18 @@ def parse_camera(raw: Dict[str, Any]) -> Optional[Camera]:
         cam_id = "CAM_" + re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_").upper()
 
     urls = _extract_stream_urls(raw, cam_id)
+    # Official catalogue entries may list only camera IDs. For such entries
+    # (no URL information at all), synthesize Sentinel stream URLs from env
+    # credentials — entries that carry their own URLs are left untouched.
+    if not urls["rtsp"] and not urls["hls"]:
+        try:
+            from config.settings import Settings
+
+            _synth = sentinel_stream_urls(cam_id, Settings.from_env())
+            urls["rtsp"] = _synth["rtsp"]
+            urls["hls"] = _synth["hls"]
+        except Exception:
+            pass
     status = (_first_str(raw, "status", "state") or "UNKNOWN").upper()
     codec = _first_str(raw, "codec", "video_codec", "encoding")
     if codec:

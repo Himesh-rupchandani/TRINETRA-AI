@@ -69,7 +69,7 @@ def normalize_sentinel_camera(raw: Dict[str, Any]) -> Dict[str, Any]:
     # 3. Stream info
     stream_url = str(raw.get("stream_url") or raw.get("url") or "").strip()
     if not stream_url:
-        stream_url = f"https://cctv.corp8.cloud/{cam_id.lower()}/index.m3u8"
+        stream_url = f"{settings.SENTINEL_HLS_BASE_URL.rstrip('/')}/{cam_id.lower()}/index.m3u8"
     stream_url = _sanitize_url(stream_url)
 
     stream_type = str(raw.get("stream_type") or ("hls" if ".m3u8" in stream_url else "rtsp")).lower()

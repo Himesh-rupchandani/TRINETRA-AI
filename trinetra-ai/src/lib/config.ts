@@ -10,6 +10,9 @@ export const config = {
   tagline: 'Intelligent Vision. Faster Response.',
   useMocks: (env.VITE_USE_MOCKS ?? 'true') !== 'false',
   apiBaseUrl: env.VITE_API_BASE_URL ?? '/api',
+  // The backend serves both SSE (/api/stream) and WebSocket (/api/ws/events).
+  // SSE is the default: it traverses reverse proxies cleanly and reconnects
+  // natively in the browser.
   realtimeTransport: (env.VITE_REALTIME_TRANSPORT ?? 'sse') as 'sse' | 'ws' | 'off',
   /**
    * Same-origin path the UI posts WHEP offers to. A server-side proxy maps it

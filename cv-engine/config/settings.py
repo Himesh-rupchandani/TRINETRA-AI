@@ -43,6 +43,13 @@ class Settings:
     # --- Sentinel catalogue ---------------------------------------------
     sentinel_catalogue_url: str = "https://cctv.corp8.cloud/cameras.json"
     catalogue_timeout_sec: float = 10.0
+    # Credentials come from the environment ONLY (never hard-coded, never
+    # logged). The '@' in the email is percent-encoded (%40) in URLs.
+    sentinel_email: str = ""
+    sentinel_password: str = ""
+    sentinel_hls_base_url: str = "https://cctv.corp8.cloud"
+    sentinel_rtsp_host: str = "103.250.160.189"
+    sentinel_rtsp_port: int = 8554
 
     # --- Backend integration --------------------------------------------
     backend_base_url: str = "http://localhost:8000"
@@ -87,8 +94,9 @@ class Settings:
     event_on_track_loss_sec: float = 1.5    # emit when track silent this long
 
     # --- Evidence ---------------------------------------------------------
-    evidence_dir: str = "evidence"
+    evidence_dir: str = "evidence_out"   # NOT "evidence/" — that is the source package
     evidence_jpeg_quality: int = 90
+    evidence_max_files: int = 4000   # retention cap for the evidence dir (0 = off)
     evidence_store_full_frame: bool = True
     evidence_store_plate_crop: bool = True
 
@@ -107,6 +115,11 @@ class Settings:
             sentinel_catalogue_url=_env_str(
                 "SENTINEL_CATALOGUE_URL", cls.sentinel_catalogue_url
             ),
+            sentinel_email=_env_str("SENTINEL_EMAIL", ""),
+            sentinel_password=_env_str("SENTINEL_PASSWORD", ""),
+            sentinel_hls_base_url=_env_str("SENTINEL_HLS_BASE_URL", cls.sentinel_hls_base_url),
+            sentinel_rtsp_host=_env_str("SENTINEL_RTSP_HOST", cls.sentinel_rtsp_host),
+            sentinel_rtsp_port=_env_int("SENTINEL_RTSP_PORT", cls.sentinel_rtsp_port),
             catalogue_timeout_sec=_env_float("CATALOGUE_TIMEOUT", 10.0),
             backend_base_url=_env_str("BACKEND_BASE_URL", "http://localhost:8000"),
             backend_timeout_sec=_env_float("BACKEND_TIMEOUT", 5.0),
@@ -136,8 +149,9 @@ class Settings:
             event_suppression_sec=_env_float("EVENT_SUPPRESSION_SEC", 30.0),
             event_max_track_hold_sec=_env_float("EVENT_MAX_TRACK_HOLD_SEC", 20.0),
             event_on_track_loss_sec=_env_float("EVENT_ON_TRACK_LOSS_SEC", 1.5),
-            evidence_dir=_env_str("EVIDENCE_DIR", "evidence"),
+            evidence_dir=_env_str("EVIDENCE_DIR", "evidence_out"),
             evidence_jpeg_quality=_env_int("EVIDENCE_JPEG_QUALITY", 90),
+            evidence_max_files=_env_int("EVIDENCE_MAX_FILES", 4000),
             evidence_store_full_frame=_env_bool("EVIDENCE_FULL_FRAME", True),
             evidence_store_plate_crop=_env_bool("EVIDENCE_PLATE_CROP", True),
             scene_cut_check=_env_bool("SCENE_CUT_CHECK", True),
