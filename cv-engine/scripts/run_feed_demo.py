@@ -137,7 +137,7 @@ def annotate(frame: np.ndarray, camera_id: str, tracks, pts_ms: float) -> np.nda
     return out
 
 
-def annotate_green(frame: np.ndarray, camera_id: str, tracks) -> np.ndarray:
+def annotate_green(frame: np.ndarray, camera_id: str, tracks, demo: bool = True) -> np.ndarray:
     """On-demand live view: bright-green boxes + small labels (surveillance style)."""
     out = frame.copy()
     live = [t for t in tracks if t.time_since_update_ms == 0]
@@ -150,7 +150,8 @@ def annotate_green(frame: np.ndarray, camera_id: str, tracks) -> np.ndarray:
         cv2.putText(out, label, (x1 + 4, y1 - 5),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (15, 18, 24), 1, cv2.LINE_AA)
     h, w = out.shape[:2]
-    osd = f"TRINETRA LIVE AI | {camera_id.upper()} | vehicles {len(live)} | LOCAL DEMO"
+    suffix = "LOCAL DEMO" if demo else "LIVE CAM"
+    osd = f"TRINETRA LIVE AI | {camera_id.upper()} | vehicles {len(live)} | {suffix}"
     cv2.rectangle(out, (0, 0), (w, 30), (15, 18, 24), -1)
     cv2.putText(out, osd, (10, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 1, cv2.LINE_AA)
     return out
@@ -177,9 +178,10 @@ def _ondemand_detector(settings):
 
 
 class _Watch:
-    def __init__(self, camera_id: str, source: str):
+    def __init__(self, camera_id: str, source: str, is_file: bool):
         self.camera_id = camera_id
         self.source = source
+        self.is_file = is_file
         self.refs = 0
         self.stop = threading.Event()
         self.alive = False
@@ -203,8 +205,9 @@ class OndemandWatchManager:
         self._watches: dict = {}
         self._lock = threading.Lock()
 
-    # -- registry lookup (file cameras only; never trusts client paths) ----
+    # -- registry lookup (file + real rtsp/hls cameras; never trusts paths) --
     def _resolve_source(self, camera_id: str):
+        """Return (source, is_file) for a registry camera, or None."""
         try:
             import httpx
 
@@ -212,9 +215,14 @@ class OndemandWatchManager:
             if r.status_code != 200:
                 return None
             d = r.json()
-            url = d.get("stream_url") or ""
-            if (d.get("stream_type") or "").lower() == "file" and os.path.exists(url):
-                return url
+            url = (d.get("stream_url") or "").strip()
+            stype = (d.get("stream_type") or "").lower()
+            if not url:
+                return None
+            if stype == "file":
+                return (url, True) if os.path.exists(url) else None
+            if stype in ("rtsp", "hls"):
+                return (url, False)  # real network camera
         except Exception as exc:
             logger.warning("[ondemand:%s] registry lookup failed: %s", camera_id, exc)
         return None
@@ -238,15 +246,16 @@ class OndemandWatchManager:
                 logger.info("[ondemand:%s] capacity reached (%d) - serving without boxes",
                             camera_id, self.max_watches)
                 return False
-        source = self._resolve_source(camera_id)
-        if source is None:
+        resolved = self._resolve_source(camera_id)
+        if resolved is None:
             return False
+        source, is_file = resolved
         with self._lock:
             w = self._watches.get(camera_id)
             if w is not None:
                 w.refs += 1
                 return True
-            w = _Watch(camera_id, source)
+            w = _Watch(camera_id, source, is_file)
             w.refs = 1
             w.thread = threading.Thread(target=self._loop, args=(w,),
                                         name=f"ondemand-{camera_id}", daemon=True)
@@ -293,7 +302,7 @@ class OndemandWatchManager:
                     continue
                 detections = detector.detect(frame, camera_id=w.camera_id, pts_ms=pts)
                 tracks = tracker.update(detections, pts_ms=pts)
-                annotated = annotate_green(frame, w.camera_id, tracks)
+                annotated = annotate_green(frame, w.camera_id, tracks, demo=w.is_file)
                 ok2, buf = cv2.imencode(".jpg", annotated,
                                         [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 if ok2:

@@ -218,18 +218,43 @@ class CameraManager:
         with self._lock:
             return self._latest_packets.get(camera_id)
 
-    def _ondemand_source(self, camera_id: str) -> Optional[str]:
-        """Return the local file path if this camera can be decoded on demand."""
+    # Stream types openable on demand for a live view. Files are local
+    # recordings (stamped as demo footage); rtsp/hls are real network cams.
+    _ONDEMAND_TYPES = {"file", "rtsp", "hls"}
+
+    def _ondemand_source(self, camera_id: str):
+        """Return (source, is_file) if this camera can be opened on demand."""
         with self._lock:
             stream = self._streams.get(camera_id) or self._streams.get(camera_id.upper())
             if stream is None:
                 return None
-            if (getattr(stream, "source_type", "") or "").lower() != "file":
+            stype = (getattr(stream, "source_type", "") or "").lower()
+            if stype not in self._ONDEMAND_TYPES:
                 return None
-            source = stream.source
-        if source and os.path.exists(source):
-            return source
-        return None
+            source = (stream.source or "").strip()
+        if not source:
+            return None
+        if stype == "file":
+            return (source, True) if os.path.exists(source) else None
+        return (source, False)  # real network camera URL
+
+    @staticmethod
+    def _stamp_source_osd(frame, is_file: bool):
+        """Burn an honest source label into on-demand live-view frames.
+
+        Recorded clips are explicitly marked NOT LIVE so demo footage can
+        never be mistaken for a real camera; real network streams are
+        marked LIVE.
+        """
+        label = "RECORDED DEMO FOOTAGE - NOT LIVE" if is_file else "LIVE SOURCE"
+        h, w = frame.shape[:2]
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+        x2, y2 = w - 10, h - 12
+        cv2.rectangle(frame, (x2 - tw - 10, y2 - th - 8), (x2 + 2, y2 + 4), (15, 18, 24), -1)
+        color = (0, 200, 255) if is_file else (0, 255, 0)
+        cv2.putText(frame, label, (x2 - tw - 5, y2), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55, color, 1, cv2.LINE_AA)
+        return frame
 
     @staticmethod
     def _read_ondemand_frame(cap: "cv2.VideoCapture", source: str):
@@ -260,20 +285,25 @@ class CameraManager:
         """
         ondemand_cap = None
         ondemand_source = None
+        ondemand_is_file = True
         try:
             while True:
                 frame = self.get_latest_frame(camera_id, annotated=True)
                 if frame is None:
                     frame = self.get_latest_frame(camera_id.upper(), annotated=True)
                 if frame is None and ondemand_source is None and ondemand_cap is None:
-                    ondemand_source = self._ondemand_source(camera_id)
-                    if ondemand_source is not None:
+                    resolved = self._ondemand_source(camera_id)
+                    if resolved is not None:
+                        ondemand_source, ondemand_is_file = resolved
                         ondemand_cap = cv2.VideoCapture(ondemand_source)
+                        kind = "local recording" if ondemand_is_file else "real network stream"
                         logger.info(
-                            f"[{camera_id.upper()}] On-demand live view decoding local file: {ondemand_source}"
+                            f"[{camera_id.upper()}] On-demand live view decoding {kind}: {ondemand_source}"
                         )
                 if frame is None and ondemand_cap is not None:
                     frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)
+                    if frame is not None:
+                        frame = self._stamp_source_osd(frame, ondemand_is_file)
                 if frame is None:
                     placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
                     placeholder[:] = (20, 24, 30)

@@ -77,6 +77,31 @@ Every emitted event also stores a **cropped vehicle photo** (evidence) under
 `/api/evidence/<ref>` — the Events page shows the crop plus full details
 (class, track ID, camera, GPS, timestamps) in its evidence drawer.
 
+## Connecting a REAL live camera (e.g. authorized Ahmedabad CCTV)
+
+No authorized public Ahmedabad CCTV feed exists today — the city's ANPR/CCTV
+network feeds government control rooms only. The system therefore ships with
+an env-configured live-camera slot that stays honestly **NOT_CONFIGURED**
+("Camera source not configured") until you add an authorized URL. Recorded
+demo clips are always stamped `RECORDED DEMO FOOTAGE — NOT LIVE` and are
+never labelled live.
+
+When you receive an authorized stream URL, edit `TRINETRAAI/backend/.env`
+(see `.env.example`) — no code changes, just restart the backend:
+
+```env
+LIVE_CAMERA_NAME=SG Highway Junction, Ahmedabad
+LIVE_CAMERA_LOCATION=Ahmedabad, Gujarat
+LIVE_CAMERA_STREAM_TYPE=rtsp          # rtsp | hls | webrtc | file
+LIVE_CAMERA_STREAM_URL=rtsp://...     # the authorized URL
+AUTO_START_CAMERAS=true               # connect real network cameras at boot
+```
+
+Statuses are always honest: **Working** only while frames actually arrive
+from the real camera; **Not working** when the stream is unreachable;
+**NOT_CONFIGURED** when no source is set. Resident workers start only for
+real network cameras — the file-backed demo grid always plays on demand.
+
 ## Frontend modes
 
 | Mode | How | Data source |

@@ -39,6 +39,21 @@ class Settings(BaseSettings):
     # Root of the CV engine's evidence crops (served by /api/evidence/...).
     EVIDENCE_ROOT: str = "../../cv-engine/evidence"
 
+    # ---- REAL live camera source (configure in TRINETRAAI/backend/.env) ----
+    # When LIVE_CAMERA_STREAM_URL is set, the backend registers/updates a real
+    # camera (default id CAMLIVE) in the registry at startup. Supported types:
+    # rtsp | hls | webrtc | file. Leave STREAM_URL empty to keep the slot
+    # visible as "NOT_CONFIGURED" ("Camera source not configured") — a
+    # recorded video is never presented as a live source.
+    LIVE_CAMERA_ID: str = "CAMLIVE"
+    LIVE_CAMERA_NAME: str = "Ahmedabad Live Traffic Camera"
+    LIVE_CAMERA_LOCATION: str = "Ahmedabad, Gujarat"
+    LIVE_CAMERA_STREAM_TYPE: str = ""   # rtsp | hls | webrtc | file
+    LIVE_CAMERA_STREAM_URL: str = ""    # authorized stream URL
+    LIVE_CAMERA_STATUS: str = ""        # optional initial registry status override
+    LIVE_CAMERA_LATITUDE: float = 23.0225
+    LIVE_CAMERA_LONGITUDE: float = 72.5714
+
     # Alert deduplication cooldown window (seconds)
     ALERT_DEDUP_COOLDOWN_SECONDS: int = 180
 

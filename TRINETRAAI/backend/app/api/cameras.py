@@ -55,6 +55,10 @@ def _resolve_camera_status(cam: "Camera") -> tuple:
     delivering frames. Otherwise the registry value stands, so a camera whose
     stream has simply not been opened yet is not misreported as OFFLINE.
     """
+    # No source configured at all (e.g. the env-driven live camera slot
+    # before an authorized URL is provided): never pretend it is online.
+    if not (cam.stream_url or "").strip():
+        return "NOT_CONFIGURED", cam.last_seen
     stream_status = camera_manager.get_camera_status(cam.camera_id)
     if stream_status and stream_status.get("is_alive"):
         mapped = _LIVE_TO_API_STATUS.get(stream_status.get("status"), None)
@@ -207,6 +211,16 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Camera '{camera_id}' not found.",
+        )
+
+    if not (cam.stream_url or "").strip():
+        return CameraStreamTicket(
+            camera_id=cam.camera_id.lower(),
+            stream_type=(cam.stream_type or "rtsp").upper(),
+            stream_url="",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+            playable=False,
+            reason="Camera source not configured — set LIVE_CAMERA_* in TRINETRAAI/backend/.env",
         )
 
     stream_status = camera_manager.get_camera_status(cam.camera_id)
