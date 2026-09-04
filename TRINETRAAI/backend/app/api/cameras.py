@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -59,6 +60,10 @@ def _resolve_camera_status(cam: "Camera") -> tuple:
         mapped = _LIVE_TO_API_STATUS.get(stream_status.get("status"), None)
         if mapped:
             return mapped, stream_status.get("last_seen") or cam.last_seen
+    # File-backed cameras are playable whenever their media exists on disk:
+    # the live view is decoded on demand, so no permanent worker is required.
+    if (cam.stream_type or "").lower() == "file" and cam.stream_url and os.path.exists(cam.stream_url):
+        return "ONLINE", cam.last_seen
     return (cam.status or "OFFLINE"), cam.last_seen
 
 
@@ -206,6 +211,15 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
 
     stream_status = camera_manager.get_camera_status(cam.camera_id)
     status_value = (stream_status["status"] if stream_status else (cam.status or "OFFLINE")).upper()
+    # File-backed demo cameras are playable whenever the media exists; the
+    # live view is served by an on-demand decoder, not a resident worker.
+    if (
+        (cam.stream_type or "").lower() == "file"
+        and cam.stream_url
+        and os.path.exists(cam.stream_url)
+        and status_value != "ONLINE"
+    ):
+        status_value = "ONLINE"
     playable = status_value == "ONLINE"
     slug = cam.camera_id.lower()
 

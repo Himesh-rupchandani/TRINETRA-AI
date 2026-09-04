@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 import threading
@@ -217,35 +218,93 @@ class CameraManager:
         with self._lock:
             return self._latest_packets.get(camera_id)
 
+    def _ondemand_source(self, camera_id: str) -> Optional[str]:
+        """Return the local file path if this camera can be decoded on demand."""
+        with self._lock:
+            stream = self._streams.get(camera_id) or self._streams.get(camera_id.upper())
+            if stream is None:
+                return None
+            if (getattr(stream, "source_type", "") or "").lower() != "file":
+                return None
+            source = stream.source
+        if source and os.path.exists(source):
+            return source
+        return None
+
+    @staticmethod
+    def _read_ondemand_frame(cap: "cv2.VideoCapture", source: str):
+        """Read one frame for an on-demand live view, looping the file safely."""
+        ok, frame = cap.read()
+        if not (ok and frame is not None and frame.size > 0):
+            # Some containers cannot seek backwards reliably — reopen instead.
+            try:
+                cap.release()
+            except Exception:
+                pass
+            cap.open(source)
+            ok, frame = cap.read()
+        if not (ok and frame is not None and frame.size > 0):
+            return None
+        h, w = frame.shape[:2]
+        if w > 1280:  # keep on-demand views cheap to decode and stream
+            scale = 1280.0 / w
+            frame = cv2.resize(frame, (1280, int(round(h * scale))), interpolation=cv2.INTER_AREA)
+        return frame
+
     def generate_mjpeg_stream(self, camera_id: str):
-        """Yield multipart MJPEG stream frames for HTTP live view."""
-        while True:
-            frame = self.get_latest_frame(camera_id, annotated=True)
-            if frame is None:
-                placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
-                placeholder[:] = (20, 24, 30)
-                cv2.putText(
-                    placeholder,
-                    f"NO SIGNAL - {camera_id}",
-                    (180, 240),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (100, 100, 255),
-                    2,
+        """Yield multipart MJPEG stream frames for HTTP live view.
+
+        When no resident worker is running for the camera (e.g. file-backed
+        demo cameras with AUTO_START_CAMERAS off), the source file is decoded
+        on demand for the lifetime of this HTTP connection only.
+        """
+        ondemand_cap = None
+        ondemand_source = None
+        try:
+            while True:
+                frame = self.get_latest_frame(camera_id, annotated=True)
+                if frame is None:
+                    frame = self.get_latest_frame(camera_id.upper(), annotated=True)
+                if frame is None and ondemand_source is None and ondemand_cap is None:
+                    ondemand_source = self._ondemand_source(camera_id)
+                    if ondemand_source is not None:
+                        ondemand_cap = cv2.VideoCapture(ondemand_source)
+                        logger.info(
+                            f"[{camera_id.upper()}] On-demand live view decoding local file: {ondemand_source}"
+                        )
+                if frame is None and ondemand_cap is not None:
+                    frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)
+                if frame is None:
+                    placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+                    placeholder[:] = (20, 24, 30)
+                    cv2.putText(
+                        placeholder,
+                        f"NO SIGNAL - {camera_id}",
+                        (180, 240),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8,
+                        (100, 100, 255),
+                        2,
+                    )
+                    frame = placeholder
+
+                ret, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if not ret:
+                    time.sleep(0.04)
+                    continue
+
+                frame_bytes = buffer.tobytes()
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
                 )
-                frame = placeholder
-
-            ret, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-            if not ret:
-                time.sleep(0.04)
-                continue
-
-            frame_bytes = buffer.tobytes()
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-            )
-            time.sleep(0.04)  # ~25 FPS live preview pacing
+                time.sleep(0.08)  # ~12 FPS on-demand live preview pacing
+        finally:
+            if ondemand_cap is not None:
+                try:
+                    ondemand_cap.release()
+                except Exception:
+                    pass
 
     def _camera_worker(self, camera_id: str, stream: CameraStream, stop_event: threading.Event):
         """

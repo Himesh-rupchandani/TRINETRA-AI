@@ -273,21 +273,34 @@ export function toVehicleEvent(
   const cameraId = dto.camera_id.toLowerCase();
   const meta = metaFor(dir, cameraId);
   const matched = Boolean(dto.watchlist_match);
+  const evidenceRef = dto.evidence_ref ?? undefined;
+  const plate = dto.plate_number ?? dto.plate_raw ?? undefined;
   return {
     id: String(dto.id),
     cameraId,
     cameraName: meta?.name ?? dto.camera_id.toUpperCase(),
     vehicleId: dto.vehicle_track_id ?? undefined,
-    plate: dto.plate_number ?? dto.plate_raw ?? '',
+    plate: plate ?? '',
     plateConfidence: pct(dto.plate_confidence),
     timestamp: dto.event_time,
     latitude: dto.latitude ?? meta?.latitude ?? 0,
     longitude: dto.longitude ?? meta?.longitude ?? 0,
     location: meta?.location ?? '—',
     vehicleClass: asVehicleClass(dto.vehicle_class),
-    eventType: matched ? 'WATCHLIST_MATCH' : 'ANPR_READ',
+    eventType: matched ? 'WATCHLIST_MATCH' : plate ? 'ANPR_READ' : 'VEHICLE_DETECTION',
     severity: matched ? 'CRITICAL' : 'INFO',
-    evidenceRef: dto.evidence_ref ?? undefined,
+    evidenceRef,
+    evidence: evidenceRef
+      ? {
+          ref: evidenceRef,
+          // Real crops captured by the CV engine's evidence writer.
+          frameUrl: `/api/evidence/${evidenceRef}`,
+          plateCropUrl: plate
+            ? `/api/evidence/${evidenceRef.replace(/\.jpg$/, '_plate.jpg')}`
+            : undefined,
+          capturedAt: dto.event_time,
+        }
+      : undefined,
     watchlistMatch: matched,
   };
 }

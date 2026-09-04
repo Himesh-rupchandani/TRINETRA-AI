@@ -30,6 +30,7 @@ from .api.detections import router as detections_router
 from .api.events import router as events_router
 from .api.vehicles import router as vehicles_router
 from .api.internal import router as internal_router
+from .api.evidence import router as evidence_router
 from .api.stats import router as stats_router
 from .api.stream import router as sse_router
 from .api.websocket import router as ws_router
@@ -157,6 +158,7 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(vehicles_router)
     r.include_router(stats_router)
     r.include_router(internal_router)
+    r.include_router(evidence_router)
     r.include_router(sse_router)
     app.include_router(r)
     app.include_router(ws_router, prefix=prefix)

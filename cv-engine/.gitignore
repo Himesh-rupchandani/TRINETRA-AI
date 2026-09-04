@@ -10,3 +10,8 @@ __pycache__/
 
 # local demo feed videos (large binaries — place manually, see scripts/run_feed_demo.py)
 feeds/
+
+# Runtime evidence crops (served by the backend at /api/evidence/...).
+# Keep the source package (evidence/*.py) tracked, ignore generated output.
+evidence/*/
+evidence/dead_letter_events.jsonl

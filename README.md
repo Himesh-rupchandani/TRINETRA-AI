@@ -22,10 +22,14 @@ Sentinel CCTV → Frame (PTS) → Vehicle Detection (YOLO11) → Tracking
 # Backend (port 8000)
 cd TRINETRAAI/backend && pip install -r requirements.txt
 python -m scripts.seed_demo
-# AUTO_START_CAMERAS=true is REQUIRED for live video: without it no stream
-# workers start, /api/cameras/{id}/stream returns unplayable ("Camera is
-# OFFLINE") and the dashboard player will refuse to play.
-AUTO_START_CAMERAS=true uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Point every registry camera at a local traffic clip (offline demo) —
+# video is then decoded ON DEMAND when an operator opens a camera:
+python -m scripts.point_cameras_at_local_feeds
+# EVIDENCE_ROOT serves the CV engine's detection crops at /api/evidence/...
+EVIDENCE_ROOT=../../cv-engine/evidence uvicorn app.main:app --host 0.0.0.0 --port 8000
+# (AUTO_START_CAMERAS=true is only for REAL RTSP/HLS deployments — it starts
+# a resident ingest worker per camera. Do NOT enable it with 32 file cameras
+# on a small machine.)
 
 # CV engine — real Sentinel camera (live mode)
 cd cv-engine && pip install -r requirements.txt
@@ -65,6 +69,11 @@ python scripts/run_feed_demo.py                   # detection + events + annotat
 The frontend picks the annotated view automatically (`/cvfeed/<id>`, proxied),
 falling back to the backend's own MJPEG mirror when the CV engine is off.
 Every frame is watermarked **LOCAL DEMO FEED** — never mistaken for Sentinel.
+
+Every emitted event also stores a **cropped vehicle photo** (evidence) under
+`cv-engine/evidence/<camera>/`, which the backend serves at
+`/api/evidence/<ref>` — the Events page shows the crop plus full details
+(class, track ID, camera, GPS, timestamps) in its evidence drawer.
 
 ## Frontend modes
 
