@@ -31,7 +31,7 @@ class BackendClient:
         backoff_base_sec: float = 1.0,
         backoff_cap_sec: float = 10.0,
         queue_size: int = 1000,
-        dead_letter_path: Optional[str] = "evidence/dead_letter_events.jsonl",
+        dead_letter_path: Optional[str] = "evidence_out/dead_letter_events.jsonl",
         sleep_fn=time.sleep,
     ):
         self.base_url = base_url.rstrip("/")

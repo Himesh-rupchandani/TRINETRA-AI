@@ -87,7 +87,7 @@ class Settings:
     event_on_track_loss_sec: float = 1.5    # emit when track silent this long
 
     # --- Evidence ---------------------------------------------------------
-    evidence_dir: str = "evidence"
+    evidence_dir: str = "evidence_out"   # NOT "evidence/" — that is the source package
     evidence_jpeg_quality: int = 90
     evidence_store_full_frame: bool = True
     evidence_store_plate_crop: bool = True
@@ -136,7 +136,7 @@ class Settings:
             event_suppression_sec=_env_float("EVENT_SUPPRESSION_SEC", 30.0),
             event_max_track_hold_sec=_env_float("EVENT_MAX_TRACK_HOLD_SEC", 20.0),
             event_on_track_loss_sec=_env_float("EVENT_ON_TRACK_LOSS_SEC", 1.5),
-            evidence_dir=_env_str("EVIDENCE_DIR", "evidence"),
+            evidence_dir=_env_str("EVIDENCE_DIR", "evidence_out"),
             evidence_jpeg_quality=_env_int("EVIDENCE_JPEG_QUALITY", 90),
             evidence_store_full_frame=_env_bool("EVIDENCE_FULL_FRAME", True),
             evidence_store_plate_crop=_env_bool("EVIDENCE_PLATE_CROP", True),

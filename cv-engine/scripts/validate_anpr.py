@@ -5,7 +5,7 @@ ANPR quality evaluation (spec §29).
 Reports the three stages SEPARATELY — vehicle detected / plate region read /
 plate correctly formatted — and never merges them into one fake accuracy.
 
-    python scripts/validate_anpr.py --images evidence/cam04
+    python scripts/validate_anpr.py --images evidence_out/cam04
     python scripts/validate_anpr.py --images samples --truth truth.json
 
 truth.json maps filename -> expected normalized plate (optional).

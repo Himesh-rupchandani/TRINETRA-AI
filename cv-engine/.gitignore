@@ -3,6 +3,7 @@
 *.onnx
 *.engine
 models_dev/
-evidence/
+# generated evidence artifacts only — "evidence/" itself is a SOURCE package
+evidence_out/
 __pycache__/
 *.pyc
