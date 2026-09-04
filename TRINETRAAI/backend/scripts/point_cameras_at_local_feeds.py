@@ -18,6 +18,9 @@ from pathlib import Path
 
 FEEDS_DIR = Path(__file__).resolve().parents[3] / "cv-engine" / "feeds"
 CANDIDATE_FEEDS = [
+    "india_road.mp4",  # Indian road, 720p, longest clip — closest to Ahmedabad grid
+    "india_busy.mp4",  # dense Indian city traffic
+    "india_junction.mp4",  # busy Indian junction
     "highway2.mp4",  # real highway CCTV, dense traffic
     "city_cctv.mp4",  # real city CCTV footage
     "city_traffic.mp4",  # dense urban arterial
