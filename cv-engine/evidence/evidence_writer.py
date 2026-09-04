@@ -63,9 +63,11 @@ def sanitize(value: Optional[str], max_len: int = _MAX_NAME_LEN) -> str:
 class EvidenceWriter:
     """Stores full-frame and plate-crop JPEGs for emitted sighting events."""
 
-    def __init__(self, base_dir: str = "evidence", jpeg_quality: int = 90) -> None:
+    def __init__(self, base_dir: str = "evidence", jpeg_quality: int = 90,
+                 max_files: int = 0) -> None:
         self.base_dir = base_dir
         self.jpeg_quality = max(1, min(int(jpeg_quality), 100))
+        self.max_files = max(0, int(max_files))  # 0 disables retention pruning
         self.files_written = 0
         self._lock = threading.Lock()
 
@@ -117,6 +119,37 @@ class EvidenceWriter:
         return crop_ref
 
     # -------------------------------------------------------------- helpers
+    def _prune_if_needed(self) -> None:
+        """Occasionally delete the oldest evidence files beyond ``max_files``.
+
+        A long-running live demo writes thousands of crops; without a cap the
+        disk eventually fills and the whole stack dies. Runs every 250 writes.
+        """
+        if self.max_files <= 0 or self.files_written % 250 != 0:
+            return
+        try:
+            files = []
+            for root, _dirs, names in os.walk(self.base_dir):
+                for name in names:
+                    if name.endswith(".jpg"):
+                        p = os.path.join(root, name)
+                        try:
+                            files.append((os.path.getmtime(p), p))
+                        except OSError:
+                            pass
+            excess = len(files) - self.max_files
+            if excess <= 0:
+                return
+            files.sort()
+            for _mtime, p in files[:excess]:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+            logger.info("evidence retention: pruned %d file(s), kept %d", excess, len(files) - excess)
+        except Exception as exc:  # never let housekeeping crash the pipeline
+            logger.warning("evidence retention sweep failed: %s", exc)
+
     def _write(self, rel_ref: str, image: np.ndarray) -> bool:
         """JPEG-encode ``image`` to ``base_dir/rel_ref``. True on success."""
         if not isinstance(image, np.ndarray) or image.size == 0:
@@ -136,6 +169,8 @@ class EvidenceWriter:
         if not ok:
             logger.warning("cv2 could not encode evidence for %s", rel_ref)
             return False
+
+        self._prune_if_needed()
 
         with self._lock:
             self.files_written += 1

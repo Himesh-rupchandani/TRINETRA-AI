@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import threading
 import time
@@ -45,6 +46,7 @@ from detection.vehicle_detector import VehicleDetector
 from evidence.evidence_writer import EvidenceWriter
 from integration.backend_client import BackendClient
 from pipeline.camera_pipeline import CameraPipeline
+from tracking.vehicle_tracker import VehicleTracker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -94,6 +96,10 @@ class AnnotatedStore:
         with self._lock:
             return self._frames.get(camera_id)
 
+    def discard(self, camera_id: str) -> None:
+        with self._lock:
+            self._frames.pop(camera_id, None)
+
     def ids(self) -> list[str]:
         with self._lock:
             return sorted(self._frames)
@@ -131,30 +137,219 @@ def annotate(frame: np.ndarray, camera_id: str, tracks, pts_ms: float) -> np.nda
     return out
 
 
+def annotate_green(frame: np.ndarray, camera_id: str, tracks) -> np.ndarray:
+    """On-demand live view: bright-green boxes + small labels (surveillance style)."""
+    out = frame.copy()
+    live = [t for t in tracks if t.time_since_update_ms == 0]
+    for t in live:
+        x1, y1, x2, y2 = (int(v) for v in t.bbox)
+        cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        label = f"{t.class_name} #{t.track_id}"
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(out, (x1, y1 - th - 8), (x1 + tw + 8, y1), (0, 255, 0), -1)
+        cv2.putText(out, label, (x1 + 4, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (15, 18, 24), 1, cv2.LINE_AA)
+    h, w = out.shape[:2]
+    osd = f"TRINETRA LIVE AI | {camera_id.upper()} | vehicles {len(live)} | LOCAL DEMO"
+    cv2.rectangle(out, (0, 0), (w, 30), (15, 18, 24), -1)
+    cv2.putText(out, osd, (10, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 1, cv2.LINE_AA)
+    return out
+
+
+# ------------------------------------------------- on-demand annotated views ----
+
+_ONDEMAND_DETECTOR = None
+_ONDEMAND_DETECTOR_LOCK = threading.Lock()
+
+
+def _ondemand_detector(settings):
+    """One shared cheap-settings detector for all on-demand views."""
+    global _ONDEMAND_DETECTOR
+    with _ONDEMAND_DETECTOR_LOCK:
+        if _ONDEMAND_DETECTOR is None:
+            _ONDEMAND_DETECTOR = VehicleDetector(
+                model_path=settings.model_path,
+                conf_threshold=0.35,
+                imgsz=416,
+                device="cpu",
+            )
+        return _ONDEMAND_DETECTOR
+
+
+class _Watch:
+    def __init__(self, camera_id: str, source: str):
+        self.camera_id = camera_id
+        self.source = source
+        self.refs = 0
+        self.stop = threading.Event()
+        self.alive = False
+        self.thread = None
+
+
+class OndemandWatchManager:
+    """Annotates arbitrary backend-registry cameras on demand.
+
+    While at least one HTTP client is watching a camera, a detection+tracking
+    loop runs on that camera's local file and publishes green-box frames to
+    the shared STORE. When the last viewer disconnects the watch stops, so
+    CPU is only spent on cameras somebody is actually looking at.
+    """
+
+    def __init__(self, store, backend_base_url: str, settings, max_watches: int = 2):
+        self.store = store
+        self.backend_base_url = backend_base_url.rstrip("/")
+        self.settings = settings
+        self.max_watches = max_watches
+        self._watches: dict = {}
+        self._lock = threading.Lock()
+
+    # -- registry lookup (file cameras only; never trusts client paths) ----
+    def _resolve_source(self, camera_id: str):
+        try:
+            import httpx
+
+            r = httpx.get(f"{self.backend_base_url}/api/cameras/{camera_id}", timeout=3.0)
+            if r.status_code != 200:
+                return None
+            d = r.json()
+            url = d.get("stream_url") or ""
+            if (d.get("stream_type") or "").lower() == "file" and os.path.exists(url):
+                return url
+        except Exception as exc:
+            logger.warning("[ondemand:%s] registry lookup failed: %s", camera_id, exc)
+        return None
+
+    def exists(self, camera_id: str) -> bool:
+        with self._lock:
+            return camera_id in self._watches
+
+    def alive(self, camera_id: str) -> bool:
+        with self._lock:
+            w = self._watches.get(camera_id)
+            return bool(w and w.alive)
+
+    def acquire(self, camera_id: str) -> bool:
+        with self._lock:
+            w = self._watches.get(camera_id)
+            if w is not None:
+                w.refs += 1
+                return True
+            if len(self._watches) >= self.max_watches:
+                logger.info("[ondemand:%s] capacity reached (%d) - serving without boxes",
+                            camera_id, self.max_watches)
+                return False
+        source = self._resolve_source(camera_id)
+        if source is None:
+            return False
+        with self._lock:
+            w = self._watches.get(camera_id)
+            if w is not None:
+                w.refs += 1
+                return True
+            w = _Watch(camera_id, source)
+            w.refs = 1
+            w.thread = threading.Thread(target=self._loop, args=(w,),
+                                        name=f"ondemand-{camera_id}", daemon=True)
+            self._watches[camera_id] = w
+            w.thread.start()
+        logger.info("[ondemand:%s] live AI view started: %s", camera_id, source)
+        return True
+
+    def release(self, camera_id: str) -> None:
+        with self._lock:
+            w = self._watches.get(camera_id)
+            if w is None:
+                return
+            w.refs -= 1
+            if w.refs <= 0:
+                w.stop.set()
+                self._watches.pop(camera_id, None)
+
+    def _loop(self, w: _Watch) -> None:
+        w.alive = True
+        cap = cv2.VideoCapture(w.source)
+        tracker = VehicleTracker(
+            max_age_sec=self.settings.track_max_age_sec,
+            min_hits=self.settings.track_min_hits,
+            iou_threshold=self.settings.track_iou_threshold,
+        )
+        pts = 0.0
+        idx = 0
+        try:
+            detector = _ondemand_detector(self.settings)
+            while not w.stop.is_set():
+                ok, frame = cap.read()
+                if not (ok and frame is not None and frame.size > 0):
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
+                    cap = cv2.VideoCapture(w.source)  # loop the clip (reopen)
+                    continue
+                idx += 1
+                pts += 40.0
+                if idx % 3 != 0:  # light CPU budget for on-demand views
+                    time.sleep(0.01)
+                    continue
+                detections = detector.detect(frame, camera_id=w.camera_id, pts_ms=pts)
+                tracks = tracker.update(detections, pts_ms=pts)
+                annotated = annotate_green(frame, w.camera_id, tracks)
+                ok2, buf = cv2.imencode(".jpg", annotated,
+                                        [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if ok2:
+                    self.store.publish(w.camera_id, buf.tobytes())
+                time.sleep(0.02)
+        except Exception as exc:
+            logger.warning("[ondemand:%s] watch failed: %s", w.camera_id, exc)
+        finally:
+            try:
+                cap.release()
+            except Exception:
+                pass
+            w.alive = False
+            self.store.discard(w.camera_id)
+            logger.info("[ondemand:%s] live AI view stopped", w.camera_id)
+
+
+ONDEMAND = None
+
+
 class MjpegHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         # Works both directly (/camd01) and behind the dev proxy (/cvfeed/camd01).
         camera_id = self.path.strip("/").split("?")[0].split("/")[-1].lower()
         jpeg = STORE.get(camera_id)
-        if jpeg is None:
-            self.send_response(404)
-            self.end_headers()
-            return
+        acquired = False
+        if jpeg is None and camera_id not in FEEDS:
+            # Unknown camera: start (or join) an on-demand detection watch so
+            # any registry file camera gets a real annotated live view too.
+            if ONDEMAND is not None:
+                acquired = ONDEMAND.acquire(camera_id)
+            if not acquired and STORE.get(camera_id) is None:
+                self.send_response(404)
+                self.end_headers()
+                return
         self.send_response(200)
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         last: bytes | None = None
-        while True:
-            jpeg = STORE.get(camera_id)
-            if jpeg is not None and jpeg is not last:
-                try:
-                    self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
-                    self.wfile.flush()
-                    last = jpeg
-                except (BrokenPipeError, ConnectionResetError):
-                    return
-            time.sleep(0.05)  # ~20 fps preview
+        try:
+            while True:
+                jpeg = STORE.get(camera_id)
+                if jpeg is not None and jpeg is not last:
+                    try:
+                        self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
+                        self.wfile.flush()
+                        last = jpeg
+                    except (BrokenPipeError, ConnectionResetError):
+                        return
+                elif jpeg is None and acquired and ONDEMAND is not None and not ONDEMAND.alive(camera_id):
+                    return  # watch died (e.g. unreadable source)
+                time.sleep(0.05)  # ~20 fps preview
+        finally:
+            if acquired and ONDEMAND is not None:
+                ONDEMAND.release(camera_id)
 
     def log_message(self, *args):  # silence per-request noise
         pass
@@ -271,7 +466,8 @@ def run_feed(camera_id: str, cfg: dict, settings: Settings, annotate_feed: bool)
         detector=detector,
         ocr_engine=ocr_engine,     # real detection + tracking; ANPR via RapidOCR when --anpr
         backend_client=backend,
-        evidence_writer=EvidenceWriter(settings.evidence_dir, settings.evidence_jpeg_quality),
+        evidence_writer=EvidenceWriter(settings.evidence_dir, settings.evidence_jpeg_quality,
+                                         max_files=settings.evidence_max_files),
         emit_plateless_sightings=True,   # genuine vehicle sightings without OCR
         on_tracks=on_tracks,
     )
@@ -310,6 +506,11 @@ def main() -> None:
             raise SystemExit(f"missing video for {cid}: {cfg['video']}")
 
     if not args.no_annotate:
+        global ONDEMAND
+        ONDEMAND = OndemandWatchManager(
+            STORE, settings.backend_base_url, settings,
+            max_watches=int(os.environ.get("ONDEMAND_MAX_WATCHES", "2")),
+        )
         server = ThreadingHTTPServer(("0.0.0.0", 8555), MjpegHandler)
         threading.Thread(target=server.serve_forever, daemon=True, name="mjpeg").start()
         logger.info("annotated MJPEG preview on http://0.0.0.0:8555/<camera_id>")

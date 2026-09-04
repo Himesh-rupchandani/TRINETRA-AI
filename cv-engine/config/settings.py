@@ -89,6 +89,7 @@ class Settings:
     # --- Evidence ---------------------------------------------------------
     evidence_dir: str = "evidence_out"   # NOT "evidence/" — that is the source package
     evidence_jpeg_quality: int = 90
+    evidence_max_files: int = 4000   # retention cap for the evidence dir (0 = off)
     evidence_store_full_frame: bool = True
     evidence_store_plate_crop: bool = True
 
@@ -138,6 +139,7 @@ class Settings:
             event_on_track_loss_sec=_env_float("EVENT_ON_TRACK_LOSS_SEC", 1.5),
             evidence_dir=_env_str("EVIDENCE_DIR", "evidence_out"),
             evidence_jpeg_quality=_env_int("EVIDENCE_JPEG_QUALITY", 90),
+            evidence_max_files=_env_int("EVIDENCE_MAX_FILES", 4000),
             evidence_store_full_frame=_env_bool("EVIDENCE_FULL_FRAME", True),
             evidence_store_plate_crop=_env_bool("EVIDENCE_PLATE_CROP", True),
             scene_cut_check=_env_bool("SCENE_CUT_CHECK", True),
