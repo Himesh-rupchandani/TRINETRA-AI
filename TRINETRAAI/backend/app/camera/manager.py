@@ -219,7 +219,20 @@ class CameraManager:
             return self._latest_packets.get(camera_id)
 
     def generate_mjpeg_stream(self, camera_id: str):
-        """Yield multipart MJPEG stream frames for HTTP live view."""
+        """Yield multipart MJPEG frames for HTTP live view.
+
+        Ends cleanly when the client disconnects (GeneratorExit) so a closed
+        browser tab does not leak an encoder loop per viewer.
+        """
+        try:
+            yield from self._mjpeg_frames(camera_id)
+        except GeneratorExit:
+            logger.info(f"[{camera_id}] MJPEG viewer disconnected.")
+            raise
+        except Exception as exc:
+            logger.warning(f"[{camera_id}] MJPEG stream ended: {exc}")
+
+    def _mjpeg_frames(self, camera_id: str):
         while True:
             frame = self.get_latest_frame(camera_id, annotated=True)
             if frame is None:

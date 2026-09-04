@@ -73,6 +73,7 @@ class CameraItem(BaseModel):
     # source is unreachable — the UI must label this, never show it as live.
     is_demo_feed: bool = False
     last_error: Optional[str] = None
+    event_count_24h: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -88,6 +89,20 @@ class CameraStreamInfo(BaseModel):
     frame_count: int
     is_alive: bool
     last_error: Optional[str] = None
+
+
+class CameraStreamTicket(BaseModel):
+    """Playback ticket telling the UI how to actually view this camera.
+
+    The backend picks the transport, so the browser never guesses and never
+    holds Sentinel credentials. `stream_url` is same-origin.
+    """
+    camera_id: str
+    stream_type: str  # MJPEG | WEBRTC | HLS
+    stream_url: str
+    is_demo_feed: bool = False
+    expires_at: Optional[datetime] = None
+    note: Optional[str] = None
 
 
 # --- Detection Schemas ---

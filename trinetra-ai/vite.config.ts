@@ -49,6 +49,14 @@ export default defineConfig(({ mode }) => ({
               target: process.env.VITE_BACKEND_ORIGIN,
               changeOrigin: true,
               secure: false,
+              // The realtime channel upgrades to a WebSocket on this same
+              // prefix (/api/ws/events). Without ws:true the upgrade is never
+              // proxied and the UI shows OFFLINE despite a healthy backend.
+              ws: true,
+              // MJPEG is an endless multipart response; buffering it would
+              // make the live view look frozen.
+              timeout: 0,
+              proxyTimeout: 0,
             },
           }
         : {}),

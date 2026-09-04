@@ -165,6 +165,7 @@ export interface CameraDto {
   last_seen?: string | null;
   is_demo_feed?: boolean;
   last_error?: string | null;
+  event_count_24h?: number | null;
 }
 
 export function toCamera(dto: CameraDto): Camera {
@@ -186,6 +187,7 @@ export function toCamera(dto: CameraDto): Camera {
     lastSeen: toIso(dto.last_seen),
     isDemoFeed: dto.is_demo_feed === true,
     lastError: dto.last_error ?? undefined,
+    eventCount24h: dto.event_count_24h ?? 0,
   };
 }
 

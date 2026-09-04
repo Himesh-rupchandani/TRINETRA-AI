@@ -11,7 +11,10 @@ import {
 /** Plain-English wording for every status the UI shows an officer. */
 const CAMERA_LABEL: Record<CameraStatus, string> = {
   ONLINE: 'Working',
-  DEGRADED: 'Poor quality',
+  // A degraded camera is reachable but not delivering a healthy live feed
+  // (e.g. the backend is substituting synthetic frames). 'Poor quality'
+  // understated that, so the operator could read it as a working camera.
+  DEGRADED: 'Not live',
   OFFLINE: 'Not working',
 };
 

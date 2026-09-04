@@ -41,26 +41,48 @@ export function CameraPlayer({
   const decodable = canDecodeOverWebRtc(camera.codec);
   const rtcOk = webRtcAvailable();
 
+  /**
+   * MJPEG is served by our own ingestion pipeline over the same origin, so it
+   * needs no WebRTC signalling to an external gateway. When the backend hands
+   * us an MJPEG ticket we render it with a plain <img> and skip WHEP entirely.
+   */
+  const isMjpeg = ticket?.streamType === 'MJPEG';
+  const [mjpegOk, setMjpegOk] = useState(false);
+  const [mjpegNonce, setMjpegNonce] = useState(0);
+
   const { videoRef, phase, error, stats, attempt, retryAt, retryNow } = useWhepStream(
-    ticket?.streamUrl || null,
-    wanted,
+    isMjpeg ? null : ticket?.streamUrl || null,
+    wanted && !isMjpeg,
   );
 
+  // Cache-busting nonce forces the browser to open a fresh multipart response
+  // on retry; without it a stalled MJPEG connection can be reused.
+  const mjpegSrc =
+    isMjpeg && wanted && ticket?.streamUrl
+      ? `${ticket.streamUrl}${ticket.streamUrl.includes('?') ? '&' : '?'}t=${mjpegNonce}`
+      : null;
+
   const requestStream = async () => {
-    if (!rtcOk) {
-      setTicketError('This browser cannot play live video. Please use Chrome, Edge or Safari.');
-      return;
-    }
-    if (!decodable) {
-      setTicketError(
-        'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.',
-      );
-      return;
-    }
     setRequesting(true);
     setTicketError(null);
+    setMjpegOk(false);
     try {
+      // Ask the backend which transport to use BEFORE applying WebRTC-only
+      // capability checks — an MJPEG feed plays fine in browsers with no
+      // WebRTC and decodes codecs WebRTC would reject.
       const t = await cameraService.stream(camera.id);
+      if (t.streamType !== 'MJPEG') {
+        if (!rtcOk) {
+          setTicketError('This browser cannot play live video. Please use Chrome, Edge or Safari.');
+          return;
+        }
+        if (!decodable) {
+          setTicketError(
+            'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.',
+          );
+          return;
+        }
+      }
       setTicket(t);
       setWanted(true);
     } catch (e) {
@@ -80,6 +102,7 @@ export function CameraPlayer({
     setWanted(false);
     setTicket(null);
     setTicketError(null);
+    setMjpegOk(false);
     if (autoRequest && camera.status !== 'OFFLINE') void requestStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera.id]);
@@ -88,7 +111,18 @@ export function CameraPlayer({
   const connecting =
     requesting || phase === 'CONNECTING' || phase === 'BUFFERING' || phase === 'AWAITING_KEYFRAME';
   const showVideo = wanted && Boolean(ticket?.streamUrl);
-  const onAir = phase === 'LIVE' || phase === 'STALLED';
+  const onAir = isMjpeg ? mjpegOk : phase === 'LIVE' || phase === 'STALLED';
+
+  /** Retry that works for whichever transport is active. */
+  const retryStream = () => {
+    if (isMjpeg) {
+      setMjpegOk(false);
+      setMjpegNonce((n) => n + 1);
+      return;
+    }
+    if (ticket?.streamUrl) retryNow();
+    else void requestStream();
+  };
   const showPoster = ticket?.poster ?? poster;
   /** Demo mode with no reachable gateway: show a clean demo frame, not an error. */
   const demoFeed =
@@ -136,6 +170,25 @@ export function CameraPlayer({
             muted
             playsInline
             controls={onAir}
+          />
+        )}
+
+        {/*
+          MJPEG feed from our own pipeline. A multipart response renders in a
+          plain <img>, so this works with no WebRTC, no codec negotiation and
+          no external gateway — and it carries the AI overlay we already draw.
+        */}
+        {mjpegSrc && (
+          <img
+            key={mjpegSrc}
+            src={mjpegSrc}
+            alt={`Live view from ${camera.name}`}
+            className={cn(
+              'absolute inset-0 h-full w-full bg-black object-contain transition-opacity',
+              mjpegOk ? 'opacity-100' : 'opacity-0',
+            )}
+            onLoad={() => setMjpegOk(true)}
+            onError={() => setMjpegOk(false)}
           />
         )}
 
@@ -196,10 +249,7 @@ export function CameraPlayer({
                 <button
                   type="button"
                   className="btn-ghost btn-xs border-white/30 text-white/85"
-                  onClick={() => {
-                    if (ticket?.streamUrl) retryNow();
-                    else void requestStream();
-                  }}
+                  onClick={retryStream}
                 >
                   Try live
                 </button>
@@ -253,7 +303,7 @@ export function CameraPlayer({
                   <button
                     type="button"
                     className="btn-ghost btn-xs mt-3 border-white/30 text-white/85"
-                    onClick={retryNow}
+                    onClick={retryStream}
                   >
                     Try now
                   </button>
@@ -272,10 +322,7 @@ export function CameraPlayer({
                   <button
                     type="button"
                     className="btn-ghost btn-xs mt-2.5 border-white/30 text-white/85"
-                    onClick={() => {
-                      if (ticket?.streamUrl) retryNow();
-                      else void requestStream();
-                    }}
+                    onClick={retryStream}
                   >
                     Try again
                   </button>
@@ -293,7 +340,6 @@ export function CameraPlayer({
                     type="button"
                     className="btn-solid mx-auto"
                     onClick={requestStream}
-                    disabled={!decodable || !rtcOk}
                   >
                     <Play size={15} aria-hidden /> Watch live video
                   </button>

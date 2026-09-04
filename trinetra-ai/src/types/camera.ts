@@ -57,4 +57,8 @@ export interface CameraStreamTicket {
   /** ISO expiry of the signed URL. */
   expiresAt: string;
   poster?: string;
+  /** True when the backend is serving synthetic frames, not a live source. */
+  isDemoFeed?: boolean;
+  /** Human-readable note from the backend (e.g. why the feed is synthetic). */
+  note?: string;
 }
