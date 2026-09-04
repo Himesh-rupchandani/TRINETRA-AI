@@ -74,6 +74,17 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         secure: false,
       },
+      // Serve the verified production build against a real backend: same-origin
+      // /api so the browser never needs to know where the API lives.
+      ...(process.env.BACKEND_ORIGIN
+        ? {
+            '/api': {
+              target: process.env.BACKEND_ORIGIN,
+              changeOrigin: true,
+              ws: true,
+            },
+          }
+        : {}),
     },
   },
   build: {
