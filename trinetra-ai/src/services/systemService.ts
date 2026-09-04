@@ -1,4 +1,4 @@
-import type { DashboardKpis, SystemSummary } from '@/types';
+import type { DashboardKpis, ServiceHealth, SystemSummary } from '@/types';
 import { get, isMockMode } from './api';
 import * as mock from '@/mocks/mockBackend';
 import { config } from '@/lib/config';
@@ -77,7 +77,7 @@ async function probeSentinelGrid(): Promise<GridProbe> {
 
 export const systemService = {
   async health(): Promise<SystemSummary> {
-    const summary = isMockMode ? await mock.getHealth() : await get<SystemSummary>('/health');
+    const summary = isMockMode ? await mock.getHealth() : await liveHealth();
     if (!config.liveStreams) return summary;
 
     const probe = await probeSentinelGrid();
@@ -98,6 +98,75 @@ export const systemService = {
   },
 
   kpis(): Promise<DashboardKpis> {
-    return isMockMode ? mock.getKpis() : get<DashboardKpis>('/stats/kpis');
+    if (isMockMode) return mock.getKpis();
+    // Aggregated by the backend from real rows (GET /api/stats/kpis).
+    return get<DashboardKpis>('/stats/kpis');
   },
 };
+
+/* ------------------------- live health (GET /health) ------------------------ */
+
+interface HealthDto {
+  status?: string;
+  version?: string;
+  environment?: string;
+  database_connected?: boolean;
+  active_cameras?: number;
+  total_cameras?: number;
+  demo_mode?: boolean;
+  timestamp?: string;
+  components?: Record<string, string>;
+}
+
+const COMPONENT_LABELS: Array<{ key: string; name: string; description: string }> = [
+  { key: 'api', name: 'API Gateway', description: 'FastAPI service exposing the registry, events and alerts.' },
+  { key: 'sentinel_catalogue', name: 'Sentinel Catalogue', description: 'Government CCTV catalogue sync (cctv.corp8.cloud).' },
+  { key: 'camera_registry', name: 'Camera Registry', description: 'Model 1 camera catalogue with GIS coordinates.' },
+  { key: 'event_ingestion', name: 'AI Engine', description: 'YOLO detection + tracking + ANPR ingestion pipeline.' },
+  { key: 'anpr', name: 'ANPR Engine', description: 'Plate detection, OCR confidence and normalisation.' },
+  { key: 'database', name: 'PostgreSQL', description: 'Event, camera, watchlist and alert storage.' },
+  { key: 'watchlist', name: 'Watchlist Service', description: 'Plate watchlist matching on ingest.' },
+  { key: 'alert_engine', name: 'Alert Engine', description: 'Alert creation, deduplication and lifecycle.' },
+  { key: 'realtime_channel', name: 'Realtime Channel', description: 'WebSocket + SSE broadcast of detections and alerts.' },
+];
+
+/**
+ * Map the backend's `/health` components onto the control-room board.
+ * Only reported facts are shown — uptime percentages and queue depths the
+ * backend does not measure stay absent rather than fabricated.
+ */
+async function liveHealth(): Promise<SystemSummary> {
+  const raw = await get<HealthDto>('/health');
+  const components = raw.components ?? {};
+  const heartbeat = raw.timestamp ?? new Date().toISOString();
+  const mapStatus = (s?: string): ServiceHealth['status'] =>
+    s === 'HEALTHY' ? 'HEALTHY' : s === 'DEGRADED' ? 'DEGRADED' : 'OFFLINE';
+
+  const services: ServiceHealth[] = COMPONENT_LABELS.map((c) => {
+    const svc: ServiceHealth = {
+      id: c.key,
+      name: c.name,
+      description: c.description,
+      status: mapStatus(components[c.key]),
+      lastHeartbeat: heartbeat,
+      version: raw.version,
+    };
+    if (c.key === 'database') svc.status = raw.database_connected ? 'HEALTHY' : 'OFFLINE';
+    if (c.key === 'camera_registry') {
+      svc.status = (raw.total_cameras ?? 0) > 0 && raw.database_connected ? 'HEALTHY' : 'DEGRADED';
+      svc.activeConnections = raw.total_cameras;
+    }
+    return svc;
+  });
+
+  // The media gateway itself is probed separately (see probeSentinelGrid).
+  services.splice(2, 0, {
+    id: 'sentinel-grid',
+    name: 'Sentinel Grid',
+    description: 'Live CCTV media gateway (WebRTC/WHEP + HLS + RTSP).',
+    status: 'HEALTHY', // replaced by the live probe result below
+    lastHeartbeat: heartbeat,
+  });
+
+  return { services, generatedAt: heartbeat };
+}

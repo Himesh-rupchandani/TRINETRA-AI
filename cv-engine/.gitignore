@@ -3,6 +3,8 @@
 *.onnx
 *.engine
 models_dev/
-evidence/
+# Runtime evidence OUTPUT (JPEG frames/crops written by the pipeline) —
+# the evidence/ python package source itself IS committed.
+evidence/**/*.jpg
 __pycache__/
 *.pyc

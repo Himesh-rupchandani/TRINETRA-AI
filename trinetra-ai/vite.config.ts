@@ -1,4 +1,4 @@
-import { defineConfig, type ProxyOptions } from 'vite';
+import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
@@ -43,10 +43,12 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: true,
     proxy: {
       '/sentinel': sentinelProxy,
-      ...(mode === 'development' && process.env.VITE_BACKEND_ORIGIN
+      // .env files are loaded here because the config itself is evaluated
+      // before Vite injects them into process.env.
+      ...(mode === 'development' && loadEnv(mode, __dirname, 'VITE_').VITE_BACKEND_ORIGIN
         ? {
             '/api': {
-              target: process.env.VITE_BACKEND_ORIGIN,
+              target: loadEnv(mode, __dirname, 'VITE_').VITE_BACKEND_ORIGIN,
               changeOrigin: true,
               secure: false,
             },

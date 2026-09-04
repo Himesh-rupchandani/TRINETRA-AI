@@ -288,7 +288,7 @@ export default function Dashboard() {
                   <div className="min-w-0">
                     <p className="truncate text-xs text-ink">{s.name}</p>
                     <p className="text-2xs text-ink-faint">
-                      {s.uptimePct.toFixed(2)}% · hb {formatTime(s.lastHeartbeat)}
+                      {s.uptimePct != null ? `${s.uptimePct.toFixed(2)}% · ` : ''}hb {formatTime(s.lastHeartbeat)}
                     </p>
                   </div>
                   <ServiceStatusChip status={s.status} />

@@ -6,11 +6,12 @@ export interface ServiceHealth {
   name: string;
   description: string;
   status: ServiceStatus;
-  uptimePct: number;
-  uptimeSince: string;
+  /** Live telemetry: fields the backend does not measure stay absent (rendered `—`). */
+  uptimePct?: number;
+  uptimeSince?: string;
   lastHeartbeat: string;
-  activeConnections: number;
-  processingState: ProcessingState;
+  activeConnections?: number;
+  processingState?: ProcessingState;
   queueDepth?: number;
   latencyMs?: number;
   latestError?: string | null;
@@ -19,9 +20,9 @@ export interface ServiceHealth {
 
 export interface SystemSummary {
   services: ServiceHealth[];
-  ingestFps: number;
-  eventsPerMinute: number;
-  anprPerMinute: number;
+  ingestFps?: number;
+  eventsPerMinute?: number;
+  anprPerMinute?: number;
   generatedAt: string;
 }
 

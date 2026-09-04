@@ -30,7 +30,7 @@ export function AlertBanner() {
         </span>
         <span className="plate text-sm text-ink">{a.plate}</span>
         <span className="text-2xs text-ink-muted">
-          {a.cameraName ?? a.cameraId.toUpperCase()} · {a.location} · {formatTime(a.createdAt)}
+          {a.cameraName ?? a.cameraId.toUpperCase()} · {a.location ?? 'Unknown location'} · {formatTime(a.createdAt)}
           {a.confidence != null && ` · ${a.confidence.toFixed(1)}% match`}
         </span>
 

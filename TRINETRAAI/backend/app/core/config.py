@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 250
     UPLOAD_DIR: str = "uploads"
 
+    # Evidence store written by the CV engine and served (read-only) at
+    # /api/evidence — the CV engine should point EVIDENCE_DIR here too.
+    EVIDENCE_DIR: str = "uploads/evidence"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

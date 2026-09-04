@@ -105,17 +105,21 @@ export default function SystemHealth() {
                   <p className="text-2xs text-ink-faint">{s.description}</p>
                   <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
                     <KeyValue label="Working time">
-                      <span className="font-mono">{s.uptimePct.toFixed(2)}%</span>
+                      <span className="font-mono">
+                        {s.uptimePct != null ? `${s.uptimePct.toFixed(2)}%` : '—'}
+                      </span>
                     </KeyValue>
-                    <KeyValue label="Running since">{relativeTime(s.uptimeSince)}</KeyValue>
+                    <KeyValue label="Running since">
+                      {s.uptimeSince ? relativeTime(s.uptimeSince) : '—'}
+                    </KeyValue>
                     <KeyValue label="Last checked">
                       <span className="font-mono">{formatTime(s.lastHeartbeat)}</span>
                     </KeyValue>
                     <KeyValue label="Cameras connected">
-                      <span className="font-mono tabular-nums">{s.activeConnections}</span>
+                      <span className="font-mono tabular-nums">{s.activeConnections ?? '—'}</span>
                     </KeyValue>
                     <KeyValue label="Currently">
-                      <span className={cn('font-semibold', PROCESSING_TONE[s.processingState])}>
+                      <span className={cn('font-semibold', s.processingState ? PROCESSING_TONE[s.processingState] : '')}>
                         {s.processingState === 'PROCESSING'
                           ? 'Working'
                           : s.processingState === 'IDLE'
@@ -132,7 +136,7 @@ export default function SystemHealth() {
                       </KeyValue>
                     )}
                     <KeyValue label="Version">
-                      <span className="font-mono">{s.version}</span>
+                      <span className="font-mono">{s.version ?? '—'}</span>
                     </KeyValue>
                   </dl>
                   <div className="mt-3 border-t border-line/60 pt-2.5">

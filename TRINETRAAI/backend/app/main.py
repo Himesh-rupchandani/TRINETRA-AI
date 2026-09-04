@@ -12,8 +12,11 @@ if __name__ == "__main__" and not __package__:
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
+
 from fastapi import FastAPI, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -31,6 +34,12 @@ from .api.events import router as events_router
 from .api.vehicles import router as vehicles_router
 from .api.internal import router as internal_router
 from .api.websocket import router as ws_router
+from .api.stats import router as stats_router
+from .api.stream import router as sse_router
+
+# Evidence store (frames + plate crops written by the CV engine), served read-only.
+EVIDENCE_PATH = Path(settings.EVIDENCE_DIR)
+EVIDENCE_PATH.mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -40,6 +49,9 @@ async def lifespan(app: FastAPI):
 
     # 1. Initialize DB tables (creates vehicle_events + alert ack fields)
     init_db()
+
+    # 1b. Evidence store served read-only at /api/evidence
+    EVIDENCE_PATH.mkdir(parents=True, exist_ok=True)
 
     # 2. Register existing cameras into CameraManager
     db = SessionLocal()
@@ -153,8 +165,12 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(events_router)
     r.include_router(vehicles_router)
     r.include_router(internal_router)
+    r.include_router(stats_router)
+    r.include_router(sse_router)
     app.include_router(r)
     app.include_router(ws_router, prefix=prefix)
+    # Read-only evidence files written by the CV engine (frames + plate crops).
+    app.mount(f"{prefix}/evidence", StaticFiles(directory=str(EVIDENCE_PATH)), name=f"evidence{prefix.replace('/', '_')}")
 
 # Also mount WebSocket router without prefix
 app.include_router(ws_router)

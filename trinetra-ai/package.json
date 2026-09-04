@@ -2,14 +2,16 @@
   "name": "trinetra-ai",
   "private": true,
   "version": "1.0.0",
-  "description": "TRINETRA AI — CCTV Intelligence & Investigation Control Room",
+  "description": "TRINETRA AI \u2014 CCTV Intelligence & Investigation Control Room",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "lint": "oxlint src",
     "preview": "vite preview --host 0.0.0.0",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "dev:demo": "vite --host 0.0.0.0 --mode demo",
+    "build:demo": "tsc -b && vite build --mode demo"
   },
   "dependencies": {
     "axios": "^1.20.0",

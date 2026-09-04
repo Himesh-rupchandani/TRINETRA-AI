@@ -36,13 +36,20 @@ const SEVERITY_LABEL: Record<Severity, string> = {
 };
 
 
-export function SeverityChip({ severity, className }: { severity: Severity; className?: string }) {
+export function SeverityChip({
+  severity,
+  className,
+}: {
+  /** Absent for live watchlist records the backend does not rate — shown as UNRATED. */
+  severity: Severity | undefined;
+  className?: string;
+}) {
   return (
     <span
-      className={cn('chip uppercase tracking-wide', severityClass[severity], className)}
-      title={`Priority: ${SEVERITY_LABEL[severity] ?? severity}`}
+      className={cn('chip uppercase tracking-wide', (severity && severityClass[severity]) || 'bg-surface-2 text-ink-muted', className)}
+      title={`Priority: ${severity ? (SEVERITY_LABEL[severity] ?? severity) : 'Not rated'}`}
     >
-      {SEVERITY_LABEL[severity] ?? severity}
+      {severity ? (SEVERITY_LABEL[severity] ?? severity) : 'Unrated'}
     </span>
   );
 }

@@ -14,11 +14,13 @@ if __name__ == "__main__" and not __package__:
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Optional
 
 from ..core.logging_config import logger
 from ..database.database import get_db
-from sqlalchemy import func
-from ..database.models import Camera
+from sqlalchemy import func, case
+from ..database.models import Camera, VehicleEvent
 from ..database.schemas import (
     CameraResponse,
     CameraCreate,
@@ -32,32 +34,53 @@ from ..camera.manager import camera_manager
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
 
+def _camera_event_stats(db: Session) -> Dict[str, tuple]:
+    """One grouped query: {UPPER(camera_id): (last_event_at, events_in_24h)}."""
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    rows = (
+        db.query(
+            func.upper(VehicleEvent.camera_id),
+            func.max(VehicleEvent.event_time),
+            func.sum(case((VehicleEvent.event_time >= since, 1), else_=0)),
+        )
+        .group_by(func.upper(VehicleEvent.camera_id))
+        .all()
+    )
+    return {str(r[0]).upper(): (r[1], int(r[2] or 0)) for r in rows}
+
+
+def _build_camera_item(cam: Camera, stream_status: Optional[dict], stats: Optional[tuple]) -> CameraItem:
+    current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
+    last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
+    last_event_at, event_count_24h = stats if stats else (None, 0)
+    return CameraItem(
+        id=cam.camera_id.lower(),
+        camera_id=cam.camera_id,
+        name=cam.name,
+        location=cam.location or cam.name,
+        latitude=cam.latitude,
+        longitude=cam.longitude,
+        status=current_status,
+        codec=cam.codec or "H264",
+        width=cam.width or 1920,
+        height=cam.height or 1080,
+        stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
+        stream_url=cam.stream_url,
+        last_seen=last_seen,
+        last_event_at=last_event_at,
+        event_count_24h=event_count_24h,
+    )
+
+
 @router.get("", response_model=CameraListResponse, summary="List cameras", description="Returns normalized list of all registered CCTV cameras.")
 def list_cameras(db: Session = Depends(get_db)):
     """List all registered CCTV cameras normalized for frontend and analytics."""
     cameras = db.query(Camera).all()
+    stats = _camera_event_stats(db)
     items = []
     for cam in cameras:
         stream_status = camera_manager.get_camera_status(cam.camera_id)
-        current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-        last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
-        items.append(
-            CameraItem(
-                id=cam.camera_id.lower(),
-                camera_id=cam.camera_id,
-                name=cam.name,
-                location=cam.location or cam.name,
-                latitude=cam.latitude,
-                longitude=cam.longitude,
-                status=current_status,
-                codec=cam.codec or "H264",
-                width=cam.width or 1920,
-                height=cam.height or 1080,
-                stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
-                stream_url=cam.stream_url,
-                last_seen=last_seen,
-            )
-        )
+        items.append(_build_camera_item(cam, stream_status, stats.get(cam.camera_id.upper())))
     return CameraListResponse(data=items)
 
 
@@ -124,22 +147,23 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
             detail=f"Camera '{camera_id}' not found.",
         )
     stream_status = camera_manager.get_camera_status(cam.camera_id)
-    current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-    last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
-    return CameraItem(
-        id=cam.camera_id.lower(),
-        camera_id=cam.camera_id,
-        name=cam.name,
-        location=cam.location or cam.name,
-        latitude=cam.latitude,
-        longitude=cam.longitude,
-        status=current_status,
-        codec=cam.codec or "H264",
-        width=cam.width or 1920,
-        height=cam.height or 1080,
-        stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
-        stream_url=cam.stream_url,
-        last_seen=last_seen,
+    stats_row = (
+        db.query(
+            func.max(VehicleEvent.event_time),
+            func.sum(
+                case(
+                    (VehicleEvent.event_time >= datetime.now(timezone.utc) - timedelta(hours=24), 1),
+                    else_=0,
+                )
+            ),
+        )
+        .filter(func.upper(VehicleEvent.camera_id) == cam.camera_id.upper())
+        .one()
+    )
+    return _build_camera_item(
+        cam,
+        stream_status,
+        (stats_row[0], int(stats_row[1] or 0)) if stats_row[0] else None,
     )
 
 

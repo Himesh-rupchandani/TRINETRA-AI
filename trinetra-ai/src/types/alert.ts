@@ -8,7 +8,8 @@ export interface Alert {
   plate: string;
   cameraId: string;
   cameraName?: string;
-  location: string;
+  /** Resolved from the camera registry when known. */
+  location?: string;
   latitude?: number;
   longitude?: number;
   severity: Severity;

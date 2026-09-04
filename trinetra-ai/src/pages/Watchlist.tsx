@@ -17,7 +17,7 @@ export default function Watchlist() {
     const q = query.trim().toUpperCase();
     return (data ?? []).filter((w) => {
       if (onlyActive && !w.active) return false;
-      if (q && !`${w.plate} ${w.category} ${w.caseRef} ${w.reason}`.toUpperCase().includes(q)) return false;
+      if (q && !`${w.plate} ${w.category} ${w.caseRef ?? ''} ${w.reason}`.toUpperCase().includes(q)) return false;
       return true;
     });
   }, [data, query, onlyActive]);
@@ -93,8 +93,8 @@ export default function Watchlist() {
                       <td className="max-w-[320px] truncate text-ink-muted" title={w.reason}>
                         {w.reason}
                       </td>
-                      <td className="font-mono text-2xs text-ink-muted">{w.caseRef}</td>
-                      <td className="text-ink-muted">{w.addedBy}</td>
+                      <td className="font-mono text-2xs text-ink-muted">{w.caseRef ?? '—'}</td>
+                      <td className="text-ink-muted">{w.addedBy ?? '—'}</td>
                       <td className="text-2xs text-ink-faint">{formatDateTime(w.addedAt)}</td>
                       <td>
                         <span

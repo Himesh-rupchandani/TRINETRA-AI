@@ -68,6 +68,8 @@ class CameraItem(BaseModel):
     stream_type: str = "HLS"
     stream_url: str
     last_seen: Optional[datetime] = None
+    last_event_at: Optional[datetime] = None
+    event_count_24h: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -29,14 +29,25 @@ cd cv-engine && pip install -r requirements.txt
 python scripts/fetch_models.py          # one-time model download
 python scripts/run_pipeline.py --mode live --camera cam04
 
-# CV engine — offline demo mode (scripted fixtures, clearly NOT live)
-python scripts/run_pipeline.py --mode demo
+# CV engine — offline demo mode (scripted fixtures, clearly NOT live).
+# --backend-url posts to a REAL backend: CV -> ingest -> watchlist -> alert.
+# EVIDENCE_DIR should point at the backend's evidence dir so the UI can
+# serve the captured frames + plate crops at /api/evidence.
+cd cv-engine && pip install -r requirements.txt
+EVIDENCE_DIR=../TRINETRAAI/backend/uploads/evidence \
+python scripts/run_pipeline.py --mode demo --backend-url http://localhost:8000
+
+# Frontend (port 5173)
+cd trinetra-ai && npm install
+npm run dev          # LIVE mode — real backend via /api proxy
+npm run dev:demo     # DEMO mode — synthetic data, no backend required
 ```
 
 ## Tests
 
 ```bash
-cd TRINETRAAI/backend && pytest          # 91 tests
+cd TRINETRAAI/backend && pytest          # 96 tests
 cd cv-engine && pytest                   # 79 offline tests (live-feed tests opt-in)
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
+cd trinetra-ai && npm run typecheck && npm run lint && npm run build
 ```

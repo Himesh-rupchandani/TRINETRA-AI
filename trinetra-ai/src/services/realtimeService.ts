@@ -5,6 +5,14 @@ import { mockCameras } from '@/mocks/cameras';
 import { watchlistByPlate } from '@/mocks/watchlist';
 import { pushMockEvent, setMockCameraStatus } from '@/mocks/mockBackend';
 import { syntheticFrame, syntheticPlateCrop } from '@/utils/syntheticEvidence';
+import {
+  getCameraIndex,
+  mapAlert,
+  mapVehicleEvent,
+  type AlertDto,
+  type CameraIndex,
+  type VehicleEventDto,
+} from './backendAdapter';
 
 /* ------------------------------ message model ------------------------------ */
 
@@ -95,7 +103,7 @@ function makeEvent(): { event: VehicleEvent; alert?: Alert } {
         location: cam.location,
         latitude: cam.latitude,
         longitude: cam.longitude,
-        severity: wl.severity,
+        severity: wl.severity ?? 'HIGH',
         status: 'NEW',
         category: wl.category,
         createdAt: now,
@@ -138,19 +146,71 @@ function connectSimulator(onMessage: Handler, onState: StateHandler): RealtimeCh
 
 /* ------------------------------- SSE / WS ------------------------------- */
 
+/**
+ * The backend broadcasts `{type: VEHICLE_DETECTED | WATCHLIST_MATCH |
+ * ALERT_CREATED | CAMERA_STATUS_CHANGED, timestamp, payload}` (snake_case).
+ * Translate to the app's realtime union; never fabricate fields.
+ */
+function mapBackendMessage(
+  raw: unknown,
+  cameras: CameraIndex,
+): RealtimeMessage | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const msg = raw as { type?: string; payload?: Record<string, unknown> };
+  const p = (msg.payload ?? {}) as Record<string, unknown>;
+  switch (msg.type) {
+    case 'VEHICLE_DETECTED':
+    case 'WATCHLIST_MATCH':
+      return { type: 'EVENT', payload: mapVehicleEvent(p as unknown as VehicleEventDto, cameras) };
+    case 'ALERT_CREATED':
+      return { type: 'ALERT', payload: mapAlert(p as unknown as AlertDto, cameras) };
+    case 'CAMERA_STATUS_CHANGED':
+      if (typeof p.camera_id === 'string') {
+        return {
+          type: 'CAMERA_STATUS',
+          payload: { cameraId: p.camera_id.toLowerCase(), status: toCameraStatus(p.status) },
+        };
+      }
+      return null;
+    default:
+      return null; // CONNECTED / PONG / unknown — informational only
+  }
+}
+
+const toCameraStatus = (s: unknown): Camera['status'] =>
+  s === 'ONLINE' || s === 'DEGRADED' ? s : 'OFFLINE';
+
+/** Camera index (best effort, 2s budget) so live payloads carry real names. */
+async function camerasForRealtime(): Promise<CameraIndex> {
+  try {
+    return await Promise.race([
+      getCameraIndex(),
+      new Promise<CameraIndex>((resolve) => setTimeout(() => resolve(new Map()), 2000)),
+    ]);
+  } catch {
+    return new Map();
+  }
+}
+
 function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('CONNECTING');
-  const es = new EventSource(realtimeUrl('/stream'), { withCredentials: true });
-  es.onopen = () => onState('LIVE');
-  es.onerror = () => onState('OFFLINE');
-  es.onmessage = (e) => {
-    try {
-      onMessage(JSON.parse(e.data) as RealtimeMessage);
-    } catch {
-      /* ignore malformed frame */
-    }
-  };
-  return { close: () => es.close() };
+  let es: EventSource | null = null;
+  let closed = false;
+  void camerasForRealtime().then((cameras) => {
+    if (closed) return;
+    es = new EventSource(realtimeUrl('/stream'));
+    es.onopen = () => onState('LIVE');
+    es.onerror = () => onState('OFFLINE');
+    es.onmessage = (e) => {
+      try {
+        const mapped = mapBackendMessage(JSON.parse(e.data), cameras);
+        if (mapped) onMessage(mapped);
+      } catch {
+        /* ignore malformed frame */
+      }
+    };
+  });
+  return { close: () => { closed = true; es?.close(); } };
 }
 
 function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
@@ -158,13 +218,15 @@ function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   let closed = false;
   let ws: WebSocket;
   let retry: number;
+  let cameras = new Map() as CameraIndex;
 
   const open = () => {
-    ws = new WebSocket(realtimeUrl('/ws', 'ws'));
+    ws = new WebSocket(realtimeUrl('/ws/events', 'ws'));
     ws.onopen = () => onState('LIVE');
     ws.onmessage = (e) => {
       try {
-        onMessage(JSON.parse(e.data) as RealtimeMessage);
+        const mapped = mapBackendMessage(JSON.parse(e.data), cameras);
+        if (mapped) onMessage(mapped);
       } catch {
         /* ignore malformed frame */
       }
@@ -174,6 +236,7 @@ function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {
       if (!closed) retry = window.setTimeout(open, 4000); // simple backoff
     };
   };
+  void camerasForRealtime().then((idx) => { cameras = idx; });
   open();
 
   return {

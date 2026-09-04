@@ -101,7 +101,7 @@ export function AlertCard({
         </div>
         <div className="col-span-2 sm:col-span-1">
           <dt className="kv-label">Place</dt>
-          <dd className="kv-value truncate">{alert.location}</dd>
+          <dd className="kv-value truncate">{alert.location ?? '—'}</dd>
         </div>
         <div>
           <dt className="kv-label">Plate match</dt>

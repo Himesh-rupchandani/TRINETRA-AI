@@ -22,6 +22,22 @@ from ..services.event_service import ingest_event
 router = APIRouter(prefix="/events", tags=["Events"])
 
 
+@router.get(
+    "/{event_id}",
+    response_model=VehicleEventResponse,
+    summary="Get a single vehicle event",
+)
+def get_event(event_id: int, db: Session = Depends(get_db)):
+    """Fetch one vehicle event by ID (used by the frontend evidence panel)."""
+    event = db.query(VehicleEvent).filter(VehicleEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vehicle event #{event_id} not found.",
+        )
+    return event
+
+
 @router.post(
     "",
     response_model=VehicleEventIngestResponse,

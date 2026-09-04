@@ -13,7 +13,8 @@ export type WatchlistCategory =
   | 'BLACKLISTED'
   | 'EXPIRED PERMIT'
   | 'PERSON OF INTEREST'
-  | 'AMBER ALERT';
+  | 'AMBER ALERT'
+  | (string & {}); // backend categories are free-form; UI renders unknown ones verbatim
 
 export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
 
@@ -21,10 +22,11 @@ export interface WatchlistRecord {
   id: string;
   plate: string;
   category: WatchlistCategory;
-  severity: Severity;
   reason: string;
-  caseRef: string;
-  addedBy: string;
+  /** Not stored by the backend watchlist — absent in live mode (never faked). */
+  severity?: Severity;
+  caseRef?: string;
+  addedBy?: string;
   addedAt: string;
   active: boolean;
   contact?: string;
