@@ -29,6 +29,7 @@ import type {
   WatchlistRecord,
 } from '@/types';
 import { haversineKm, minutesBetween } from '@/lib/utils';
+import { config } from '@/lib/config';
 
 /* ------------------------------- envelopes ------------------------------- */
 
@@ -202,9 +203,27 @@ export interface VehicleEventDto {
   created_at?: string | null;
 }
 
+/**
+ * Real evidence URL for a backend `evidence_ref`.
+ *
+ * Points at our own API, so the browser never talks to the CV host directly
+ * and no credential is involved. Returns undefined when the event carries no
+ * reference — the UI then shows "Frame not retained" rather than a broken image.
+ */
+export function evidenceUrl(
+  ref: string | undefined,
+  variant: 'frame' | 'plate' = 'frame',
+): string | undefined {
+  if (!ref) return undefined;
+  return `${config.apiBaseUrl}/evidence?ref=${encodeURIComponent(ref)}&variant=${variant}`;
+}
+
 export function toVehicleEvent(dto: VehicleEventDto): VehicleEvent {
   const plate = dto.plate_number ?? '';
   const watchlistMatch = dto.watchlist_match === true;
+  const evidenceRef = dto.evidence_ref ?? undefined;
+  const timestamp =
+    toIso(dto.event_time) ?? toIso(dto.created_at) ?? new Date(0).toISOString();
   return {
     id: String(dto.id ?? ''),
     cameraId: (dto.camera_id ?? '').toUpperCase(),
@@ -212,29 +231,53 @@ export function toVehicleEvent(dto: VehicleEventDto): VehicleEvent {
     // No plate read -> em dash, never "undefined" or an invented value.
     plate: plate || '—',
     plateConfidence: num(dto.plate_confidence) ?? 0,
-    timestamp: toIso(dto.event_time) ?? toIso(dto.created_at) ?? new Date(0).toISOString(),
+    timestamp,
     latitude: num(dto.latitude) ?? 0,
     longitude: num(dto.longitude) ?? 0,
     vehicleClass: toVehicleClass(dto.vehicle_class),
     eventType: watchlistMatch ? 'WATCHLIST_MATCH' : plate ? 'ANPR_READ' : 'VEHICLE_DETECTION',
     severity: watchlistMatch ? 'CRITICAL' : 'INFO',
-    evidenceRef: dto.evidence_ref ?? undefined,
+    evidenceRef,
+    // Real CV evidence: never flagged synthetic, so the UI shows no demo badge.
+    evidence: evidenceRef
+      ? {
+          ref: evidenceRef,
+          frameUrl: evidenceUrl(evidenceRef, 'frame'),
+          plateCropUrl: evidenceUrl(evidenceRef, 'plate'),
+          capturedAt: timestamp,
+          synthetic: false,
+        }
+      : undefined,
     watchlistMatch,
   };
+}
+
+/** A coordinate the backend never actually supplied (null -> 0,0 in the DTO). */
+export function hasPosition(lat?: number, lng?: number): boolean {
+  return Boolean(lat && lng);
 }
 
 /**
  * Attach registry metadata (camera display name + location) to events.
  * The backend event row only stores `camera_id`, so the camera registry stays
  * the single source of truth for names and locations (spec Phase 3 / 39).
+ *
+ * Events ingested without coordinates inherit the camera's surveyed position
+ * rather than plotting at 0,0 in the Atlantic (spec Phase 28 / 33).
  */
-export function withCameraContext<T extends { cameraId: string }>(
+export function withCameraContext<T extends { cameraId: string; latitude?: number; longitude?: number }>(
   rows: T[],
   cameras: Map<string, Camera>,
 ): Array<T & { cameraName?: string; location?: string }> {
   return rows.map((r) => {
     const cam = cameras.get(r.cameraId.toUpperCase());
-    return { ...r, cameraName: cam?.name, location: cam?.location };
+    const useCameraPos = !hasPosition(r.latitude, r.longitude) && cam;
+    return {
+      ...r,
+      cameraName: cam?.name,
+      location: cam?.location,
+      ...(useCameraPos ? { latitude: cam.latitude, longitude: cam.longitude } : {}),
+    };
   });
 }
 

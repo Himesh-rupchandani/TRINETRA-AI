@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Demo Mode
     DEMO_MODE: bool = True
 
+    # Open every registered camera's decoder at startup. Fine for the ~30-50
+    # camera PoC; set false for larger deployments so streams are opened on
+    # demand instead of holding one decoder thread per camera (spec §30/§31).
+    EAGER_START_STREAMS: bool = True
+
     # Alert deduplication cooldown window (seconds)
     ALERT_DEDUP_COOLDOWN_SECONDS: int = 180
 

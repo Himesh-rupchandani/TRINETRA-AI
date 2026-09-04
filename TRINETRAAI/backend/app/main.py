@@ -31,6 +31,7 @@ from .api.events import router as events_router
 from .api.vehicles import router as vehicles_router
 from .api.internal import router as internal_router
 from .api.stats import router as stats_router
+from .api.evidence import router as evidence_router
 from .api.websocket import router as ws_router
 
 
@@ -46,13 +47,17 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         cameras = db.query(Camera).all()
-        logger.info(f"Registering {len(cameras)} CCTV cameras into CameraManager...")
+        eager = getattr(settings, "EAGER_START_STREAMS", True)
+        logger.info(
+            f"Registering {len(cameras)} CCTV cameras into CameraManager "
+            f"(auto_start={eager})..."
+        )
         for cam in cameras:
             camera_manager.add_camera(
                 camera_id=cam.camera_id,
                 source=cam.stream_url,
                 source_type=cam.stream_type,
-                auto_start=True,
+                auto_start=eager,
             )
     except Exception as e:
         logger.error(f"Error initializing cameras from DB: {e}")
@@ -155,6 +160,7 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(vehicles_router)
     r.include_router(internal_router)
     r.include_router(stats_router)
+    r.include_router(evidence_router)
     app.include_router(r)
     app.include_router(ws_router, prefix=prefix)
 

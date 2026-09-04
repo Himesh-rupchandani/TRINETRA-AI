@@ -12,6 +12,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config } from '@/lib/config';
+import { hasPosition } from '@/services/adapters';
 import { useTheme } from '@/features/system/ThemeProvider';
 import { cameraIcon, eventIcon, routeIcon } from './mapIcons';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
@@ -108,16 +109,32 @@ export function MapView({
 }: MapViewProps) {
   const { theme } = useTheme();
   const tiles = theme === 'dark' ? config.map.tiles.dark : config.map.tiles.light;
-  const routeLine = useMemo(
-    () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
+  // A record with no surveyed position must not be plotted — 0,0 would drop a
+  // marker in the Atlantic and mislead the operator (spec Phase 33).
+  const mappableCameras = useMemo(
+    () => cameras.filter((c) => hasPosition(c.latitude, c.longitude)),
+    [cameras],
+  );
+  const mappableEvents = useMemo(
+    () => events.filter((e) => hasPosition(e.latitude, e.longitude)),
+    [events],
+  );
+  const mappableRoute = useMemo(
+    () => route.filter((p) => hasPosition(p.latitude, p.longitude)),
     [route],
+  );
+
+  const routeLine = useMemo(
+    () => mappableRoute.map((p) => [p.latitude, p.longitude] as [number, number]),
+    [mappableRoute],
   );
 
   const fitPoints = useMemo(() => {
     if (routeLine.length) return routeLine;
-    if (cameras.length) return cameras.map((c) => [c.latitude, c.longitude] as [number, number]);
-    return events.map((e) => [e.latitude, e.longitude] as [number, number]);
-  }, [routeLine, cameras, events]);
+    if (mappableCameras.length)
+      return mappableCameras.map((c) => [c.latitude, c.longitude] as [number, number]);
+    return mappableEvents.map((e) => [e.latitude, e.longitude] as [number, number]);
+  }, [routeLine, mappableCameras, mappableEvents]);
 
   return (
     <div className={className ?? 'h-full w-full'}>
@@ -157,7 +174,7 @@ export function MapView({
             />
           ))}
 
-        {cameras.map((c) => (
+        {mappableCameras.map((c) => (
           <Marker
             key={c.id}
             position={[c.latitude, c.longitude]}
@@ -172,7 +189,7 @@ export function MapView({
           </Marker>
         ))}
 
-        {events.map((e) => (
+        {mappableEvents.map((e) => (
           <Marker
             key={e.id}
             position={[e.latitude, e.longitude]}
@@ -197,7 +214,7 @@ export function MapView({
           </>
         )}
 
-        {route.map((p) => (
+        {mappableRoute.map((p) => (
           <Marker
             key={`${p.eventId}-${p.sequence}`}
             position={[p.latitude, p.longitude]}
