@@ -61,7 +61,7 @@ logger = logging.getLogger("feed_demo")
 # serve its own MJPEG fallback view of the identical source.
 FEEDS = {
     "camd01": {
-        "video": CV_ROOT / "feeds" / "los_angeles.mp4",
+        "video": CV_ROOT / "feeds" / "highway2.mp4",
         "name": "DEMO FEED — Highway Interchange",
         "location": "Local Demo Interchange",
         "latitude": 23.0322,
