@@ -37,14 +37,26 @@ export function CameraPlayer({
   const [wanted, setWanted] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
 
+  // MJPEG cameras (file-backed demo feeds): <img> playback instead of WHEP.
+  const isMjpeg = ticket?.streamType === 'MJPEG';
+  const [mjpegAlive, setMjpegAlive] = useState(false);
+  const [mjpegSrc, setMjpegSrc] = useState<string | null>(null);
+
   // Checked before negotiating: an undecodable codec must not retry-loop.
   const decodable = canDecodeOverWebRtc(camera.codec);
   const rtcOk = webRtcAvailable();
 
   const { videoRef, phase, error, stats, attempt, retryAt, retryNow } = useWhepStream(
-    ticket?.streamUrl || null,
+    isMjpeg ? null : ticket?.streamUrl || null,
     wanted,
   );
+
+  // Prefer the CV engine's annotated live view; fall back to the backend's
+  // own MJPEG mirror of the same source when the CV engine is not running.
+  useEffect(() => {
+    setMjpegAlive(false);
+    setMjpegSrc(ticket?.streamType === 'MJPEG' ? `/cvfeed/${camera.id}` : null);
+  }, [ticket?.cameraId, ticket?.streamUrl, camera.id]);
 
   const requestStream = async () => {
     if (!rtcOk) {
@@ -88,7 +100,7 @@ export function CameraPlayer({
   const connecting =
     requesting || phase === 'CONNECTING' || phase === 'BUFFERING' || phase === 'AWAITING_KEYFRAME';
   const showVideo = wanted && Boolean(ticket?.streamUrl);
-  const onAir = phase === 'LIVE' || phase === 'STALLED';
+  const onAir = isMjpeg ? mjpegAlive : phase === 'LIVE' || phase === 'STALLED';
   const showPoster = ticket?.poster ?? poster;
   /** Demo mode with no reachable gateway: show a clean demo frame, not an error. */
   const demoFeed =
@@ -125,7 +137,28 @@ export function CameraPlayer({
           <div className="grid h-full w-full place-items-center bg-surface-2" />
         )}
 
-        {showVideo && (
+        {showVideo && isMjpeg && mjpegSrc && (
+          <img
+            src={mjpegSrc}
+            alt={`${camera.name} — live view`}
+            className={cn(
+              'absolute inset-0 h-full w-full bg-black object-contain transition-opacity',
+              mjpegAlive ? 'opacity-100' : 'opacity-0',
+            )}
+            decoding="async"
+            onLoad={() => setMjpegAlive(true)}
+            onError={() => {
+              if (mjpegSrc !== ticket?.streamUrl && ticket?.streamUrl) {
+                setMjpegSrc(ticket.streamUrl); // CV engine not running -> backend view
+              } else {
+                setMjpegAlive(false);
+                setTicketError('Live view unavailable for this camera right now.');
+              }
+            }}
+          />
+        )}
+
+        {showVideo && !isMjpeg && (
           <video
             ref={videoRef}
             className={cn(

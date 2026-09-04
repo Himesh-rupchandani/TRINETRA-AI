@@ -209,6 +209,18 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
     playable = status_value == "ONLINE"
     slug = cam.camera_id.lower()
 
+    # File-backed cameras (local demo feeds) play natively in the browser via
+    # the backend's MJPEG live view — no WebRTC gateway involved.
+    if playable and (cam.stream_type or "").lower() == "file":
+        return CameraStreamTicket(
+            camera_id=slug,
+            stream_type="MJPEG",
+            stream_url=f"/api/cameras/{slug}/live",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+            playable=True,
+            reason=None,
+        )
+
     return CameraStreamTicket(
         camera_id=slug,
         stream_type="WEBRTC" if playable else (cam.stream_type or "hls").upper(),
