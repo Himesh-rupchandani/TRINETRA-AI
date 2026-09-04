@@ -1,10 +1,11 @@
 """
 Vehicles API — cross-camera vehicle investigation endpoints.
 
+GET /api/v1/vehicles/{plate}         — investigation profile (stats + watchlist)
 GET /api/v1/vehicles/{plate}/events  — full event history across all cameras
 GET /api/v1/vehicles/{plate}/route   — ordered GIS coordinate route
 """
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from ..database.models import VehicleEvent
 from ..database.schemas import (
     VehicleEventResponse,
     VehicleRouteResponse,
+    VehicleProfileResponse,
     RoutePoint,
     PaginatedResponse,
 )
@@ -102,4 +104,54 @@ def get_vehicle_route(plate: str, db: Session = Depends(get_db)):
         plate_number=plate_norm,
         total_sightings=len(events),
         route=route_points,
+    )
+
+
+@router.get(
+    "/{plate}",
+    response_model=VehicleProfileResponse,
+    summary="Vehicle investigation profile",
+    description=(
+        "Aggregates everything known about one plate: sighting statistics plus "
+        "the active watchlist record when present. Powers the investigation header."
+    ),
+)
+def get_vehicle_profile(plate: str, db: Session = Depends(get_db)):
+    """Cross-camera profile for a single vehicle registration number."""
+    from ..database.models import Watchlist
+
+    plate_norm = normalize_plate(plate)
+    if not plate_norm:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid or empty plate number.",
+        )
+
+    events = (
+        db.query(VehicleEvent)
+        .filter(VehicleEvent.plate_number == plate_norm)
+        .order_by(VehicleEvent.event_time.desc())
+        .all()
+    )
+
+    vehicle_class: Optional[str] = None
+    for ev in events:
+        if ev.vehicle_class:
+            vehicle_class = ev.vehicle_class
+            break
+
+    entry = (
+        db.query(Watchlist)
+        .filter(Watchlist.plate_number == plate_norm, Watchlist.active.is_(True))
+        .first()
+    )
+
+    return VehicleProfileResponse(
+        plate_number=plate_norm,
+        vehicle_class=vehicle_class,
+        first_seen=events[-1].event_time if events else None,
+        last_seen=events[0].event_time if events else None,
+        total_sightings=len(events),
+        cameras_touched=len({ev.camera_id.upper() for ev in events}),
+        watchlist=entry,
     )

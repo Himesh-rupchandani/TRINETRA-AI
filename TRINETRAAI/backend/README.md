@@ -1,6 +1,6 @@
 # TRINETRA AI - Enterprise Computer Vision CCTV & License Plate Intelligence Platform
 
-[![Backend Tests](https://img.shields.io/badge/Tests-91%2F91%20Passed-brightgreen)](tests/)
+[![Backend Tests](https://img.shields.io/badge/Tests-97%2F97%20Passed-brightgreen)](tests/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)]()
@@ -85,7 +85,12 @@ docker compose exec backend python -m scripts.seed_demo
 All endpoints are fully mounted and accessible via both `/api/...` and `/api/v1/...`.
 
 ### 1. System & Health
-- `GET /api/health` — Full subsystem health diagnostics (Database, Watchlist, Event Ingestion, Alert Engine, Sentinel Catalogue, WebSocket Realtime Channel).
+- - `GET /api/events/{event_id}` — Single event lookup (evidence / detection detail).
+- `GET /api/stats/kpis` — Live Command Center KPIs computed from the database (no fabricated numbers).
+- `GET /api/cameras/{camera_id}/stream` — Browser-safe playback ticket: same-origin WHEP path for online cameras, `playable: false` + reason otherwise. Never exposes RTSP URLs or Sentinel credentials.
+- `GET /api/stream` — SSE realtime channel (same typed events as `WS /api/ws/events`).
+
+`GET /api/health` — Full subsystem health diagnostics (Database, Watchlist, Event Ingestion, Alert Engine, Sentinel Catalogue, WebSocket Realtime Channel).
 - `GET /api/` — Service root metadata.
 
 ### 2. Cameras
@@ -133,6 +138,7 @@ All endpoints are fully mounted and accessible via both `/api/...` and `/api/v1/
   ```
 
 ### 5. Vehicle Trace & GIS Routes
+- `GET /api/vehicles/{plate_number}` — Investigation profile: sighting stats + active watchlist record (or `null`).
 - `GET /api/vehicles/{plate_number}/events` — Chronological timeline of sightings for a given plate.
 - `GET /api/vehicles/{plate_number}/route` — Ordered GIS route points with confidence:
   ```json
@@ -170,7 +176,7 @@ All endpoints are fully mounted and accessible via both `/api/...` and `/api/v1/
 
 ## Running the Automated Test Suite
 
-The test suite contains 91 automated tests covering unit logic, hardware pacing, state machines, and end-to-end integration workflows.
+The test suite contains 97 automated tests covering unit logic, hardware pacing, state machines, and end-to-end integration workflows.
 
 ```powershell
 # Run the entire test suite
@@ -184,7 +190,7 @@ pytest --cov=app --cov-report=term-missing
 ```
 
 Test Results Summary:
-- **Total Tests**: 91
-- **Passed**: 91 (100%)
+- **Total Tests**: 97
+- **Passed**: 97 (100%)
 - **Failed**: 0
 - **Errors**: 0

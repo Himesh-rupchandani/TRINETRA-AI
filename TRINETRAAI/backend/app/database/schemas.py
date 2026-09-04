@@ -76,6 +76,16 @@ class CameraListResponse(BaseModel):
     data: List[CameraItem]
 
 
+class CameraStreamTicket(BaseModel):
+    """Browser-safe playback ticket. Contains no credentials and no RTSP URLs."""
+    camera_id: str
+    stream_type: str = "WEBRTC"
+    stream_url: str = ""
+    expires_at: datetime
+    playable: bool = False
+    reason: Optional[str] = None
+
+
 class CameraStreamInfo(BaseModel):
     camera_id: str
     status: str
@@ -250,6 +260,17 @@ class VehicleRouteResponse(BaseModel):
     plate_number: str
     total_sightings: int
     route: List[RoutePoint]
+
+
+class VehicleProfileResponse(BaseModel):
+    """Investigation profile for one plate: sighting stats + watchlist state."""
+    plate_number: str
+    vehicle_class: Optional[str] = None
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    total_sightings: int = 0
+    cameras_touched: int = 0
+    watchlist: Optional[WatchlistResponse] = None
 
 
 # --- System Health Schema ---

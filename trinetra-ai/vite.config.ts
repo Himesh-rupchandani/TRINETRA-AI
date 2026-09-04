@@ -49,6 +49,9 @@ export default defineConfig(({ mode }) => ({
               target: process.env.VITE_BACKEND_ORIGIN,
               changeOrigin: true,
               secure: false,
+              // Also proxy WebSocket upgrades (/api/ws/events) when the
+              // realtime transport is configured as `ws`.
+              ws: true,
             },
           }
         : {}),
