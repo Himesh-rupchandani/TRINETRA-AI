@@ -97,6 +97,7 @@ export interface RouteDto {
   route: Array<{
     sequence: number;
     camera_id: string;
+    event_id?: number | null;
     event_time: string;
     latitude?: number | null;
     longitude?: number | null;
@@ -376,7 +377,9 @@ export function toVehicleRoute(dto: RouteDto, dir?: Map<string, CameraMeta> | nu
         : undefined;
     return {
       sequence: p.sequence,
-      eventId: '', // backend route omits event ids; correlated with sightings in useVehicleSearch
+      // Backend now carries the sighting id; leave correlation to the hook only
+      // for older payloads that omit it.
+      eventId: p.event_id != null ? String(p.event_id) : '',
       cameraId,
       cameraName: meta?.name ?? p.camera_id.toUpperCase(),
       location: meta?.location ?? '—',

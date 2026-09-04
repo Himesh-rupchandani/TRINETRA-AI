@@ -72,6 +72,8 @@ export interface MapViewProps {
   cameras?: Camera[];
   events?: VehicleEvent[];
   route?: RoutePoint[];
+  /** The plate the plotted route belongs to — powers popup deep-links. */
+  routePlate?: string;
   selectedCameraId?: string | null;
   activeRouteSequence?: number | null;
   onSelectCamera?: (camera: Camera) => void;
@@ -94,6 +96,7 @@ export function MapView({
   cameras = [],
   events = [],
   route = [],
+  routePlate,
   selectedCameraId,
   activeRouteSequence,
   onSelectCamera,
@@ -207,7 +210,7 @@ export function MapView({
             title={`Sighting ${p.sequence} — ${p.cameraName}`}
           >
             <Popup>
-              <RoutePopup point={p} />
+              <RoutePopup point={p} plate={routePlate} />
             </Popup>
           </Marker>
         ))}

@@ -65,7 +65,7 @@ export function EventPopup({ event }: { event: VehicleEvent }) {
   );
 }
 
-export function RoutePopup({ point }: { point: RoutePoint }) {
+export function RoutePopup({ point, plate }: { point: RoutePoint; plate?: string }) {
   return (
     <div className="min-w-[210px] p-2.5 text-ink">
       <div className="mb-1.5 flex items-center gap-2">
@@ -75,6 +75,9 @@ export function RoutePopup({ point }: { point: RoutePoint }) {
         <p className="font-mono text-xs font-bold">{point.cameraName}</p>
       </div>
       <p className="mb-2 text-2xs text-ink-muted">{point.location}</p>
+      {plate && (
+        <p className="mb-2 font-mono text-2xs font-semibold text-brand">{plate}</p>
+      )}
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">
         <dt className="text-ink-faint">Sighting time</dt>
         <dd className="text-right font-mono">{formatTime(point.timestamp)}</dd>
@@ -99,9 +102,16 @@ export function RoutePopup({ point }: { point: RoutePoint }) {
           </>
         )}
       </dl>
-      <Link to={`/cameras/${point.cameraId}`} className="btn-ghost btn-xs mt-2.5 w-full">
-        Open {point.cameraName}
-      </Link>
+      <div className="mt-2.5 grid gap-1.5">
+        {plate && (
+          <Link to={`/vehicles/${plate}`} className="btn-primary btn-xs w-full">
+            View vehicle &amp; evidence
+          </Link>
+        )}
+        <Link to={`/cameras/${point.cameraId}`} className="btn-ghost btn-xs w-full">
+          Open {point.cameraName}
+        </Link>
+      </div>
     </div>
   );
 }

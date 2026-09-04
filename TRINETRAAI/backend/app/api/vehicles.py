@@ -92,6 +92,7 @@ def get_vehicle_route(plate: str, db: Session = Depends(get_db)):
         RoutePoint(
             sequence=idx + 1,
             camera_id=ev.camera_id,
+            event_id=ev.id,
             event_time=ev.event_time,
             latitude=ev.latitude,
             longitude=ev.longitude,

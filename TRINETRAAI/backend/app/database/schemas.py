@@ -253,6 +253,9 @@ class VehicleEventIngestResponse(BaseModel):
 class RoutePoint(BaseModel):
     sequence: int
     camera_id: str
+    # The sighting behind this hop, so a GIS route point can deep-link to its
+    # evidence / detection detail without client-side guesswork.
+    event_id: Optional[int] = None
     # Registry metadata is joined here so a GIS route point can render
     # "camera / location / timestamp / confidence" without a second round trip.
     camera_name: Optional[str] = None

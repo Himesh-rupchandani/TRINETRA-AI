@@ -136,6 +136,7 @@ export default function GIS() {
             cameras={showCameras ? cameras : []}
             events={detections}
             route={points}
+            routePlate={result?.plate}
             activeRouteSequence={activeSequence}
             selectedCameraId={focusCamera}
             onSelectRoutePoint={selectPoint}
