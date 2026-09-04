@@ -24,6 +24,7 @@ from ..database.schemas import (
     CameraCreate,
     CameraUpdate,
     CameraStreamInfo,
+    CameraStreamTicket,
     CameraItem,
     CameraListResponse,
 )
@@ -32,15 +33,42 @@ from ..camera.manager import camera_manager
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
 
+
+# The API contract exposes exactly three camera states (ONLINE / OFFLINE /
+# DEGRADED). The ingestion engine has a richer lifecycle, so map it down rather
+# than leaking CONNECTING/RECONNECTING/STOPPED into the UI.
+_LIVE_TO_API_STATUS = {
+    "ONLINE": "ONLINE",
+    "DEGRADED": "DEGRADED",
+    "CONNECTING": "ONLINE",
+    "RECONNECTING": "DEGRADED",
+    "OFFLINE": "OFFLINE",
+    "STOPPED": "OFFLINE",
+}
+
+
+def _resolve_camera_status(cam: "Camera") -> tuple:
+    """Return (status, last_seen) for a camera.
+
+    A live worker only overrides the registry status when it is actually
+    delivering frames. Otherwise the registry value stands, so a camera whose
+    stream has simply not been opened yet is not misreported as OFFLINE.
+    """
+    stream_status = camera_manager.get_camera_status(cam.camera_id)
+    if stream_status and stream_status.get("is_alive"):
+        mapped = _LIVE_TO_API_STATUS.get(stream_status.get("status"), None)
+        if mapped:
+            return mapped, stream_status.get("last_seen") or cam.last_seen
+    return (cam.status or "OFFLINE"), cam.last_seen
+
+
 @router.get("", response_model=CameraListResponse, summary="List cameras", description="Returns normalized list of all registered CCTV cameras.")
 def list_cameras(db: Session = Depends(get_db)):
     """List all registered CCTV cameras normalized for frontend and analytics."""
     cameras = db.query(Camera).all()
     items = []
     for cam in cameras:
-        stream_status = camera_manager.get_camera_status(cam.camera_id)
-        current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-        last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
+        current_status, last_seen = _resolve_camera_status(cam)
         items.append(
             CameraItem(
                 id=cam.camera_id.lower(),
@@ -50,9 +78,12 @@ def list_cameras(db: Session = Depends(get_db)):
                 latitude=cam.latitude,
                 longitude=cam.longitude,
                 status=current_status,
+                department=cam.department,
+                zone=cam.zone,
                 codec=cam.codec or "H264",
                 width=cam.width or 1920,
                 height=cam.height or 1080,
+                fps=cam.fps,
                 stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
                 stream_url=cam.stream_url,
                 last_seen=last_seen,
@@ -123,9 +154,7 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Camera '{camera_id}' not found.",
         )
-    stream_status = camera_manager.get_camera_status(cam.camera_id)
-    current_status = stream_status["status"] if stream_status else (cam.status or "OFFLINE")
-    last_seen = stream_status["last_seen"] if stream_status and stream_status.get("last_seen") else cam.last_seen
+    current_status, last_seen = _resolve_camera_status(cam)
     return CameraItem(
         id=cam.camera_id.lower(),
         camera_id=cam.camera_id,
@@ -134,9 +163,12 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
         latitude=cam.latitude,
         longitude=cam.longitude,
         status=current_status,
+        department=cam.department,
+        zone=cam.zone,
         codec=cam.codec or "H264",
         width=cam.width or 1920,
         height=cam.height or 1080,
+        fps=cam.fps,
         stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
         stream_url=cam.stream_url,
         last_seen=last_seen,
@@ -240,6 +272,40 @@ def restart_camera(camera_id: str):
     """Restart stream ingestion for a camera."""
     success = camera_manager.restart_camera(camera_id)
     return {"status": "restarted", "camera_id": camera_id, "success": success}
+
+
+@router.get("/{camera_id}/stream", response_model=CameraStreamTicket,
+            summary="Playback ticket for a camera")
+def camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
+    """Resolve playback details server-side.
+
+    The frontend calls this instead of building a stream URL itself, so no
+    Sentinel credential or gateway origin is ever compiled into the bundle.
+    """
+    cam = db.query(Camera).filter(Camera.camera_id == camera_id).first()
+    if not cam:
+        # Accept the lowercase id form the UI uses ("cam04" for "CAM04").
+        cam = (
+            db.query(Camera)
+            .filter(func.lower(Camera.camera_id) == camera_id.strip().lower())
+            .first()
+        )
+    if not cam:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera '{camera_id}' not found.",
+        )
+
+    stream_status = camera_manager.get_camera_status(cam.camera_id)
+    return CameraStreamTicket(
+        camera_id=cam.camera_id,
+        stream_type=(cam.stream_type or "hls").upper(),
+        stream_url=cam.stream_url or "",
+        codec=cam.codec,
+        width=cam.width,
+        height=cam.height,
+        status=stream_status["status"] if stream_status else (cam.status or "OFFLINE"),
+    )
 
 
 @router.get("/{camera_id}/live")

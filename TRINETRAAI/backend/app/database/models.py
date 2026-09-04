@@ -31,9 +31,14 @@ class Camera(Base):
     latitude = Column(Float, nullable=True, default=23.0225)
     longitude = Column(Float, nullable=True, default=72.5714)
     location = Column(String(200), nullable=True)
+    # Owning agency + operational zone: the CCTV Registry (Model 1) must expose
+    # these so the UI never has to guess or hard-code them per component.
+    department = Column(String(100), nullable=True)
+    zone = Column(String(50), nullable=True)
     codec = Column(String(50), nullable=True, default="H264")
     width = Column(Integer, nullable=True, default=1920)
     height = Column(Integer, nullable=True, default=1080)
+    fps = Column(Integer, nullable=True)
     status = Column(String(20), default="OFFLINE", index=True)  # ONLINE, OFFLINE, CONNECTING, ERROR
     last_seen = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)

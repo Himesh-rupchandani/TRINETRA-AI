@@ -32,6 +32,10 @@ class Settings(BaseSettings):
 
     # Demo Mode
     DEMO_MODE: bool = True
+    # Start stream ingestion for every registered camera at boot? Off by
+    # default: a control room opens the streams it is actually looking at
+    # (POST /cameras/{id}/start). Set true to ingest the whole grid.
+    AUTO_START_CAMERAS: bool = False
 
     # Alert deduplication cooldown window (seconds)
     ALERT_DEDUP_COOLDOWN_SECONDS: int = 180

@@ -30,6 +30,7 @@ from .api.detections import router as detections_router
 from .api.events import router as events_router
 from .api.vehicles import router as vehicles_router
 from .api.internal import router as internal_router
+from .api.stats import router as stats_router
 from .api.websocket import router as ws_router
 
 
@@ -51,7 +52,7 @@ async def lifespan(app: FastAPI):
                 camera_id=cam.camera_id,
                 source=cam.stream_url,
                 source_type=cam.stream_type,
-                auto_start=True,
+                auto_start=settings.AUTO_START_CAMERAS,
             )
     except Exception as e:
         logger.error(f"Error initializing cameras from DB: {e}")
@@ -153,6 +154,7 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(events_router)
     r.include_router(vehicles_router)
     r.include_router(internal_router)
+    r.include_router(stats_router)
     app.include_router(r)
     app.include_router(ws_router, prefix=prefix)
 

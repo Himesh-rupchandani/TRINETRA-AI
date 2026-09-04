@@ -61,10 +61,13 @@ class CameraItem(BaseModel):
     location: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    department: Optional[str] = None
+    zone: Optional[str] = None
     status: str
     codec: Optional[str] = "H264"
     width: Optional[int] = 1920
     height: Optional[int] = 1080
+    fps: Optional[int] = None
     stream_type: str = "HLS"
     stream_url: str
     last_seen: Optional[datetime] = None
@@ -240,6 +243,10 @@ class VehicleEventIngestResponse(BaseModel):
 class RoutePoint(BaseModel):
     sequence: int
     camera_id: str
+    # Registry metadata is joined here so a GIS route point can render
+    # "camera / location / timestamp / confidence" without a second round trip.
+    camera_name: Optional[str] = None
+    location: Optional[str] = None
     event_time: datetime
     latitude: Optional[float]
     longitude: Optional[float]
@@ -264,3 +271,48 @@ class HealthResponse(BaseModel):
     demo_mode: bool
     timestamp: datetime
     components: Optional[Dict[str, Any]] = None
+
+
+# --- Camera stream ticket ----------------------------------------------------
+class CameraStreamTicket(BaseModel):
+    """Playback ticket handed to the browser.
+
+    Resolved server-side so the frontend never holds Sentinel credentials and
+    never constructs an authenticated stream URL itself.
+    """
+    camera_id: str
+    stream_type: str
+    stream_url: str
+    codec: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    status: str
+    expires_at: Optional[datetime] = None
+    poster: Optional[str] = None
+
+
+# --- Vehicle profile (investigation header) ----------------------------------
+class VehicleProfileResponse(BaseModel):
+    plate_number: str
+    vehicle_class: Optional[str] = None
+    total_sightings: int
+    cameras_touched: int
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    watchlist_match: bool = False
+    watchlist: Optional["WatchlistResponse"] = None
+
+
+# --- Dashboard KPIs ----------------------------------------------------------
+class KpisResponse(BaseModel):
+    total_cameras: int
+    cameras_online: int
+    cameras_degraded: int
+    cameras_offline: int
+    active_alerts: int
+    vehicle_detections_24h: int
+    anpr_reads_24h: int
+    watchlist_matches_24h: int
+
+
+VehicleProfileResponse.model_rebuild()
