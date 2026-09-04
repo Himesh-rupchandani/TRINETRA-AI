@@ -22,7 +22,10 @@ Sentinel CCTV → Frame (PTS) → Vehicle Detection (YOLO11) → Tracking
 # Backend (port 8000)
 cd TRINETRAAI/backend && pip install -r requirements.txt
 python -m scripts.seed_demo
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+# AUTO_START_CAMERAS=true is REQUIRED for live video: without it no stream
+# workers start, /api/cameras/{id}/stream returns unplayable ("Camera is
+# OFFLINE") and the dashboard player will refuse to play.
+AUTO_START_CAMERAS=true uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # CV engine — real Sentinel camera (live mode)
 cd cv-engine && pip install -r requirements.txt
