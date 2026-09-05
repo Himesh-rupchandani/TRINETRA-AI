@@ -256,17 +256,66 @@ class CameraManager:
                     0.55, color, 1, cv2.LINE_AA)
         return frame
 
+    def _ondemand_candidates(self, camera_id: str):
+        """Ordered (source, is_file) candidates for an on-demand live view.
+
+        Sentinel cameras: authenticated RTSP first (TCP), then authenticated
+        HLS over HTTPS (works where port 8554 is blocked), then the registry
+        URL as-is. Credentials are built here, backend-side, never stored.
+        """
+        resolved = self._ondemand_source(camera_id)
+        if resolved is None:
+            return []
+        source, is_file = resolved
+        if is_file:
+            return [(source, True)]
+        candidates = []
+        try:
+            from ..services import sentinel_stream_service as svc
+
+            with self._lock:
+                stream = self._streams.get(camera_id) or self._streams.get(camera_id.upper())
+            registry_url = (getattr(stream, "primary_source", "") or source)
+            if svc.is_sentinel_camera(registry_url) or svc.is_sentinel_camera(source):
+                cid = svc.validate_camera_id(camera_id)
+                if svc.credentials_configured():
+                    candidates.append((svc.get_rtsp_url(cid), False))
+                    candidates.append((svc.get_authenticated_hls_url(cid), False))
+                candidates.append((svc.get_hls_url(cid), False))
+        except Exception as exc:
+            logger.warning(f"[{camera_id.upper()}] Could not build Sentinel sources: {exc}")
+        if not any(c[0] == source for c in candidates):
+            candidates.append((source, False))
+        return candidates
+
     @staticmethod
-    def _read_ondemand_frame(cap: "cv2.VideoCapture", source: str):
+    def _open_ondemand_capture(source: str) -> "cv2.VideoCapture":
+        """Open a source for on-demand decoding (RTSP forced over TCP)."""
+        if source.lower().startswith("rtsp://"):
+            transport = getattr(settings, "RTSP_TRANSPORT", "tcp")
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{transport}"
+            return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+        if source.lower().startswith(("http://", "https://")):
+            return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+        return cv2.VideoCapture(source)
+
+    @classmethod
+    def _read_ondemand_frame(cls, cap: "cv2.VideoCapture", source: str):
         """Read one frame for an on-demand live view, looping the file safely."""
-        ok, frame = cap.read()
+        ok, frame = cap.read() if cap.isOpened() else (False, None)
         if not (ok and frame is not None and frame.size > 0):
             # Some containers cannot seek backwards reliably — reopen instead.
             try:
                 cap.release()
             except Exception:
                 pass
-            cap.open(source)
+            if "://" in source:
+                time.sleep(0.4)  # do not hammer an unreachable network source
+                # Force the FFmpeg backend for network URLs (default backend
+                # probing spams CAP_IMAGES errors and can fail on Windows).
+                cap.open(source, cv2.CAP_FFMPEG)
+            else:
+                cap.open(source)
             ok, frame = cap.read()
         if not (ok and frame is not None and frame.size > 0):
             return None
@@ -289,6 +338,8 @@ class CameraManager:
         ondemand_cap = None
         ondemand_source = None
         ondemand_is_file = True
+        ondemand_candidates = None
+        ondemand_failures = 0
         detector = None
         if detect_vehicles:
             from ..services.vehicle_detection_service import vehicle_detection_service
@@ -299,16 +350,12 @@ class CameraManager:
                 if frame is None:
                     frame = self.get_latest_frame(camera_id.upper(), annotated=True)
                 if frame is None and ondemand_source is None and ondemand_cap is None:
-                    resolved = self._ondemand_source(camera_id)
-                    if resolved is not None:
-                        ondemand_source, ondemand_is_file = resolved
-                        if ondemand_source.lower().startswith("rtsp://"):
-                            # Same rule as CameraStream: RTSP over TCP (Sentinel requirement).
-                            transport = getattr(settings, "RTSP_TRANSPORT", "tcp")
-                            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{transport}"
-                            ondemand_cap = cv2.VideoCapture(ondemand_source, cv2.CAP_FFMPEG)
-                        else:
-                            ondemand_cap = cv2.VideoCapture(ondemand_source)
+                    if ondemand_candidates is None:
+                        ondemand_candidates = self._ondemand_candidates(camera_id)
+                    if ondemand_candidates:
+                        ondemand_source, ondemand_is_file = ondemand_candidates.pop(0)
+                        ondemand_cap = self._open_ondemand_capture(ondemand_source)
+                        ondemand_failures = 0
                         from ..services.sentinel_stream_service import redact as _redact
                         kind = "local recording" if ondemand_is_file else "real network stream"
                         logger.info(
@@ -317,7 +364,23 @@ class CameraManager:
                 if frame is None and ondemand_cap is not None:
                     frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)
                     if frame is not None:
+                        ondemand_failures = 0
                         frame = self._stamp_source_osd(frame, ondemand_is_file)
+                    elif not ondemand_is_file:
+                        # Network source not delivering: after a few misses, move
+                        # on to the next candidate (e.g. RTSP blocked -> HLS).
+                        ondemand_failures += 1
+                        if ondemand_failures >= 25 and ondemand_candidates:
+                            from ..services.sentinel_stream_service import redact as _redact
+                            logger.warning(
+                                f"[{camera_id.upper()}] No frames from {_redact(ondemand_source)} — trying next source"
+                            )
+                            try:
+                                ondemand_cap.release()
+                            except Exception:
+                                pass
+                            ondemand_cap = None
+                            ondemand_source = None
                 if frame is not None and detector is not None:
                     # Real detections only: boxes come straight from the model.
                     frame = detector.annotate(camera_id.lower(), frame)
