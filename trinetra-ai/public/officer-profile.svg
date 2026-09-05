@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Officer profile photo</title>
+  <desc id="desc">Illustrated police officer profile portrait</desc>
+  <rect width="160" height="160" rx="80" fill="#dbeafe"/>
+  <path d="M31 151c3-31 22-49 49-49s46 18 49 49" fill="#1d4ed8"/>
+  <path d="M52 108c5-8 16-13 28-13s23 5 28 13l-4 14H56z" fill="#1e3a8a"/>
+  <circle cx="80" cy="70" r="30" fill="#c08457"/>
+  <path d="M51 68c0-25 12-39 30-39 20 0 29 14 29 39-9-6-17-11-28-11-11 0-20 4-31 11z" fill="#1f2937"/>
+  <path d="M49 65c4-22 15-32 31-32 18 0 28 12 31 32l-8-6c-6-6-13-9-23-9-11 0-20 4-31 15z" fill="#111827"/>
+  <circle cx="69" cy="72" r="2.5" fill="#1f2937"/>
+  <circle cx="91" cy="72" r="2.5" fill="#1f2937"/>
+  <path d="M72 87c5 4 11 4 16 0" fill="none" stroke="#7c3f2a" stroke-linecap="round" stroke-width="2"/>
+  <path d="M69 109h22l-4 13H73z" fill="#c08457"/>
+  <path d="m80 112 7 11-7 8-7-8z" fill="#f8fafc"/>
+  <path d="M73 119h14v9H73z" fill="#f8fafc"/>
+  <circle cx="80" cy="124" r="3" fill="#2563eb"/>
+</svg>

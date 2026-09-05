@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import {
   Bell,
@@ -116,7 +116,11 @@ export function Header({
           )}
         </button>
 
-        <div className="hidden items-center gap-2.5 border-l border-line pl-3 xl:flex">
+        <Link
+          to="/profile"
+          className="hidden items-center gap-2.5 border-l border-line pl-3 xl:flex"
+          aria-label="Open officer profile"
+        >
           <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
             <UserRound size={15} />
           </span>
@@ -124,7 +128,7 @@ export function Header({
             <p className="text-xs font-semibold text-ink">System Operator</p>
             <p className="text-2xs text-ink-faint">Control Center</p>
           </div>
-        </div>
+        </Link>
       </div>
     </header>
   );
