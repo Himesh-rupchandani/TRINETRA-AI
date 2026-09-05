@@ -302,10 +302,17 @@ class CameraManager:
                     resolved = self._ondemand_source(camera_id)
                     if resolved is not None:
                         ondemand_source, ondemand_is_file = resolved
-                        ondemand_cap = cv2.VideoCapture(ondemand_source)
+                        if ondemand_source.lower().startswith("rtsp://"):
+                            # Same rule as CameraStream: RTSP over TCP (Sentinel requirement).
+                            transport = getattr(settings, "RTSP_TRANSPORT", "tcp")
+                            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{transport}"
+                            ondemand_cap = cv2.VideoCapture(ondemand_source, cv2.CAP_FFMPEG)
+                        else:
+                            ondemand_cap = cv2.VideoCapture(ondemand_source)
+                        from ..services.sentinel_stream_service import redact as _redact
                         kind = "local recording" if ondemand_is_file else "real network stream"
                         logger.info(
-                            f"[{camera_id.upper()}] On-demand live view decoding {kind}: {ondemand_source}"
+                            f"[{camera_id.upper()}] On-demand live view decoding {kind}: {_redact(ondemand_source)}"
                         )
                 if frame is None and ondemand_cap is not None:
                     frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)

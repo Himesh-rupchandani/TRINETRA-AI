@@ -415,20 +415,26 @@ def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
             detail="Camera source not configured.",
         )
 
-    # Register the camera with the manager if it is not yet known (no worker
-    # is started: the frames are decoded on demand for this request). For
-    # Sentinel cameras this resolves the authenticated RTSP source backend-side
-    # — exactly like POST /{camera_id}/start — nothing is returned to the client.
-    if camera_manager.get_camera(cam.camera_id) is None:
-        from ..services.sentinel_stream_service import resolve_ingest_source
+    # Resolve the source the backend should decode. For Sentinel cameras this
+    # is the AUTHENTICATED RTSP URL built from env credentials (exactly like
+    # POST /{camera_id}/start) — the registry only holds the public HLS URL,
+    # which the gateway rejects without credentials. Nothing is returned to
+    # the client. No worker is started: frames are decoded on demand.
+    from ..services.sentinel_stream_service import resolve_ingest_source
 
-        source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
+    source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
+    source_type = "rtsp" if source != cam.stream_url else (cam.stream_type or "rtsp")
+    existing = camera_manager.get_camera(cam.camera_id)
+    if existing is None:
         camera_manager.add_camera(
-            camera_id=cam.camera_id,
-            source=source,
-            source_type="rtsp" if source != cam.stream_url else cam.stream_type,
-            auto_start=False,
+            camera_id=cam.camera_id, source=source, source_type=source_type, auto_start=False,
         )
+    elif not existing.is_alive() and existing.source != source:
+        # Registered at boot with the public URL and not ingesting: point the
+        # idle entry at the authenticated source so on-demand decode can open it.
+        existing.source = source
+        existing.primary_source = source
+        existing.source_type = source_type
 
     return StreamingResponse(
         camera_manager.generate_mjpeg_stream(cam.camera_id, detect_vehicles=True),
