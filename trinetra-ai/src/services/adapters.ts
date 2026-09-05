@@ -25,6 +25,7 @@ import type {
   WatchlistRecord,
 } from '@/types';
 import { get } from './api';
+import { config } from '@/lib/config';
 import { haversineKm, minutesBetween } from '@/lib/utils';
 
 /* ------------------------------ raw DTO types ------------------------------ */
@@ -246,6 +247,37 @@ function pct(conf?: number | null): number {
   return Math.round(Math.min(Math.max(conf, 0), 1) * 1000) / 10;
 }
 
+/* ------------------------------ evidence crops ----------------------------- */
+/**
+ * Same-origin path the backend serves captured crops from
+ * (`GET /api/evidence/{ref}` → the CV engine's EvidenceWriter output). Built
+ * from the configured API base so a deployment that points the UI at an
+ * absolute API origin still resolves its imagery.
+ */
+export const EVIDENCE_BASE = `${config.apiBaseUrl.replace(/\/+$/, '')}/evidence`;
+
+const PLATE_CROP_SUFFIX = /_plate\.(jpe?g|png)$/i;
+const IMAGE_SUFFIX = /\.(jpe?g|png)$/i;
+
+/**
+ * Real crop URLs behind one `evidence_ref`.
+ *
+ * The CV engine stores `<stem>.jpg` (full frame) and `<stem>_plate.jpg` (the
+ * ANPR crop). When full-frame capture is disabled it returns the *crop* as the
+ * reference, so a ref that already ends in `_plate.*` is the plate crop — it
+ * must not be suffixed a second time (`_plate_plate.jpg` would 404) and must
+ * not be presented as a full frame.
+ */
+export function evidenceCropUrls(ref: string): { frameUrl?: string; plateCropUrl?: string } {
+  const clean = ref.replace(/^\/+/, '');
+  const url = `${EVIDENCE_BASE}/${clean}`;
+  if (PLATE_CROP_SUFFIX.test(clean)) return { plateCropUrl: url };
+  return {
+    frameUrl: url,
+    plateCropUrl: `${EVIDENCE_BASE}/${clean.replace(IMAGE_SUFFIX, '_plate.$1')}`,
+  };
+}
+
 export function toCamera(dto: CameraItemDto): Camera {
   return {
     id: (dto.id ?? dto.camera_id ?? '').toLowerCase(),
@@ -268,8 +300,7 @@ export function toCamera(dto: CameraItemDto): Camera {
 
 export function toVehicleEvent(
   dto: VehicleEventDto,
-  dir?: Map<string, CameraMeta> | null,
-): VehicleEvent {
+  dir?: Map<string, CameraMeta> | null,): VehicleEvent {
   const cameraId = dto.camera_id.toLowerCase();
   const meta = metaFor(dir, cameraId);
   const matched = Boolean(dto.watchlist_match);
@@ -293,11 +324,10 @@ export function toVehicleEvent(
     evidence: evidenceRef
       ? {
           ref: evidenceRef,
-          // Real crops captured by the CV engine's evidence writer.
-          frameUrl: `/api/evidence/${evidenceRef}`,
-          plateCropUrl: plate
-            ? `/api/evidence/${evidenceRef.replace(/\.jpg$/, '_plate.jpg')}`
-            : undefined,
+          // Real crops captured by the CV engine's evidence writer and served
+          // by the backend. The derived plate crop is only requested when a
+          // plate was actually read — the writer never stores one otherwise.
+          ...(plate ? evidenceCropUrls(evidenceRef) : { frameUrl: `${EVIDENCE_BASE}/${evidenceRef.replace(/^\/+/, '')}` }),
           capturedAt: dto.event_time,
         }
       : undefined,

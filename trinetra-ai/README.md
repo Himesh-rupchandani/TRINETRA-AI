@@ -27,6 +27,8 @@ Other scripts:
 | `npm run preview`   | Serve the production build               |
 | `npm run typecheck` | Types only, no emit                      |
 | `npm run lint`      | oxlint over `src/`                       |
+| `npm run verify:live` | Adapter contract vs a running backend (`BACKEND=http://…`) |
+| `npm run verify:evidence` | Real-crop evidence check: store → adapter → shipped `EvidencePanel` |
 
 ---
 
@@ -41,7 +43,9 @@ The Command Center carries a **Guided demo** strip that follows exactly this pat
 5. **Sightings** — `14:12:08 CAM04 → 14:27:19 CAM08 → 14:41:05 CAM12 → 15:03:41 CAM17`.
 6. **View on Map** — Leaflet route with numbered, chronological hops.
 7. **Click a route point** — camera, timestamp, confidence, travel gap, distance, average speed.
-8. **Evidence** — CCTV frame + plate crop (clearly watermarked *DEMO / SYNTHETIC*).
+8. **Evidence** — the panel shows the crop the CV engine actually captured. The demo
+   dataset holds no captures, so it says exactly that instead of inventing a frame; in
+   LIVE mode the real crop (full frame + ANPR plate crop) is displayed.
 9. **Back to Alerts** — the alert stays visible; acknowledge/resolve moves it through its lifecycle.
 
 Two more journeys are seeded for variety: `GJ05XY4321` (wanted suspect, CRITICAL) and
@@ -84,7 +88,7 @@ src/
 ├── mocks/         Synthetic registry, events, alerts, watchlist, health + mockBackend
 ├── data/          Demo walkthrough definition
 ├── lib/           config (env), utils (formatting, severity tokens, geo maths)
-└── utils/         Synthetic evidence generator (SVG data URIs)
+└── utils/         Demo camera stills + the real-crop evidence guard (utils/evidence.ts)
 ```
 
 **Rules that keep the frontend replaceable:**
@@ -156,6 +160,33 @@ VITE_USE_MOCKS=false VITE_BACKEND_ORIGIN=http://localhost:8000 npm run dev
 
 `VITE_BACKEND_ORIGIN` is dev-only and configures the Vite proxy for `/api`, so the browser
 always talks to the same origin (no CORS, no hard-coded hosts in client code).
+
+### Evidence imagery: real captured crops only
+
+The **Photo evidence** panel (Vehicle Investigation, Events, Alerts, Camera detail) renders only
+crops the CV engine actually stored, served by the backend at `GET /api/evidence/{ref}`:
+
+```
+CV engine EvidenceWriter ──► cv-engine/evidence/<cam>/<cam>_<track>_<ms>ms_<plate>.jpg
+                          └─► …_plate.jpg (ANPR crop)
+        │  evidence_ref on every event (POST /api/events + realtime broadcast)
+        ▼
+backend /api/evidence/{ref} ──► adapters.ts evidenceCropUrls() ──► EvidencePanel
+```
+
+- `utils/evidence.ts` is the guard: a URL only counts as evidence when it resolves to the
+  backend evidence route. `data:`/`blob:` demo imagery and stock photos are rejected, so a
+  generated picture can never be shown to an operator as a capture.
+- A sighting with no stored crop shows a plain "no captured image" state (with the reason:
+  never captured, or pruned by retention) — never a stand-in photo.
+- In the investigation workspace the panel **follows the newest live capture** of the traced
+  plate (the realtime broadcast carries `evidence_ref`), with *Pin this sighting* to hold a
+  specific capture, and *Reload crop* to re-fetch the file from the store.
+
+To see it live: run the backend with `EVIDENCE_ROOT=../../cv-engine/evidence`, run the CV
+engine against a camera, then open the UI in LIVE mode (`VITE_USE_MOCKS=false`).
+`BACKEND=http://127.0.0.1:8000 npm run verify:evidence` asserts the whole chain, including a
+server-render of the shipped panel.
 
 ---
 
@@ -282,9 +313,10 @@ is unaffected.
 | Tracked journeys   | 3, led by `GJ01AB1234`                                              |
 
 Data is deterministic (seeded PRNG) so every reload of the demo looks the same, and demo clock
-times (14:12:08 …) always resolve to the most recent past occurrence. Evidence imagery is
-generated locally as inline SVG and watermarked **DEMO / SYNTHETIC** so it can never be mistaken
-for real material.
+times (14:12:08 …) always resolve to the most recent past occurrence. Evidence imagery is the
+one thing the demo never fakes: the evidence panel renders **real captured crops only** (served
+by the backend from the CV engine's evidence store), so a demo sighting shows an honest
+"no captured image for this sighting" state rather than a generated photo.
 
 ---
 
@@ -323,7 +355,9 @@ Last full pass on this build:
 |---|---|
 | `npm run typecheck` | clean |
 | `npm run build` | success, code-split bundles |
-| `npm run lint` | 0 errors (16 react-refresh warnings) |
+| `npm run lint` | 0 errors (18 pre-existing style warnings) |
+| `npm run verify:evidence` (LIVE backend) | **16/16 checks** — crop served by `/api/evidence`, adapter mapping, shipped panel render, no stand-in imagery |
+| `npm run verify:live` (LIVE backend) | **48/48 checks** — includes the realtime broadcast carrying `evidence_ref` into a real crop URL |
 | All 13 routes | render, no broken links |
 | Browser console | 0 JS errors, 0 failed requests |
 | Automated flow suite | **51/51 assertions pass** — every route, the full 15-step vehicle trace, alert lifecycle, event filters + pagination, camera stream discipline, dark theme, plain-language scan, secret scan |

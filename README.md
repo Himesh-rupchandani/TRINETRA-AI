@@ -77,6 +77,13 @@ Every emitted event also stores a **cropped vehicle photo** (evidence) under
 `/api/evidence/<ref>` — the Events page shows the crop plus full details
 (class, track ID, camera, GPS, timestamps) in its evidence drawer.
 
+`evidence_ref` travels on **both** delivery paths — `POST /api/events` responses and the
+realtime broadcast (`VEHICLE_DETECTED` / `WATCHLIST_MATCH` / `ALERT_CREATED`) — so a live
+detection can show its crop the moment it is captured. The Vehicle Investigation **Photo
+evidence** panel follows the newest live capture of the traced plate and renders real captured
+crops only; a sighting with no stored crop shows an honest "no captured image" state instead of
+a stand-in photo.
+
 ## Official Sentinel Camera Grid integration
 
 The backend reads the official catalogue (`https://cctv.corp8.cloud/cameras.json`)

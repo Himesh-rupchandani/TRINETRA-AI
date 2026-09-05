@@ -1,11 +1,13 @@
 import type { SyntheticEvent } from 'react';
-import type { VehicleClass } from '@/types';
 
 /**
- * Realistic demo imagery (AI-generated, clearly labelled "demo / synthetic"
- * in the UI). Shown in mock mode so cameras and detections look like a real
- * ANPR deployment. When the backend is connected these are replaced by
- * signed evidence URLs / live streams.
+ * Demo camera imagery (AI-generated, clearly labelled "demo / synthetic" in the
+ * UI). Shown in mock mode so the camera grid looks like a real deployment.
+ * When the backend is connected these are replaced by live streams.
+ *
+ * NOTE: detection evidence is deliberately NOT here. The evidence panel shows
+ * only crops the CV engine actually captured (`utils/evidence.ts`), so no
+ * generated vehicle photo can ever be passed off as a capture.
  *
  * The image files are OPTIONAL assets: stripped builds may not ship them.
  * Every <img> that uses them pairs with an underlying placeholder layer and
@@ -36,25 +38,4 @@ function hash(str: string): number {
 /** Stable, realistic CCTV preview image for a camera (demo mode). */
 export function cameraStill(cameraId: string): string {
   return SCENES[hash(cameraId.toLowerCase()) % SCENES.length];
-}
-
-const VEHICLES: Record<VehicleClass, string> = {
-  CAR: '/evidence/veh-car.jpg',
-  MOTORCYCLE: '/evidence/veh-bike.jpg',
-  BUS: '/evidence/veh-bus.jpg',
-  VAN: '/evidence/veh-van.jpg',
-  // NOTE: dedicated truck / rickshaw images pending — reusing close classes.
-  TRUCK: '/evidence/veh-van.jpg',
-  AUTO_RICKSHAW: '/evidence/veh-bike.jpg',
-  UNKNOWN: '/evidence/veh-car.jpg',
-};
-
-/** Realistic per-class vehicle image for detection frames (demo mode). */
-export function vehicleStill(v?: VehicleClass | null): string {
-  return VEHICLES[v ?? 'UNKNOWN'] ?? VEHICLES.CAR;
-}
-
-/** Stable pseudo track id for a detection (like the ANPR stage would assign). */
-export function trackId(eventId: string): number {
-  return 100 + (hash(eventId) % 900);
 }

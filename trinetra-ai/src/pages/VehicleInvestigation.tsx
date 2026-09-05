@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Car, FileImage, Map as MapIcon, Route, ScanLine, ShieldAlert, Table2 } from 'lucide-react';
+import { Car, FileImage, Map as MapIcon, Pause, Play, Rss, Route, ScanLine, ShieldAlert, Table2 } from 'lucide-react';
 import { InvestigationLayout } from '@/layouts/InvestigationLayout';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { MapLegend } from '@/components/gis/MapLegend';
@@ -13,8 +13,9 @@ import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common
 import { SeverityChip } from '@/components/common/Chips';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useLiveEvents } from '@/hooks/useLiveEvents';
 import type { RoutePoint, VehicleEvent } from '@/types';
-import { formatDuration, minutesBetween, prettyPlate } from '@/lib/utils';
+import { cn, formatDuration, minutesBetween, normalisePlate, prettyPlate } from '@/lib/utils';
 
 /**
  * VEHICLE INVESTIGATION WORKSPACE
@@ -26,16 +27,20 @@ export default function VehicleInvestigation() {
   const navigate = useNavigate();
   const { result, loading, error, trace } = useVehicleSearch();
   const { alerts, acknowledge, resolve } = useAlerts();
+  const { events: liveEvents, connection } = useLiveEvents();
   const [activeSequence, setActiveSequence] = useState<number | null>(null);
   const [panTo, setPanTo] = useState<[number, number] | null>(null);
   const [evidenceEvent, setEvidenceEvent] = useState<VehicleEvent | null>(null);
+  // Real-time evidence: the panel follows the newest live sighting of this
+  // plate until the operator pins a specific sighting.
+  const [followLive, setFollowLive] = useState(true);
 
   useEffect(() => {
     if (plate) void trace(plate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plate]);
 
-  const events = useMemo(() => result?.events ?? [], [result]);
+  const tracedEvents = useMemo(() => result?.events ?? [], [result]);
   const points = useMemo(() => result?.route?.points ?? [], [result]);
   const profile = result?.profile ?? null;
   const wl = profile?.watchlist;
@@ -45,15 +50,46 @@ export default function VehicleInvestigation() {
     [alerts, plate],
   );
 
+  /** Sightings of THIS plate arriving on the realtime channel, newest first. */
+  const liveSightings = useMemo(() => {
+    const target = normalisePlate(plate);
+    if (!target) return [];
+    return liveEvents.filter((e) => normalisePlate(e.plate) === target);
+  }, [liveEvents, plate]);
+  const newestLive = liveSightings[0] ?? null;
+
+  /**
+   * Everything known about this plate: the traced history plus whatever the
+   * realtime channel has delivered since, deduped by id and kept chronological.
+   * A live capture therefore reaches the detection table and can become the
+   * evidence on screen.
+   */
+  const events = useMemo(() => {
+    if (!liveSightings.length) return tracedEvents;
+    const known = new Set(tracedEvents.map((e) => e.id));
+    const fresh = liveSightings.filter((e) => !known.has(e.id));
+    return [...tracedEvents, ...fresh].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+  }, [tracedEvents, liveSightings]);
+
+  /**
+   * What the evidence panel shows. While following, the newest live capture of
+   * this plate wins the moment the CV engine reports it — that is the
+   * "real-time vehicle image". Picking a sighting on the map/table pins the
+   * panel to that capture instead.
+   */
   const activeEvent = useMemo(() => {
+    if (followLive && newestLive) return newestLive;
     if (!activeSequence) return evidenceEvent ?? events[events.length - 1] ?? null;
     const p = points.find((x) => x.sequence === activeSequence);
     return events.find((e) => e.id === p?.eventId) ?? null;
-  }, [activeSequence, points, events, evidenceEvent]);
+  }, [followLive, newestLive, activeSequence, points, events, evidenceEvent]);
 
   const selectPoint = (p: RoutePoint) => {
     setActiveSequence(p.sequence);
     setPanTo([p.latitude, p.longitude]);
+    setFollowLive(false); // an explicit pick pins the evidence panel
     const ev = events.find((e) => e.id === p.eventId);
     if (ev) setEvidenceEvent(ev);
   };
@@ -245,7 +281,39 @@ export default function VehicleInvestigation() {
           />
         </Panel>
 
-        <Panel title="Photo evidence" icon={FileImage} className="xl:col-span-4">
+        <Panel
+          title="Photo evidence"
+          icon={FileImage}
+          className="xl:col-span-4"
+          actions={
+            <>
+              <span
+                className={cn(
+                  'chip',
+                  connection === 'LIVE'
+                    ? 'border-online/45 bg-online/10 text-online'
+                    : 'border-line bg-surface-3 text-ink-faint',
+                )}
+                title="Realtime channel state"
+              >
+                <Rss size={10} aria-hidden /> {connection}
+              </span>
+              <button
+                type="button"
+                className="btn-ghost btn-xs"
+                onClick={() => setFollowLive((v) => !v)}
+                title={
+                  followLive
+                    ? 'Stop following live captures and keep this sighting on screen'
+                    : 'Follow the newest live capture of this plate'
+                }
+              >
+                {followLive ? <Pause size={12} aria-hidden /> : <Play size={12} aria-hidden />}
+                {followLive ? 'Pin this sighting' : 'Follow live captures'}
+              </button>
+            </>
+          }
+        >
           <EvidencePanel event={activeEvent} />
         </Panel>
       </div>

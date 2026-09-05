@@ -4,11 +4,15 @@ import type { VehicleEvent } from '@/types';
 import { PlateLink } from '@/components/common/Links';
 import { EmptyState } from '@/components/common/Panel';
 import { cn, relativeTime, confidenceClass } from '@/lib/utils';
-import { hideBrokenImage, vehicleStill } from '@/utils/mediaAssets';
+import { hideBrokenImage } from '@/utils/mediaAssets';
+import { realCrops } from '@/utils/evidence';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 
 export const EventRow = memo(function EventRow({ event }: { event: VehicleEvent }) {
   const watch = event.watchlistMatch;
+  // Thumbnail is the real captured crop when one exists — never a stock photo.
+  const crop = realCrops(event.evidence);
+  const thumb = crop?.plateCropUrl ?? crop?.frameUrl;
   return (
     <li
       className={cn(
@@ -23,13 +27,15 @@ export const EventRow = memo(function EventRow({ event }: { event: VehicleEvent 
         )}
       >
         <Car size={14} aria-hidden />
-        <img
-          src={vehicleStill(event.vehicleClass)}
-          alt=""
-          onError={hideBrokenImage}
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        {thumb && (
+          <img
+            src={thumb}
+            alt=""
+            onError={hideBrokenImage}
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">

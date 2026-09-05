@@ -178,6 +178,9 @@ function mapBackendEventPayload(raw: Record<string, unknown>): VehicleEvent {
     event_time: (raw.event_time ?? new Date().toISOString()) as string,
     latitude: raw.latitude as number | undefined,
     longitude: raw.longitude as number | undefined,
+    // The crop the CV engine stored for THIS sighting. Without it a live
+    // detection has no image to show — it is part of the broadcast contract.
+    evidence_ref: (raw.evidence_ref as string | undefined) ?? undefined,
     watchlist_match: Boolean(raw.watchlist_match),
   } satisfies VehicleEventDto;
   return toVehicleEvent(dto, liveCameraDir);

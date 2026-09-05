@@ -207,9 +207,14 @@ async def ingest_event(
             alert = create_watchlist_alert(db, event, watchlist_entry)
 
     # --- Step 7: Broadcast to WebSocket ---
+    # evidence_ref is part of the realtime contract: it is the only handle the
+    # control room has on the crop the CV engine actually stored for this
+    # sighting (served by GET /api/evidence/{ref}). Without it a live detection
+    # can never show its real captured image, so it travels with every frame.
     ws_payload = {
         "event_id": event.id,
         "camera_id": event.camera_id,
+        "vehicle_track_id": event.vehicle_track_id,
         "plate": event.plate_number,
         "plate_number": event.plate_number,
         "plate_raw": event.plate_raw,
@@ -218,6 +223,7 @@ async def ingest_event(
         "event_time": event.event_time.isoformat() if event.event_time else None,
         "latitude": event.latitude,
         "longitude": event.longitude,
+        "evidence_ref": event.evidence_ref,
         "watchlist_match": event.watchlist_match,
     }
 

@@ -28,6 +28,8 @@ import {
   type VehicleEventDto,
   type WatchlistDto,
 } from '@/services/adapters';
+import { mapBackendMessages } from '@/services/realtimeService';
+import { realCrops } from '@/utils/evidence';
 
 const BACKEND = process.env.BACKEND ?? 'http://127.0.0.1:8000';
 const API = `${BACKEND.replace(/\/$/, '')}/api`;
@@ -256,6 +258,16 @@ async function main() {
       // The UI derives both a sighting and an alert from this one frame, so it
       // must carry the event fields as well as the alert fields.
       check('broadcast carries event fields for the live feed', p.event_id != null && p.confidence != null, `event_id=${p.event_id}`);
+      // The crop handle is what lets the live evidence panel show the image the
+      // CV engine captured — a realtime frame without it has no real imagery.
+      check('broadcast carries the crop reference', p.evidence_ref === 'verify/realtime.jpg', String(p.evidence_ref ?? 'missing'));
+
+      // Run the shipped realtime mapper over the real wire frame: the event it
+      // hands the UI must resolve to a real captured crop, not a stand-in.
+      const mapped = mapBackendMessages(created).find((m) => m.type === 'EVENT');
+      const crop = mapped?.type === 'EVENT' ? realCrops(mapped.payload.evidence) : null;
+      check('live event maps to a real crop URL', !!crop?.frameUrl?.endsWith('verify/realtime.jpg'), crop?.frameUrl ?? 'none');
+      check('live event is not flagged synthetic', mapped?.type === 'EVENT' ? mapped.payload.evidence?.synthetic !== true : false);
     }
     ws.close();
   }

@@ -258,6 +258,7 @@ def test_sse_stream_endpoint_and_ingest_broadcast(client):
                 assert first == ": connected"
 
                 # A real ingest broadcasts VEHICLE_DETECTED on the server loop.
+                crop_ref = "cam04/cam04_17_123456ms_GJ01AB1234.jpg"
                 r = c.post(f"{base}/api/events", json={
                     "camera_id": "CAM04",
                     "vehicle_id": 17,
@@ -267,6 +268,7 @@ def test_sse_stream_endpoint_and_ingest_broadcast(client):
                     "vehicle_class": "car",
                     "latitude": 23.0338,
                     "longitude": 72.585,
+                    "evidence_ref": crop_ref,
                 })
                 assert r.status_code == 201
 
@@ -282,6 +284,34 @@ def test_sse_stream_endpoint_and_ingest_broadcast(client):
                 assert payload["type"] in ("VEHICLE_DETECTED", "WATCHLIST_MATCH", "ALERT_CREATED")
                 assert payload["payload"]["plate_number"] == "GJ01AB1234"
                 assert payload["payload"]["camera_id"] == "CAM04"
+                # The crop handle must ride along: it is the ONLY way the live
+                # evidence panel can show the image the CV engine captured.
+                assert payload["payload"]["evidence_ref"] == crop_ref
+
+                # Same contract on the plain (non-watchlist) detection branch.
+                plain_ref = "cam04/cam04_18_234567ms_GJ99ZZ4321.jpg"
+                r2 = c.post(f"{base}/api/events", json={
+                    "camera_id": "CAM04",
+                    "vehicle_id": 18,
+                    "plate_raw": "GJ99ZZ4321",
+                    "plate": "GJ99ZZ4321",
+                    "plate_confidence": 0.88,
+                    "vehicle_class": "car",
+                    "evidence_ref": plain_ref,
+                })
+                assert r2.status_code == 201
+
+                plain = None
+                for line in lines:
+                    if not line.startswith("data: "):
+                        continue
+                    frame = json.loads(line[len("data: "):])
+                    if frame["payload"].get("plate_number") == "GJ99ZZ4321":
+                        plain = frame
+                        break
+                assert plain is not None
+                assert plain["type"] == "VEHICLE_DETECTED"
+                assert plain["payload"]["evidence_ref"] == plain_ref
     finally:
         server.should_exit = True
         thread.join(timeout=5)
