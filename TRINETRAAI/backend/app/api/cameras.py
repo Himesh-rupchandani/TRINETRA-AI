@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ..core.config import settings
 from ..core.logging_config import logger
 from ..database.database import get_db
 from sqlalchemy import func
@@ -235,6 +236,17 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
 
     # File-backed cameras (local demo feeds) play natively in the browser via
     # the backend's MJPEG live view — no WebRTC gateway involved.
+    # Real-time OpenCV vehicle detection view: the backend decodes the same
+    # source (RTSP/HLS/file) and streams annotated MJPEG. Same-origin path,
+    # no credentials — the authenticated URL is built backend-side only.
+    detection_url = (
+        f"/api/cameras/{slug}/live/detect"
+        if playable
+        and settings.VEHICLE_DETECTION_ENABLED
+        and (cam.stream_type or "").lower() in ("file", "rtsp", "hls")
+        else None
+    )
+
     if playable and (cam.stream_type or "").lower() == "file":
         return CameraStreamTicket(
             camera_id=slug,
@@ -243,6 +255,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
             playable=True,
             reason=None,
+            detection_url=detection_url,
         )
 
     # Sentinel WHEP endpoint is /stream/<id>/whep on the gateway (integrator
@@ -258,6 +271,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
         playable=playable,
         reason=None if playable else f"Camera is {status_value}",
+        detection_url=detection_url,
     )
 
 
@@ -373,4 +387,51 @@ def live_mjpeg_stream(camera_id: str):
     return StreamingResponse(
         camera_manager.generate_mjpeg_stream(camera_id),
         media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@router.get("/{camera_id}/live/detect")
+def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
+    """
+    Live MJPEG stream with real-time OpenCV vehicle detection (green boxes).
+
+    Same source as ``/live``; frames are decoded backend-side (resident worker
+    when running, otherwise on demand for this connection only), passed
+    through the YOLO vehicle detector and annotated with OpenCV.
+    """
+    cam = (
+        db.query(Camera)
+        .filter(func.upper(Camera.camera_id) == camera_id.strip().upper())
+        .first()
+    )
+    if not cam:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera '{camera_id}' not found.",
+        )
+    if not (cam.stream_url or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Camera source not configured.",
+        )
+
+    # Register the camera with the manager if it is not yet known (no worker
+    # is started: the frames are decoded on demand for this request). For
+    # Sentinel cameras this resolves the authenticated RTSP source backend-side
+    # — exactly like POST /{camera_id}/start — nothing is returned to the client.
+    if camera_manager.get_camera(cam.camera_id) is None:
+        from ..services.sentinel_stream_service import resolve_ingest_source
+
+        source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
+        camera_manager.add_camera(
+            camera_id=cam.camera_id,
+            source=source,
+            source_type="rtsp" if source != cam.stream_url else cam.stream_type,
+            auto_start=False,
+        )
+
+    return StreamingResponse(
+        camera_manager.generate_mjpeg_stream(cam.camera_id, detect_vehicles=True),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

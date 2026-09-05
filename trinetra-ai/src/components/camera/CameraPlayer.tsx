@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CircleDot, Loader2, Play, RotateCw, ShieldAlert, Square } from 'lucide-react';
+import { CircleDot, Loader2, Play, RotateCw, ScanSearch, ShieldAlert, Square } from 'lucide-react';
 import type { Camera, CameraStreamTicket } from '@/types';
 import { cameraService } from '@/services/cameraService';
 import { useWhepStream } from '@/hooks/useWhepStream';
@@ -42,21 +42,35 @@ export function CameraPlayer({
   const [mjpegAlive, setMjpegAlive] = useState(false);
   const [mjpegSrc, setMjpegSrc] = useState<string | null>(null);
 
+  // Real-time vehicle detection: when the backend offers an annotated view of
+  // this camera (OpenCV + YOLO, green boxes) it is shown instead of the raw
+  // feed. The operator can switch back to the raw stream at any time, and any
+  // failure of the detection view silently falls back to the raw feed.
+  const [aiBoxes, setAiBoxes] = useState(true);
+  const [detectionFailed, setDetectionFailed] = useState(false);
+  const detectionActive = aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
+  const useImg = isMjpeg || detectionActive;
+
   // Checked before negotiating: an undecodable codec must not retry-loop.
   const decodable = canDecodeOverWebRtc(camera.codec);
   const rtcOk = webRtcAvailable();
 
   const { videoRef, phase, error, stats, attempt, retryAt, retryNow } = useWhepStream(
-    isMjpeg ? null : ticket?.streamUrl || null,
+    useImg ? null : ticket?.streamUrl || null,
     wanted,
   );
 
   // Prefer the CV engine's annotated live view; fall back to the backend's
   // own MJPEG mirror of the same source when the CV engine is not running.
+  // With the backend detection view available, that view comes first.
   useEffect(() => {
     setMjpegAlive(false);
+    if (detectionActive && ticket?.detectionUrl) {
+      setMjpegSrc(ticket.detectionUrl);
+      return;
+    }
     setMjpegSrc(ticket?.streamType === 'MJPEG' ? `/cvfeed/${camera.id}` : null);
-  }, [ticket?.cameraId, ticket?.streamUrl, camera.id]);
+  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id]);
 
   const requestStream = async () => {
     if (!rtcOk) {
@@ -85,6 +99,7 @@ export function CameraPlayer({
   const stopStream = () => {
     setWanted(false);
     setTicket(null);
+    setDetectionFailed(false);
   };
 
   // Switching camera always releases the previous feed first.
@@ -100,7 +115,7 @@ export function CameraPlayer({
   const connecting =
     requesting || phase === 'CONNECTING' || phase === 'BUFFERING' || phase === 'AWAITING_KEYFRAME';
   const showVideo = wanted && Boolean(ticket?.streamUrl);
-  const onAir = isMjpeg ? mjpegAlive : phase === 'LIVE' || phase === 'STALLED';
+  const onAir = useImg ? mjpegAlive : phase === 'LIVE' || phase === 'STALLED';
   const showPoster = ticket?.poster ?? poster;
   /** Demo mode with no reachable gateway: show a clean demo frame, not an error. */
   const demoFeed =
@@ -137,7 +152,7 @@ export function CameraPlayer({
           <div className="grid h-full w-full place-items-center bg-surface-2" />
         )}
 
-        {showVideo && isMjpeg && mjpegSrc && (
+        {showVideo && useImg && mjpegSrc && (
           <img
             src={mjpegSrc}
             alt={`${camera.name} — live view`}
@@ -148,7 +163,9 @@ export function CameraPlayer({
             decoding="async"
             onLoad={() => setMjpegAlive(true)}
             onError={() => {
-              if (mjpegSrc !== ticket?.streamUrl && ticket?.streamUrl) {
+              if (detectionActive && mjpegSrc === ticket?.detectionUrl) {
+                setDetectionFailed(true); // detection view unavailable -> raw feed
+              } else if (mjpegSrc !== ticket?.streamUrl && ticket?.streamUrl) {
                 setMjpegSrc(ticket.streamUrl); // CV engine not running -> backend view
               } else {
                 setMjpegAlive(false);
@@ -158,7 +175,7 @@ export function CameraPlayer({
           />
         )}
 
-        {showVideo && !isMjpeg && (
+        {showVideo && !useImg && (
           <video
             ref={videoRef}
             className={cn(
@@ -178,9 +195,14 @@ export function CameraPlayer({
         {/* Chips only: the source burns its own timestamp into the top-left corner. */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-end gap-2 bg-gradient-to-b from-black/60 to-transparent px-2.5 py-1.5">
           <span className="flex items-center gap-1.5">
-            {phase === 'LIVE' && (
+            {(phase === 'LIVE' || (detectionActive && mjpegAlive)) && (
               <span className="chip border-critical/60 bg-critical/25 text-white">
                 <CircleDot size={9} className="animate-pulse" aria-hidden /> LIVE
+              </span>
+            )}
+            {detectionActive && mjpegAlive && (
+              <span className="chip border-online/60 bg-online/25 text-white">
+                <ScanSearch size={9} aria-hidden /> AI DETECTION
               </span>
             )}
             {phase === 'STALLED' && (
@@ -364,6 +386,17 @@ export function CameraPlayer({
               <span>Watching for {Math.round(stats.mediaTime)}s</span>
             </span>
             <span className="flex items-center gap-1.5">
+              {ticket?.detectionUrl && !detectionFailed && (
+                <button
+                  type="button"
+                  className="btn-ghost btn-xs"
+                  onClick={() => setAiBoxes((v) => !v)}
+                  aria-pressed={aiBoxes}
+                  title="Real-time vehicle detection (green boxes) rendered by the backend"
+                >
+                  <ScanSearch size={11} aria-hidden /> Vehicle detection: {aiBoxes ? 'On' : 'Off'}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-ghost btn-xs"
@@ -382,7 +415,9 @@ export function CameraPlayer({
             <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-2 font-mono text-2xs text-ink-faint sm:grid-cols-4">
               <div>
                 <dt className="inline">Transport </dt>
-                <dd className="inline text-ink-muted">{ticket?.streamType ?? 'WEBRTC'}</dd>
+                <dd className="inline text-ink-muted">
+                  {detectionActive ? 'MJPEG (AI detection)' : (ticket?.streamType ?? 'WEBRTC')}
+                </dd>
               </div>
               <div>
                 <dt className="inline">Media clock </dt>

@@ -6,3 +6,11 @@ Place your pre-trained computer vision model weights in this directory:
 - OCR weights or license plate detection models
 
 When weights are not present, TRINETRA AI automatically falls back to its built-in Mock / Demo Mode or standard lightweight Haar/DNN detectors.
+
+## Live-view vehicle detection
+
+`yolo11n.pt` in this directory powers the real-time green vehicle boxes on the
+live camera view (`GET /api/cameras/{id}/live/detect`). Put the official
+Ultralytics `yolo11n.pt` here (`YOLO_MODEL_PATH=models/yolo11n.pt`); if it is
+missing, Ultralytics downloads it on first use. Without weights the live view
+keeps working — just without boxes.

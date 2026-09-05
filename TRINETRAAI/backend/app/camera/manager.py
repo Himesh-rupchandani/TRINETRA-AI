@@ -276,16 +276,23 @@ class CameraManager:
             frame = cv2.resize(frame, (1280, int(round(h * scale))), interpolation=cv2.INTER_AREA)
         return frame
 
-    def generate_mjpeg_stream(self, camera_id: str):
+    def generate_mjpeg_stream(self, camera_id: str, detect_vehicles: bool = False):
         """Yield multipart MJPEG stream frames for HTTP live view.
 
         When no resident worker is running for the camera (e.g. file-backed
         demo cameras with AUTO_START_CAMERAS off), the source file is decoded
         on demand for the lifetime of this HTTP connection only.
+
+        With ``detect_vehicles=True`` every real frame passes through the
+        OpenCV + YOLO vehicle detector and gets green bounding boxes.
         """
         ondemand_cap = None
         ondemand_source = None
         ondemand_is_file = True
+        detector = None
+        if detect_vehicles:
+            from ..services.vehicle_detection_service import vehicle_detection_service
+            detector = vehicle_detection_service
         try:
             while True:
                 frame = self.get_latest_frame(camera_id, annotated=True)
@@ -304,6 +311,9 @@ class CameraManager:
                     frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)
                     if frame is not None:
                         frame = self._stamp_source_osd(frame, ondemand_is_file)
+                if frame is not None and detector is not None:
+                    # Real detections only: boxes come straight from the model.
+                    frame = detector.annotate(camera_id.lower(), frame)
                 if frame is None:
                     placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
                     placeholder[:] = (20, 24, 30)
@@ -335,6 +345,8 @@ class CameraManager:
                     ondemand_cap.release()
                 except Exception:
                     pass
+            if detector is not None:
+                detector.forget(camera_id.lower())
 
     def _camera_worker(self, camera_id: str, stream: CameraStream, stop_event: threading.Event):
         """

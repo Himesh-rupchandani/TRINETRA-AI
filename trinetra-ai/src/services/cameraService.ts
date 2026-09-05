@@ -15,6 +15,7 @@ interface StreamTicketDto {
   expires_at: string;
   playable?: boolean;
   reason?: string | null;
+  detection_url?: string | null;
 }
 
 /**

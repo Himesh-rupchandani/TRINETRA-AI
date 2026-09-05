@@ -10,5 +10,10 @@ opencv-python-headless>=4.9.0  # headless: no libGL/X11 required on servers
 numpy>=1.26.0
 pillow>=10.2.0
 httpx>=0.27.0
+# Real-time vehicle detection (YOLO11) for the live view. CPU-only torch is
+# enough: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# NOTE: ultralytics pulls the GUI opencv-python wheel; on headless servers
+# re-run `pip install --force-reinstall --no-deps opencv-python-headless` after.
+ultralytics>=8.3.0
 pytest>=8.1.0
 pytest-asyncio>=0.23.0

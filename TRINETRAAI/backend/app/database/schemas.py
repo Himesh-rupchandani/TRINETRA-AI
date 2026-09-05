@@ -87,6 +87,9 @@ class CameraStreamTicket(BaseModel):
     expires_at: datetime
     playable: bool = False
     reason: Optional[str] = None
+    # Same-origin MJPEG view of the same camera with real-time OpenCV vehicle
+    # detection (green boxes). None when the source cannot be processed.
+    detection_url: Optional[str] = None
 
 
 class CameraStreamInfo(BaseModel):
