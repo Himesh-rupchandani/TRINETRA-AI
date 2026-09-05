@@ -91,40 +91,46 @@ def init_db():
         if db.query(Camera).count() == 0:
             logger.info("Seeding initial CCTV camera locations...")
             initial_cameras = [
+                # Same identity rows as scripts/seed_demo.py: a camera label
+                # must never differ between the two seeders.
                 Camera(
                     camera_id="CAM04",
-                    name="North Gate Junction (HLS / RTSP)",
+                    name="Paldi Circle",
+                    location="Paldi Circle",
                     stream_url=settings.DEFAULT_CAMERA_STREAM_URL,
                     stream_type=settings.DEFAULT_CAMERA_STREAM_TYPE,
-                    latitude=23.0338,
-                    longitude=72.5850,
+                    latitude=23.0126,
+                    longitude=72.5647,
                     status="OFFLINE",
                 ),
                 Camera(
                     camera_id="CAM01",
-                    name="Central Expressway Toll Plaza",
+                    name="Chiman bhai Bridge",
+                    location="Chiman bhai Bridge",
                     stream_url="https://cctv.corp8.cloud/cam01/index.m3u8",
                     stream_type="hls",
-                    latitude=23.0225,
-                    longitude=72.5714,
+                    latitude=23.0730,
+                    longitude=72.5920,
                     status="OFFLINE",
                 ),
                 Camera(
                     camera_id="CAM02",
-                    name="Metro Station Interchange Cam",
+                    name="Janpath",
+                    location="Janpath",
                     stream_url="https://cctv.corp8.cloud/cam02/index.m3u8",
                     stream_type="hls",
-                    latitude=23.0410,
-                    longitude=72.5620,
+                    latitude=23.0225,
+                    longitude=72.5625,
                     status="OFFLINE",
                 ),
                 Camera(
                     camera_id="CAM03",
-                    name="SG Highway Ring Road West",
+                    name="O.N.G.C. Office",
+                    location="O.N.G.C. Office",
                     stream_url="https://cctv.corp8.cloud/cam03/index.m3u8",
                     stream_type="hls",
-                    latitude=23.0150,
-                    longitude=72.5110,
+                    latitude=23.1070,
+                    longitude=72.5950,
                     status="OFFLINE",
                 ),
             ]
