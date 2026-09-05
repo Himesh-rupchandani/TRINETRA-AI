@@ -50,4 +50,10 @@ export interface CameraStreamTicket {
   /** ISO expiry of the signed URL. */
   expiresAt: string;
   poster?: string;
+  /**
+   * Same-origin MJPEG view of this camera with real-time OpenCV vehicle
+   * detection (green bounding boxes) rendered by the backend. Absent when the
+   * backend cannot process the source.
+   */
+  detectionUrl?: string;
 }

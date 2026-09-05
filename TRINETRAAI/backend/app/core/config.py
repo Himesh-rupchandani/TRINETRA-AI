@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     OCR_ENABLED: bool = True
     OCR_MIN_CONFIDENCE: float = 0.60
     TRACK_BUFFER: int = 30
+    # Real-time vehicle detection on the live view (green boxes). Model is
+    # YOLO_MODEL_PATH, detections below CONFIDENCE_THRESHOLD are dropped.
+    VEHICLE_DETECTION_ENABLED: bool = True
+    DETECTION_IMGSZ: int = 640            # inference resolution (speed vs accuracy)
+    DETECTION_EVERY_N_FRAMES: int = 2     # run the model every Nth live frame
 
     # Demo Mode
     DEMO_MODE: bool = True

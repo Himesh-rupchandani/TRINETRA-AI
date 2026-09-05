@@ -75,6 +75,23 @@ def get_rtsp_url(camera_id: str) -> str:
     return f"rtsp://{email}:{password}@{host}:{port}/stream/{cid}"
 
 
+def get_authenticated_hls_url(camera_id: str) -> str:
+    """Authenticated HLS URL for BACKEND decoding only (HTTPS, works where
+    RTSP port 8554 is blocked). Same credential rules as get_rtsp_url;
+    never persist, return, or log this value unredacted."""
+    cid = validate_camera_id(camera_id)
+    if not credentials_configured():
+        raise RuntimeError(
+            "Sentinel credentials not configured "
+            "(set SENTINEL_EMAIL / SENTINEL_PASSWORD in backend/.env)"
+        )
+    email = quote(settings.SENTINEL_EMAIL.strip(), safe="")
+    password = quote(settings.SENTINEL_PASSWORD.strip(), safe="")
+    base = settings.SENTINEL_HLS_BASE_URL.rstrip("/")
+    scheme, host = base.split("://", 1)
+    return f"{scheme}://{email}:{password}@{host}/{cid}/index.m3u8"
+
+
 def get_whep_path(camera_id: str) -> str:
     """Same-origin WHEP signalling PATH for the frontend (no credentials).
 
