@@ -196,19 +196,30 @@ the player is simulated.
 ```
 browser ──POST /sentinel/stream/cam04/whep (same-origin, HTTPS)
         └─> dev server / reverse proxy  ──> Sentinel gateway :8889
-                                            (SENTINEL_WHEP_ORIGIN, server-side only)
+            (adds:  Authorization: Basic base64(email:password))
+            (SENTINEL_WHEP_ORIGIN + SENTINEL_EMAIL/PASSWORD, server-side only)
 ```
 
-Proxying is not cosmetic — it solves three real problems at once:
+Proxying is not cosmetic — it solves four real problems at once:
 
 * **Mixed content.** The gateway speaks plain HTTP on a bare IP; a page served
   over HTTPS may not call it. Same-origin `/sentinel/*` sidesteps the block.
 * **CORS.** No preflight failures, because there is no cross-origin request.
-* **Secrets.** `SENTINEL_WHEP_ORIGIN` has **no `VITE_` prefix**, so it is never
-  compiled into the public bundle. The browser never learns the gateway origin.
+* **Auth.** The integrator guide requires WebRTC/WHEP to authenticate **every**
+  connection with your registered email + access password. Browsers strip
+  `user:pass@` from cross-origin fetch URLs, so embedding them would not work —
+  instead the proxy injects the equivalent `Authorization: Basic` header
+  server-side on every `/sentinel` request.
+* **Secrets.** `SENTINEL_WHEP_ORIGIN`, `SENTINEL_EMAIL` and `SENTINEL_PASSWORD`
+  have **no `VITE_` prefix**, so none of them is ever compiled into the public
+  bundle. The browser never learns the gateway origin or the credentials.
 
-The WHEP `201 Location` header is rewritten back onto our origin so the client
-can `DELETE` its session on teardown and free gateway capacity.
+All three `SENTINEL_*` variables are read from `trinetra-ai/.env` (server-side
+only — see `.env.example`) or the shell environment; real shell env wins. The
+proxy rewrites the path from `/sentinel/stream/<id>/whep` to the gateway's
+`/stream/<id>/whep`, and the WHEP `201 Location` header (relative or absolute)
+back onto our origin so the client can `DELETE` its session on teardown and
+free gateway capacity.
 
 ### Compliance with the integrator's checklist
 

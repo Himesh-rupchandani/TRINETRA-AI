@@ -193,7 +193,7 @@ def test_camera_stream_ticket(client):
     assert r.status_code == 200
     t = r.json()
     assert t["camera_id"] == "cam04"
-    assert t["stream_url"].startswith("/sentinel/cam04/whep")
+    assert t["stream_url"].startswith("/sentinel/stream/cam04/whep")
     assert t["playable"] is True
     # Never leak the RTSP/Sentinel origin to the browser.
     assert "103.250.160.189" not in t["stream_url"]

@@ -29,6 +29,10 @@ python -m venv .venv && source .venv/bin/activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 
+# If cv2 later fails with "libGL.so.1: cannot open shared object file",
+# the GUI opencv wheel overwrote the headless build — fix with:
+#   pip uninstall -y opencv-python && pip install -q opencv-python-headless
+
 # 1. Inspect the Sentinel catalogue + suggested diverse test subset
 python scripts/check_catalogue.py
 
@@ -38,6 +42,35 @@ python scripts/run_pipeline.py --mode live --camera cam04 --duration 120
 # 3. Scale out: catalogue-diverse subset (codecs/resolutions/statuses)
 python scripts/run_pipeline.py --mode live --subset 3 --duration 300
 ```
+
+### Live mode needs your Sentinel credentials
+
+`run_pipeline.py --mode live` reads the catalogue and builds authenticated RTSP
+URLs from the same env vars as the backend. They are read from the **process
+environment** (no `.env` auto-load here), so export them in the shell first —
+the `@` in the email may be written plainly, it is percent-encoded as `%40`
+when the URL is built:
+
+```bash
+export SENTINEL_EMAIL=alice@example.com     # your registered email
+export SENTINEL_PASSWORD='your access password'
+# optional overrides (defaults match the integrator guide §1):
+# export SENTINEL_CATALOGUE_URL=https://cctv.corp8.cloud/cameras.json
+# export SENTINEL_RTSP_HOST=103.250.160.189
+# export SENTINEL_RTSP_PORT=8554
+export BACKEND_BASE_URL=http://127.0.0.1:8000   # where TRINETRA backend listens
+
+python scripts/run_pipeline.py --mode live --camera cam04 --duration 120
+```
+
+Expected failures, decoded:
+
+| Symptom | Cause → fix |
+|---|---|
+| `CATALOGUE UNREACHABLE: ...` | `cctv.corp8.cloud` not reachable from this network (it is Cloudflare-fronted and was blocked in this sandbox). Run on the venue/allowed network. |
+| RTSP logs show `401 Unauthorized` | Email/password wrong, or not on the approved access list. Check `SENTINEL_EMAIL`/`SENTINEL_PASSWORD` are exported. |
+| RTSP connect refused/timeouts on TCP | Port `8554/TCP` closed on your path → the guide says fall back to HLS (`ALLOW_HLS_FALLBACK=true` is the default). |
+| `libGL.so.1` on import cv2 | GUI `opencv-python` overwrote headless cv2 → `pip uninstall -y opencv-python && pip install -q opencv-python-headless` |
 
 ### Demo mode (NOT live Sentinel)
 

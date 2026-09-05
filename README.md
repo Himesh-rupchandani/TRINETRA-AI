@@ -85,8 +85,10 @@ hard-coded; names/locations/coordinates come from the payload and are
 normalized into the internal registry (graceful fallback to the existing
 registry when the network is down).
 
-**Credentials live only in `TRINETRAAI/backend/.env`** (gitignored; see
-`.env.example` for placeholders):
+**Primary credentials live in `TRINETRAAI/backend/.env`** (gitignored; see
+`.env.example` for placeholders). The cv-engine shell and the frontend dev
+proxy need their own server-side copies — see "Running the real Sentinel grid"
+below. Credentials never reach the browser or the database:
 
 ```env
 SENTINEL_EMAIL=you@example.com     # '@' is auto-encoded as %40 in URLs
@@ -105,10 +107,50 @@ never stored in the DB, never returned by any API, never logged unredacted):
   and feeds the existing YOLO11 → ByteTrack → ANPR → events pipeline.
 - **Browser viewing**: HLS/WHEP through same-origin paths only
   (`/api/cameras/{id}/live`, `/sentinel/stream/{id}/whep` via the dev
-  proxy). The frontend never sees a credential.
+  proxy, which injects the Sentinel credentials as HTTP Basic auth —
+  see `trinetra-ai/.env.example`). The frontend never sees a credential.
 - **CV engine live mode**: `python scripts/run_pipeline.py --mode live
   --camera cam04` — synthesizes the same authenticated RTSP URL from env
   when the catalogue lists only camera IDs.
+
+### Running the real Sentinel grid (start here on demo day)
+
+The code is split into three processes; each needs the Sentinel credentials
+somewhere **server-side**. Put your registered email + access password in:
+
+1. `TRINETRAAI/backend/.env` → backend AI ingestion + browser tickets
+   (`cp .env.example .env` and fill in `SENTINEL_EMAIL` / `SENTINEL_PASSWORD`).
+2. Your shell, for cv-engine live mode (no .env auto-load there):
+   `export SENTINEL_EMAIL=... SENTINEL_PASSWORD=...` (`@` may be plain; it is
+   percent-encoded as `%40` when the RTSP URL is built).
+3. `trinetra-ai/.env` (server-side only, **no `VITE_` prefix**) → the dev
+   server proxy uses them to authenticate every WHEP connection to the
+   gateway (`SENTINEL_EMAIL` / `SENTINEL_PASSWORD`, see `.env.example`).
+
+Then, in three terminals:
+
+```bash
+# 1. Backend — seeded demo registry (30 Sentinel cameras), API on :8000
+cd TRINETRAAI/backend && python -m scripts.seed_demo
+EVIDENCE_ROOT=../../cv-engine/evidence uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 2. AI pipeline on one real camera (needs exports above + venue network)
+cd cv-engine && python scripts/run_pipeline.py --mode live --camera cam04 --duration 300
+
+# 3. Control room — LIVE mode against the real backend
+cd trinetra-ai && VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev
+```
+
+Common errors, decoded:
+
+| Symptom | Cause → fix |
+|---|---|
+| `curl https://cctv.corp8.cloud/cameras.json` → HTTP 000 / SSL error | You are not on a network that can reach the CDN host (Cloudflare-fronted). The grid is reachable from the venue/allowed network — not from every sandbox/office network. |
+| RTSP/WHEP `401 Unauthorized` | Credentials missing or not on the approved access list. Check `SENTINEL_EMAIL`/`SENTINEL_PASSWORD` in the right place (backend `.env`, shell for cv-engine, `trinetra-ai/.env` for the browser proxy). Email `@` must belong to an approved account. |
+| WHEP player: "Camera path is not published on the gateway" | A stale ticket path. The backend ticket is `/sentinel/stream/<id>/whep` (matches gateway `/stream/<id>/whep` behind the proxy). Rebuilt frontends/tickets use this; any `/sentinel/<id>/whep`-style URL is the old bug. |
+| `ImportError: libGL.so.1: cannot open shared object file` (cv2) | GUI `opencv-python` (pulled by ultralytics/rapidocr) overwrote the headless build → `pip uninstall -y opencv-python && pip install -q opencv-python-headless`. |
+| Cameras never go ONLINE in LIVE mode | `AUTO_START_CAMERAS=false` (default) means nothing connects at boot. Either call `POST /api/cameras/{id}/start` per camera you process, or set `AUTO_START_CAMERAS=true` on a machine that can actually reach the grid. |
+| YOLO/ANPR missing at runtime | `python scripts/fetch_models.py` (weights) was never run, or tesseract isn't installed — cv-engine uses `rapidocr-onnxruntime` (bundled) for OCR. |
 
 ## Connecting a REAL live camera (e.g. authorized Ahmedabad CCTV)
 
@@ -148,7 +190,7 @@ honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
 ## Tests
 
 ```bash
-cd TRINETRAAI/backend && pytest          # 97 tests
-cd cv-engine && pytest                   # 79 offline tests (live-feed tests opt-in)
+cd TRINETRAAI/backend && pytest          # 112 tests
+cd cv-engine && pytest                   # 80 offline tests (live-feed tests opt-in)
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
 ```

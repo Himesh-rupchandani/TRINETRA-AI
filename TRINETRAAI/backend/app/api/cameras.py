@@ -223,17 +223,13 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
             reason="Camera source not configured — set LIVE_CAMERA_* in TRINETRAAI/backend/.env",
         )
 
-    stream_status = camera_manager.get_camera_status(cam.camera_id)
-    status_value = (stream_status["status"] if stream_status else (cam.status or "OFFLINE")).upper()
-    # File-backed demo cameras are playable whenever the media exists; the
-    # live view is served by an on-demand decoder, not a resident worker.
-    if (
-        (cam.stream_type or "").lower() == "file"
-        and cam.stream_url
-        and os.path.exists(cam.stream_url)
-        and status_value != "ONLINE"
-    ):
-        status_value = "ONLINE"
+    # Single status authority: the same resolver the grid/detail endpoints use.
+    # A Sentinel camera is continuously published at the gateway, so a camera
+    # that is merely not being ingested by a local AI worker is still ONLINE
+    # and viewable — the browser's WHEP pull is what opens the feed. The live
+    # worker status only overrides when it is actually delivering frames.
+    resolved_status, _ = _resolve_camera_status(cam)
+    status_value = (resolved_status or "OFFLINE").upper()
     playable = status_value == "ONLINE"
     slug = cam.camera_id.lower()
 
@@ -249,10 +245,16 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
             reason=None,
         )
 
+    # Sentinel WHEP endpoint is /stream/<id>/whep on the gateway (integrator
+    # guide §1). Behind the same-origin /sentinel proxy that becomes
+    # /sentinel/stream/<id>/whep — the ticket must carry the FULL path or the
+    # proxy forwards /<id>/whep and the gateway answers 404.
+    from ..services.sentinel_stream_service import get_whep_path
+
     return CameraStreamTicket(
         camera_id=slug,
         stream_type="WEBRTC" if playable else (cam.stream_type or "hls").upper(),
-        stream_url=f"/sentinel/{slug}/whep" if playable else "",
+        stream_url=get_whep_path(slug) if playable else "",
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
         playable=playable,
         reason=None if playable else f"Camera is {status_value}",
