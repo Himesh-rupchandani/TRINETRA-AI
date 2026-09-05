@@ -1,16 +1,30 @@
 import type { Camera } from '@/types';
 
 /**
- * Camera registry (Model 1 foundation).
+ * Camera registry (Model 1 foundation) — SENTINEL live grid, 05/09/2026.
  *
- * Locations are real Ahmedabad junctions and the operational metadata
- * (event counts, watchlist story, a few degraded/offline units) is synthetic
- * demo data. The `codec` column is NOT synthetic: it mirrors what the Sentinel
- * gateway actually publishes for each path, so the player can warn before it
- * tries to decode a stream the browser cannot handle.
+ * IDs and location labels are the SENTINEL control-room names, verbatim —
+ * including their original casing and punctuation — so an operator reading a
+ * sighting off CAM19 sees the same string the Sentinel grid prints. IDs stay
+ * CAM01…CAM30 because the media gateway addresses a feed by that path
+ * (`/sentinel/stream/cam19/whep`).
  *
- * The grid is mixed H.264 / H.265 — cam06, cam12, cam17, cam18, cam22 and
- * cam26 are HEVC and will not decode over WebRTC in most browsers.
+ * Coordinates are the real siting of each camera, resolved to town/suburb
+ * level. The grid spans Gujarat — Ahmedabad, Junagadh, Gir Somnath,
+ * Gandhinagar, Rajkot, Navsari, Patan and Kutch — not a single city, so the
+ * GIS default view is statewide (see VITE_MAP_* in .env).
+ *
+ * Two labels could not be pinned down (`Delight RLVD`, `Mohanpura`): they
+ * carry zone "Unconfirmed" and fall back to the control-room coordinate
+ * rather than a guessed town.
+ *
+ * Status: all 30 cameras reported LIVE on the 05/09/2026 12:30 IST grid, so
+ * the registry is uniformly ONLINE. Offline/poor-quality states are driven by
+ * the live WHEP probe, not by a fixture.
+ *
+ * Codec: the Sentinel grid does not publish codecs. The HEVC rows below are
+ * carried over from the previous seed purely so the player's "H.265 — this
+ * browser cannot decode it" warning path stays exercised in demo mode.
  */
 interface Seed {
   name: string;
@@ -19,7 +33,6 @@ interface Seed {
   lng: number;
   dept: string;
   zone: string;
-  status: Camera['status'];
   codec: string;
   w: number;
   h: number;
@@ -28,53 +41,40 @@ interface Seed {
 }
 
 const SEEDS: Seed[] = [
-  ['CAM01', 'Law Garden Circle', 23.0225, 72.5595, 'Traffic Police', 'Central', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM02', 'Ellis Bridge', 23.0234, 72.5714, 'Traffic Police', 'Central', 'ONLINE', 'H264', 2560, 1440, 25, 'WEBRTC'],
-  ['CAM03', 'Anjali Cross Roads', 22.995, 72.548, 'Municipal (AMC)', 'South', 'ONLINE', 'H264', 1280, 720, 20, 'WEBRTC'],
-  ['CAM04', 'Paldi Circle', 23.0126, 72.5647, 'Police', 'Central', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM05', 'Navrangpura Circle', 23.0367, 72.56, 'Police', 'West', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM06', 'Gujarat University Junction', 23.0395, 72.545, 'Traffic Police', 'West', 'ONLINE', 'H265', 1280, 720, 15, 'WEBRTC'],
-  ['CAM07', 'Panjrapole Cross Road', 23.029, 72.548, 'Traffic Police', 'West', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM08', 'Lal Darwaja Terminus', 23.025, 72.58, 'Police', 'Central', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM09', 'Kalupur Railway Station', 23.0272, 72.6014, 'Railway Police', 'East', 'ONLINE', 'H264', 2560, 1440, 30, 'WEBRTC'],
-  ['CAM10', 'Jamalpur Gate', 23.013, 72.582, 'Police', 'Central', 'ONLINE', 'H264', 1280, 720, 20, 'WEBRTC'],
-  ['CAM11', 'Delhi Darwaja', 23.04, 72.59, 'Municipal (AMC)', 'Central', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM12', 'Kankaria Lake Circle', 22.999, 72.602, 'Police', 'South', 'ONLINE', 'H265', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM13', 'CTM Cross Road', 22.99, 72.625, 'Traffic Police', 'South', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM14', 'Isanpur Cross Road', 22.97, 72.6, 'Traffic Police', 'South', 'ONLINE', 'H264', 1280, 720, 20, 'WEBRTC'],
-  ['CAM15', 'Vatva GIDC Gate', 22.96, 72.63, 'Industrial Security', 'South', 'ONLINE', 'H264', 1280, 720, 12, 'WEBRTC'],
-  ['CAM16', 'Narol Circle', 22.955, 72.585, 'Highway Authority', 'South', 'ONLINE', 'H264', 2560, 1440, 30, 'WEBRTC'],
-  ['CAM17', 'Odhav Ring Road', 23.028, 72.665, 'Highway Authority', 'East', 'ONLINE', 'H265', 1920, 1080, 30, 'WEBRTC'],
-  ['CAM18', 'Nikol Circle', 23.045, 72.665, 'Police', 'East', 'ONLINE', 'H265', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM19', 'Bapunagar Char Rasta', 23.04, 72.64, 'Police', 'East', 'ONLINE', 'H264', 1280, 720, 20, 'WEBRTC'],
-  ['CAM20', 'Naroda Patiya', 23.07, 72.66, 'Traffic Police', 'East', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM21', 'Airport Circle Hansol', 23.073, 72.626, 'Airport Security', 'North', 'ONLINE', 'H264', 2560, 1440, 30, 'WEBRTC'],
-  ['CAM22', 'Riverfront West Promenade', 23.05, 72.575, 'Municipal (AMC)', 'Central', 'ONLINE', 'H265', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM23', 'Gandhi Ashram Gate', 23.06, 72.58, 'Police', 'North', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM24', 'RTO Circle Subhash Bridge', 23.055, 72.586, 'Transport Dept', 'North', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM25', 'Motera Stadium Approach', 23.092, 72.597, 'Police', 'North', 'ONLINE', 'H264', 2560, 1440, 30, 'WEBRTC'],
-  ['CAM26', 'Chandkheda Circle', 23.11, 72.59, 'Traffic Police', 'North', 'OFFLINE', 'H265', 1280, 720, 20, 'WEBRTC'],
-  ['CAM27', 'Vastrapur Lake Junction', 23.0395, 72.529, 'Police', 'West', 'ONLINE', 'H264', 1920, 1080, 25, 'WEBRTC'],
-  ['CAM28', 'Iskcon Cross Roads', 23.027, 72.507, 'Traffic Police', 'West', 'DEGRADED', 'H264', 2560, 1440, 30, 'WEBRTC'],
-  ['CAM29', 'S.G. Highway Bopal', 23.03, 72.47, 'Highway Authority', 'West', 'OFFLINE', 'H264', 2560, 1440, 30, 'WEBRTC'],
-  ['CAM30', 'Sarkhej Circle', 22.98, 72.5, 'Highway Authority', 'West', 'DEGRADED', 'H264', 1920, 1080, 25, 'WEBRTC'],
-].map(
-  (r) =>
-    ({
-      name: r[0],
-      location: r[1],
-      lat: r[2],
-      lng: r[3],
-      dept: r[4],
-      zone: r[5],
-      status: r[6],
-      codec: r[7],
-      w: r[8],
-      h: r[9],
-      fps: r[10],
-      stream: r[11],
-    }) as Seed,
-);
+  { name: 'CAM01', location: 'Chiman bhai Bridge', lat: 23.073, lng: 72.592, dept: 'Traffic Police', zone: 'Ahmedabad', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM02', location: 'Janpath', lat: 23.0225, lng: 72.5625, dept: 'Police', zone: 'Ahmedabad', codec: 'H264', w: 2560, h: 1440, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM03', location: 'O.N.G.C. Office', lat: 23.107, lng: 72.595, dept: 'Industrial Security', zone: 'Ahmedabad', codec: 'H264', w: 1280, h: 720, fps: 20, stream: 'WEBRTC' },
+  { name: 'CAM04', location: 'Paldi Circle', lat: 23.0126, lng: 72.5647, dept: 'Police', zone: 'Ahmedabad', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM05', location: 'Visat teen Rasta', lat: 23.087, lng: 72.593, dept: 'Traffic Police', zone: 'Ahmedabad', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM06', location: 'Timbavadi gate-Junagadh', lat: 21.5236, lng: 70.455, dept: 'Police', zone: 'Junagadh', codec: 'H265', w: 1280, h: 720, fps: 15, stream: 'WEBRTC' },
+  { name: 'CAM07', location: 'hero-showroom-gir-somnath', lat: 20.9097, lng: 70.3666, dept: 'Police', zone: 'Gir Somnath', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM08', location: 'majewadi-gate-junagadh', lat: 21.53, lng: 70.462, dept: 'Police', zone: 'Junagadh', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM09', location: 'new-bypass-near-by-circle-junagadh-2', lat: 21.5355, lng: 70.478, dept: 'Highway Authority', zone: 'Junagadh', codec: 'H264', w: 2560, h: 1440, fps: 30, stream: 'WEBRTC' },
+  { name: 'CAM10', location: 'char-chowk-road-2-junagadh', lat: 21.5222, lng: 70.4573, dept: 'Police', zone: 'Junagadh', codec: 'H264', w: 1280, h: 720, fps: 20, stream: 'WEBRTC' },
+  { name: 'CAM11', location: 'dolatpara-junagadh', lat: 21.5255, lng: 70.456, dept: 'Municipal (JMC)', zone: 'Junagadh', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM12', location: 'Tri Mandir Adalaj Tollnaka', lat: 23.1662, lng: 72.5807, dept: 'Highway Authority', zone: 'Gandhinagar', codec: 'H265', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM13', location: 'CN Vidhyalaya', lat: 23.0305, lng: 72.5456, dept: 'Municipal (AMC)', zone: 'Ahmedabad', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM14', location: 'Delight RLVD', lat: 23.0225, lng: 72.5714, dept: 'Traffic Police', zone: 'Unconfirmed', codec: 'H264', w: 1280, h: 720, fps: 20, stream: 'WEBRTC' },
+  { name: 'CAM15', location: 'Suvidha park', lat: 23.0389, lng: 72.6608, dept: 'Municipal (AMC)', zone: 'Ahmedabad', codec: 'H264', w: 1280, h: 720, fps: 20, stream: 'WEBRTC' },
+  { name: 'CAM16', location: 'Visat P2', lat: 23.091, lng: 72.598, dept: 'Traffic Police', zone: 'Ahmedabad', codec: 'H264', w: 2560, h: 1440, fps: 30, stream: 'WEBRTC' },
+  { name: 'CAM17', location: 'Rajkot Bus Port CCTV', lat: 22.2908, lng: 70.799, dept: 'Transport Dept', zone: 'Rajkot', codec: 'H265', w: 1920, h: 1080, fps: 30, stream: 'WEBRTC' },
+  { name: 'CAM18', location: 'Rajkot CCTV', lat: 22.3039, lng: 70.8022, dept: 'Police', zone: 'Rajkot', codec: 'H265', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM19', location: 'KHAPARIA GRAM PANCHAYAT, TALUKA GANDEVI, DISTRICT NAVSARI', lat: 20.8136, lng: 72.99, dept: 'Gram Panchayat', zone: 'Navsari', codec: 'H264', w: 1280, h: 720, fps: 20, stream: 'WEBRTC' },
+  { name: 'CAM20', location: 'Mohanpura', lat: 23.0225, lng: 72.5714, dept: 'Police', zone: 'Unconfirmed', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM21', location: 'Patan Dethali Char Rasta', lat: 23.9167, lng: 72.35, dept: 'Police', zone: 'Patan', codec: 'H264', w: 2560, h: 1440, fps: 30, stream: 'WEBRTC' },
+  { name: 'CAM22', location: 'BK Mervada tran Rasta', lat: 23.7833, lng: 72.1167, dept: 'Police', zone: 'Patan', codec: 'H265', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM23', location: 'kheram', lat: 20.76, lng: 72.97, dept: 'Gram Panchayat', zone: 'Navsari', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM24', location: 'dehgam', lat: 23.1691, lng: 72.8066, dept: 'Municipal (Dehgam)', zone: 'Gandhinagar', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM25', location: 'dhanori', lat: 20.788, lng: 72.977, dept: 'Gram Panchayat', zone: 'Navsari', codec: 'H264', w: 2560, h: 1440, fps: 30, stream: 'WEBRTC' },
+  { name: 'CAM26', location: 'TANKAL', lat: 20.78, lng: 73.132, dept: 'Gram Panchayat', zone: 'Navsari', codec: 'H265', w: 1280, h: 720, fps: 20, stream: 'WEBRTC' },
+  { name: 'CAM27', location: 'bilimora', lat: 20.7508, lng: 72.951, dept: 'Municipal (Bilimora)', zone: 'Navsari', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+  { name: 'CAM28', location: 'bilimora', lat: 20.7543, lng: 72.9562, dept: 'Municipal (Bilimora)', zone: 'Navsari', codec: 'H264', w: 2560, h: 1440, fps: 30, stream: 'WEBRTC' },
+  { name: 'CAM29', location: 'bilimora', lat: 20.747, lng: 72.9478, dept: 'Municipal (Bilimora)', zone: 'Navsari', codec: 'H264', w: 2560, h: 1440, fps: 30, stream: 'WEBRTC' },
+  { name: 'CAM30', location: 'Gandhidham Rambaugh p2', lat: 23.0759, lng: 70.131, dept: 'Municipal (GDM)', zone: 'Kutch', codec: 'H264', w: 1920, h: 1080, fps: 25, stream: 'WEBRTC' },
+];
+
+/** The 05/09/2026 grid reported every camera LIVE. */
+const GRID_STATUS: Camera['status'] = 'ONLINE';
 
 export const mockCameras: Camera[] = SEEDS.map((s, i) => ({
   id: s.name.toLowerCase(),
@@ -84,7 +84,7 @@ export const mockCameras: Camera[] = SEEDS.map((s, i) => ({
   longitude: s.lng,
   department: s.dept,
   zone: s.zone,
-  status: s.status,
+  status: GRID_STATUS,
   codec: s.codec,
   width: s.w,
   height: s.h,

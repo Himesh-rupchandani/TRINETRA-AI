@@ -23,10 +23,10 @@ export const config = {
   liveStreams: (env.VITE_LIVE_STREAMS ?? 'true') !== 'false',
   map: {
     center: [
-      Number(env.VITE_MAP_CENTER_LAT ?? 23.0225),
-      Number(env.VITE_MAP_CENTER_LNG ?? 72.5714),
+      Number(env.VITE_MAP_CENTER_LAT ?? 22.3),
+      Number(env.VITE_MAP_CENTER_LNG ?? 71.6),
     ] as [number, number],
-    zoom: Number(env.VITE_MAP_DEFAULT_ZOOM ?? 13),
+    zoom: Number(env.VITE_MAP_DEFAULT_ZOOM ?? 7),
     /**
      * Purpose-built dark/light canvas basemaps (keyless, attribution required).
      * `base` carries geometry, `labels` is the transparent reference overlay —
