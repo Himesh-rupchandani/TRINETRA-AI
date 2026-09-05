@@ -12,11 +12,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config } from '@/lib/config';
-import { useTheme } from '@/features/system/ThemeProvider';
 import { cameraIcon, eventIcon, routeIcon } from './mapIcons';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
-/** Transparent placeholder so a blocked tile server degrades to the dark canvas. */
+/** Transparent placeholder so a blocked tile server degrades gracefully. */
 const ERROR_TILE =
   "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3C/svg%3E";
 
@@ -109,8 +108,7 @@ export function MapView({
   className,
   showCoverage = false,
 }: MapViewProps) {
-  const { theme } = useTheme();
-  const tiles = theme === 'dark' ? config.map.tiles.dark : config.map.tiles.light;
+  const tiles = config.map.tiles.light;
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],
@@ -134,13 +132,12 @@ export function MapView({
         attributionControl
       >
         <TileLayer
-          key={`base-${theme}`}
           url={tiles.base}
           attribution={config.map.tileAttribution}
           maxZoom={18}
           errorTileUrl={ERROR_TILE}
         />
-        <TileLayer key={`labels-${theme}`} url={tiles.labels} maxZoom={18} errorTileUrl={ERROR_TILE} />
+        <TileLayer url={tiles.labels} maxZoom={18} errorTileUrl={ERROR_TILE} />
         <ResizeGuard />
         <FitBounds points={fitPoints} enabled={fit} />
         <PanTo target={panTo} />

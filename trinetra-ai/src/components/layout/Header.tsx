@@ -3,17 +3,14 @@ import { useState } from 'react';
 import {
   Bell,
   Menu,
-  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
-  Sun,
   UserRound,
 } from 'lucide-react';
 import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
-import { useTheme } from '@/features/system/ThemeProvider';
 import { config } from '@/lib/config';
 
 const CONNECTION_TONE: Record<string, string> = {
@@ -35,7 +32,6 @@ export function Header({
   const navigate = useNavigate();
   const { counts } = useAlerts();
   const { connection } = useLiveEvents();
-  const { theme, toggle } = useTheme();
   const [quick, setQuick] = useState('');
 
   const submitQuick = (e: React.FormEvent) => {
@@ -118,15 +114,6 @@ export function Header({
               {counts.ACTIVE}
             </span>
           )}
-        </button>
-
-        <button
-          type="button"
-          className="grid h-9 w-9 place-items-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
-          onClick={toggle}
-          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-        >
-          {theme === 'dark' ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
         </button>
 
         <div className="hidden items-center gap-2.5 border-l border-line pl-3 xl:flex">

@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { ThemeProvider } from '@/features/system/ThemeProvider';
 import { ToastProvider } from '@/features/system/ToastProvider';
 import { LiveProvider } from '@/features/alerts/LiveProvider';
 
@@ -10,10 +9,8 @@ import { LiveProvider } from '@/features/alerts/LiveProvider';
  */
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <LiveProvider>{children}</LiveProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <ToastProvider>
+      <LiveProvider>{children}</LiveProvider>
+    </ToastProvider>
   );
 }
