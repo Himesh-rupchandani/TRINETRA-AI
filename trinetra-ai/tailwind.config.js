@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class',
+  // Light Mode only: Night/Dark Mode was removed, so there is no darkMode
+  // variant ('class'/'media') registered here anymore.
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
