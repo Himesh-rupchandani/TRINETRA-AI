@@ -1,36 +1,30 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 
-type Theme = 'dark' | 'light';
-
+/**
+ * Night Mode / Dark Mode has been removed. The application is permanently
+ * Light Mode, so the theme is a fixed `'light'` value and there is no toggle.
+ * The `dark` class and any previously persisted theme are cleared on mount so
+ * a refresh or reopen can never re-activate Dark Mode.
+ */
 interface ThemeContextValue {
-  theme: Theme;
-  toggle: () => void;
+  theme: 'light';
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-const STORAGE_KEY = 'trinetra.theme';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    // Light by default: easier to read on ordinary station hardware and in
-    // daylight. Operators who prefer the dark console can switch and it sticks.
-    return stored === 'light' || stored === 'dark' ? stored : 'light';
-  });
-
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle('dark', theme === 'dark');
-    root.style.colorScheme = theme;
-    localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
+    root.classList.remove('dark');
+    root.style.colorScheme = 'light';
+    try {
+      localStorage.removeItem('trinetra.theme');
+    } catch {
+      /* storage unavailable — non-fatal */
+    }
+  }, []);
 
-  const value = useMemo(
-    () => ({ theme, toggle: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')) }),
-    [theme],
-  );
-
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ theme: 'light' }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextValue {
