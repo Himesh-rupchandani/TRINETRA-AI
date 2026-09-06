@@ -12,6 +12,7 @@ import type {
   CameraStreamTicket,
   DashboardKpis,
   EventFilters,
+  OfficerProfile,
   Paginated,
   RoutePoint,
   SystemSummary,
@@ -24,6 +25,7 @@ import { mockCameras } from './cameras';
 import { mockEvents } from './events';
 import { mockAlerts } from './alerts';
 import { mockWatchlist, watchlistByPlate } from './watchlist';
+import { currentOfficerId, officerById } from './officer';
 import { buildMockHealth } from './health';
 import { haversineKm, minutesBetween, normalisePlate, sleep } from '@/lib/utils';
 import { config } from '@/lib/config';
@@ -287,6 +289,27 @@ export async function resolveAlert(id: string, note?: string): Promise<Alert> {
   if (!updated) throw new Error(`Alert ${id} not found`);
   emit();
   return updated;
+}
+
+/* ------------------------------- OFFICER API ------------------------------- */
+
+/**
+ * Returns the profile of the officer currently signed in. Only that officer's
+ * own figures are returned — data from other officers is never included.
+ */
+export async function getCurrentOfficer(): Promise<OfficerProfile> {
+  await latency(160);
+  const officer = officerById(currentOfficerId);
+  if (!officer) throw new Error('Current officer profile not found');
+  return officer;
+}
+
+/** Returns a specific officer's profile (their own data only). */
+export async function getOfficerProfile(id: string): Promise<OfficerProfile> {
+  await latency(140);
+  const officer = officerById(id);
+  if (!officer) throw new Error(`Officer ${id} not found`);
+  return officer;
 }
 
 /* --------------------------------- HEALTH API --------------------------------- */

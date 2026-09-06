@@ -37,6 +37,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { to: '/cameras', label: 'Live Cameras', hint: 'Watch live feeds', icon: Cctv, tone: 'green' },
       { to: '/gis', label: 'Map', hint: 'Cameras & vehicles', icon: Map, tone: 'orange' },
       { to: '/events', label: 'Vehicle Log', hint: 'Vehicle history', icon: ListTree, tone: 'green' },
+      { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound, tone: 'blue' },
     ],
   },
   {
