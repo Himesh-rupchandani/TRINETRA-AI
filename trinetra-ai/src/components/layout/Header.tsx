@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import {
   Bell,
@@ -7,6 +7,7 @@ import {
   PanelLeftOpen,
   Search,
 } from 'lucide-react';
+import { OfficerAvatar } from '@/components/common/OfficerAvatar';
 import { OfficerSwitcher } from '@/components/common/OfficerSwitcher';
 import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
@@ -118,27 +119,20 @@ export function Header({
           )}
         </button>
 
-        {/* System Operator area — photo switches officer, the rest opens Profile. */}
-        <div className="hidden items-center gap-2.5 border-l border-line pl-3 xl:flex">
-          <OfficerSwitcher size={32} placement="bottom-end" />
-          <NavLink to="/profile" aria-label="Open officer profile" className="group leading-tight">
-            {({ isActive }) => (
-              <>
-                <p
-                  className={cn(
-                    'max-w-[11rem] truncate text-xs font-semibold transition-colors',
-                    isActive ? 'text-brand' : 'text-ink group-hover:text-brand',
-                  )}
-                >
-                  {officer?.name ?? 'System Operator'}
-                </p>
-                <p className="max-w-[11rem] truncate text-2xs text-ink-faint">
-                  {officer?.position ?? 'Control Center'}
-                </p>
-              </>
-            )}
-          </NavLink>
-        </div>
+        {/* System Operator area — shows the active officer, opens the picker. */}
+        <OfficerSwitcher placement="bottom-end" className="hidden xl:block">
+          <span className="group flex items-center gap-2.5 border-l border-line pl-3">
+            <OfficerAvatar size={32} />
+            <span className="block text-left leading-tight">
+              <span className="block max-w-[11rem] truncate text-xs font-semibold text-ink transition-colors group-hover:text-brand">
+                {officer?.name ?? 'System Operator'}
+              </span>
+              <span className="block max-w-[11rem] truncate text-2xs text-ink-faint">
+                {officer?.position ?? 'Control Center'}
+              </span>
+            </span>
+          </span>
+        </OfficerSwitcher>
       </div>
     </header>
   );

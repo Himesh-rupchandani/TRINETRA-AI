@@ -1,6 +1,7 @@
 import { BadgeCheck, Car, FileText, Receipt, TrendingUp, UserRound, Wallet } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Panel, AsyncBoundary, KeyValue } from '@/components/common/Panel';
+import { OfficerAvatar } from '@/components/common/OfficerAvatar';
 import { OfficerSwitcher } from '@/components/common/OfficerSwitcher';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { refreshOfficers, useOfficerState } from '@/hooks/useCurrentOfficer';
@@ -29,7 +30,13 @@ export default function Profile() {
             <div className="flex flex-col gap-3 sm:gap-4">
               {/* Officer identity — the photo also switches the active officer. */}
               <section className="panel flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:gap-5">
-                <OfficerSwitcher size={80} placement="bottom-start" avatarClassName="ring-2 ring-line" />
+                <OfficerSwitcher
+                  placement="bottom-start"
+                  className="shrink-0"
+                  buttonClassName="block rounded-full outline-none ring-brand/40 transition-shadow hover:ring-2 focus-visible:ring-2"
+                >
+                  <OfficerAvatar size={80} className="ring-2 ring-line" />
+                </OfficerSwitcher>
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-ink-faint">
                     <BadgeCheck size={13} aria-hidden />

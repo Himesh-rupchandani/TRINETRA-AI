@@ -180,7 +180,7 @@ export const mockOfficers: OfficerProfile[] = [
     policeId: 'GJ-07310',
     department: DEPARTMENT,
     designation: 'Head Constable',
-    position: 'Junior Officer',
+    position: 'Police Officer',
     plates: ['GJ03TR6648', 'GJ07MG2295', 'GJ12AC8830', 'MH04PD1177', 'GJ19FS4423'],
     challans: [
       { plate: 'GJ03TR6648', amount: 5000, amountPaid: 5000, status: 'PAID' },
