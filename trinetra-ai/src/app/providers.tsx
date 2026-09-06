@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ToastProvider } from '@/features/system/ToastProvider';
 import { LiveProvider } from '@/features/alerts/LiveProvider';
+import { OfficerProvider } from '@/features/officer/OfficerProvider';
 
 /**
  * Application-wide providers.
@@ -13,7 +14,9 @@ import { LiveProvider } from '@/features/alerts/LiveProvider';
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ToastProvider>
-      <LiveProvider>{children}</LiveProvider>
+      <LiveProvider>
+        <OfficerProvider>{children}</OfficerProvider>
+      </LiveProvider>
     </ToastProvider>
   );
 }

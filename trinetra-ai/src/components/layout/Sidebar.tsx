@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Activity,
   Bell,
@@ -15,6 +15,7 @@ import {
 import { IconTile, type TileTone } from '@/components/common/IconTile';
 import { cn } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useOfficer } from '@/features/officer/OfficerProvider';
 
 interface NavItem {
   to: string;
@@ -60,6 +61,8 @@ export function Sidebar({
   collapsed: boolean;
 }) {
   const { counts } = useAlerts();
+  const { current: officer } = useOfficer();
+  const navigate = useNavigate();
 
   return (
     <>
@@ -173,19 +176,36 @@ export function Sidebar({
 
         {!collapsed && (
           <div className="px-3 pb-4">
-            <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2/70 p-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
-                <UserRound size={16} />
-              </span>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                navigate('/profile');
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-surface-2/70 p-3 text-left transition-colors hover:bg-surface-2"
+              aria-label="Open officer profile"
+            >
+              {officer ? (
+                <img
+                  src={officer.photoUrl}
+                  alt=""
+                  className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-line"
+                  aria-hidden
+                />
+              ) : (
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
+                  <UserRound size={16} />
+                </span>
+              )}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-ink">System Operator</p>
-                <p className="truncate text-2xs text-ink-faint">Control Center</p>
+                <p className="truncate text-xs font-semibold text-ink">{officer?.name ?? 'System Operator'}</p>
+                <p className="truncate text-2xs text-ink-faint">{officer?.designation ?? 'Control Center'}</p>
               </div>
               <span className="chip border-online/30 bg-online/10 text-online">
                 <span className="h-1.5 w-1.5 rounded-full bg-online" aria-hidden />
                 Online
               </span>
-            </div>
+            </button>
           </div>
         )}
       </aside>

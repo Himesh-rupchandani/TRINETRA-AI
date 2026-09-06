@@ -45,6 +45,13 @@ export const officerService = {
     return toOfficerProfile(await get<OfficerDto>('/officers/me'));
   },
 
+  /** Every officer available for selection in the Profile section. */
+  async list(): Promise<OfficerProfile[]> {
+    if (isMockMode) return mock.listOfficers();
+    const dtos = await get<OfficerDto[]>('/officers');
+    return (dtos ?? []).map(toOfficerProfile);
+  },
+
   /** Profile for a specific officer (their own data only). */
   async byId(id: string): Promise<OfficerProfile> {
     if (isMockMode) return mock.getOfficerProfile(id);
