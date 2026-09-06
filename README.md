@@ -153,18 +153,21 @@ somewhere **server-side**. Put your registered email + access password in:
    connection to the gateway (`SENTINEL_EMAIL` / `SENTINEL_PASSWORD`; copy the
    names from `.env.local.example`).
 
-Then, in three terminals:
+Then, in three terminals. **Do not run `scripts.seed_demo` in real mode**:
+the backend creates an empty real registry and synchronizes only the authorized
+catalogue at startup.
 
 ```bash
-# 1. Backend — seeded demo registry (30 Sentinel cameras), API on :8000
-cd TRINETRAAI/backend && python -m scripts.seed_demo
+# 1. Backend — real-mode API on :8000; authorized catalogue sync happens at startup
+cd TRINETRAAI/backend
 EVIDENCE_ROOT=../../cv-engine/evidence uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# 2. AI pipeline on one real camera (needs exports above + venue network)
+# 2. AI pipeline on one real camera (needs server-side environment + venue network)
 cd cv-engine && python scripts/run_pipeline.py --mode live --camera cam04 --duration 300
 
 # 3. Control room — LIVE mode against the real backend
-cd trinetra-ai && VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev
+# trinetra-ai/.env.local supplies VITE_USE_MOCKS=false and BACKEND_ORIGIN.
+cd trinetra-ai && npm run dev
 ```
 
 Common errors, decoded:
@@ -181,11 +184,12 @@ Common errors, decoded:
 ## Connecting a REAL live camera (e.g. authorized Ahmedabad CCTV)
 
 No authorized public Ahmedabad CCTV feed exists today — the city's ANPR/CCTV
-network feeds government control rooms only. The system therefore ships with
-an env-configured live-camera slot that stays honestly **NOT_CONFIGURED**
-("Camera source not configured") until you add an authorized URL. Recorded
-demo clips are always stamped `RECORDED DEMO FOOTAGE — NOT LIVE` and are
-never labelled live.
+network feeds government control rooms only. A fresh real deployment therefore
+shows **no fabricated camera row** until it receives an authorized catalogue or
+an explicitly configured source. **NOT_CONFIGURED** ("Camera source not
+configured") is reserved for a demo/setup record or an operator-specified
+status override, not an invented live camera. Recorded demo clips are always
+stamped `RECORDED DEMO FOOTAGE — NOT LIVE` and are never labelled live.
 
 When you receive an authorized stream URL, edit `TRINETRAAI/backend/.env`
 (see `.env.example`) — no code changes, just restart the backend:
@@ -219,16 +223,18 @@ far-vehicle recall matters more than throughput; leave it at `1` for the
 normal real-time path.
 
 Statuses are always honest: **Working** only while frames actually arrive
-from the real camera; **Not working** when the stream is unreachable;
-**NOT_CONFIGURED** when no source is set. Resident workers start only for
-real network cameras — the file-backed demo grid always plays on demand.
+from the real camera; **Not working** when the stream is unreachable; and
+**NOT_CONFIGURED** only for an explicitly registered setup source with no URL.
+A fresh real registry does not invent an empty camera tile. Resident workers
+start only for real network cameras — the file-backed demo grid always plays
+on demand.
 
 ## Frontend modes
 
 | Mode | How | Data source |
 |---|---|---|
 | **DEMO** (repo default) | `VITE_USE_MOCKS=true` | In-browser synthetic dataset incl. the scripted `GJ01AB1234` journey |
-| **LIVE** | `VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
+| **LIVE** | Set `VITE_USE_MOCKS=false` and `BACKEND_ORIGIN=http://127.0.0.1:8000` in ignored `trinetra-ai/.env.local`, then run `npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
 
 Run the backend with `DEMO_MODE=false` in LIVE mode so unreachable cameras stay
 honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
@@ -236,7 +242,7 @@ honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
 ## Tests
 
 ```bash
-cd TRINETRAAI/backend && pytest          # 112 tests
-cd cv-engine && pytest                   # 80 offline tests (live-feed tests opt-in)
+cd TRINETRAAI/backend && pytest          # 130 tests
+cd cv-engine && pytest                   # 85 offline tests (live-feed tests opt-in)
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
 ```

@@ -147,7 +147,7 @@ Write-Host 'Terminal 1 — backend:' -ForegroundColor Cyan
 Write-Host ("  cd `"{0}`"" -f $backendDirectory)
 Write-Host '  py -3.12 -m venv .venv'
 Write-Host '  .\.venv\Scripts\python.exe -m pip install -r requirements.txt'
-Write-Host '  .\.venv\Scripts\python.exe -m scripts.seed_demo'
+Write-Host '  # Do not run scripts.seed_demo in real mode: startup syncs only the authorized catalogue.' -ForegroundColor DarkGray
 Write-Host '  .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000'
 Write-Host ''
 Write-Host 'Terminal 2 — frontend:' -ForegroundColor Cyan
