@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { IconTile, type TileTone } from '@/components/common/IconTile';
+import { OfficerAvatar } from '@/components/common/OfficerAvatar';
 import { cn } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 
@@ -173,19 +174,36 @@ export function Sidebar({
 
         {!collapsed && (
           <div className="px-3 pb-4">
-            <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2/70 p-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
-                <UserRound size={16} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-ink">System Operator</p>
-                <p className="truncate text-2xs text-ink-faint">Control Center</p>
-              </div>
-              <span className="chip border-online/30 bg-online/10 text-online">
-                <span className="h-1.5 w-1.5 rounded-full bg-online" aria-hidden />
-                Online
-              </span>
-            </div>
+            {/* Opens the officer's own Profile section. */}
+            <NavLink
+              to="/profile"
+              onClick={onClose}
+              aria-label="Open officer profile"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2.5 rounded-xl border p-3 transition-colors',
+                  isActive
+                    ? 'border-brand/30 bg-brand/10'
+                    : 'border-line bg-surface-2/70 hover:border-brand/25 hover:bg-surface-2',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <OfficerAvatar size={36} />
+                  <div className="min-w-0 flex-1">
+                    <p className={cn('truncate text-xs font-semibold', isActive ? 'text-brand' : 'text-ink')}>
+                      System Operator
+                    </p>
+                    <p className="truncate text-2xs text-ink-faint">Control Center</p>
+                  </div>
+                  <span className="chip border-online/30 bg-online/10 text-online">
+                    <span className="h-1.5 w-1.5 rounded-full bg-online" aria-hidden />
+                    Online
+                  </span>
+                </>
+              )}
+            </NavLink>
           </div>
         )}
       </aside>

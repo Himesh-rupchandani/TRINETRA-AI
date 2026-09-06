@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import {
   Bell,
@@ -6,8 +6,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
-  UserRound,
 } from 'lucide-react';
+import { OfficerAvatar } from '@/components/common/OfficerAvatar';
 import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
@@ -116,15 +116,29 @@ export function Header({
           )}
         </button>
 
-        <div className="hidden items-center gap-2.5 border-l border-line pl-3 xl:flex">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
-            <UserRound size={15} />
-          </span>
-          <div className="leading-tight">
-            <p className="text-xs font-semibold text-ink">System Operator</p>
-            <p className="text-2xs text-ink-faint">Control Center</p>
-          </div>
-        </div>
+        {/* System Operator area — opens the officer's Profile page. */}
+        <NavLink
+          to="/profile"
+          aria-label="Open officer profile"
+          className="group hidden items-center gap-2.5 border-l border-line pl-3 xl:flex"
+        >
+          {({ isActive }) => (
+            <>
+              <OfficerAvatar size={32} />
+              <div className="leading-tight">
+                <p
+                  className={cn(
+                    'text-xs font-semibold transition-colors',
+                    isActive ? 'text-brand' : 'text-ink group-hover:text-brand',
+                  )}
+                >
+                  System Operator
+                </p>
+                <p className="text-2xs text-ink-faint">Control Center</p>
+              </div>
+            </>
+          )}
+        </NavLink>
       </div>
     </header>
   );
