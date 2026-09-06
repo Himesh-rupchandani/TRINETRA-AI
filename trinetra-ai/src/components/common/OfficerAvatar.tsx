@@ -1,17 +1,27 @@
 import { useState } from 'react';
 import { UserRound } from 'lucide-react';
+import type { OfficerProfile } from '@/types';
 import { cn } from '@/lib/utils';
 import { useCurrentOfficer } from '@/hooks/useCurrentOfficer';
 
 /**
- * The signed-in officer's photo, used by both System Operator profile areas
- * (sidebar + header) so they always show the same image as the Profile page.
+ * An officer's photo in a circular tile. With no `officer` prop it shows the
+ * active officer, so the sidebar, header and Profile page always match.
  * Falls back to the generic avatar icon while loading or if the photo 404s.
  */
-export function OfficerAvatar({ size = 36, className }: { size?: number; className?: string }) {
-  const officer = useCurrentOfficer();
-  const [failed, setFailed] = useState(false);
-  const photo = !failed ? officer?.photoUrl : undefined;
+export function OfficerAvatar({
+  officer,
+  size = 36,
+  className,
+}: {
+  officer?: OfficerProfile | null;
+  size?: number;
+  className?: string;
+}) {
+  const active = useCurrentOfficer();
+  const subject = officer ?? active;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const photo = subject?.photoUrl && subject.photoUrl !== failedSrc ? subject.photoUrl : undefined;
 
   return (
     <span
@@ -23,7 +33,12 @@ export function OfficerAvatar({ size = 36, className }: { size?: number; classNa
       aria-hidden
     >
       {photo ? (
-        <img src={photo} alt="" className="h-full w-full object-cover object-top" onError={() => setFailed(true)} />
+        <img
+          src={photo}
+          alt=""
+          className="h-full w-full object-cover object-top"
+          onError={() => setFailedSrc(photo)}
+        />
       ) : (
         <UserRound size={Math.round(size * 0.45)} />
       )}

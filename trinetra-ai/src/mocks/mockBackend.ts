@@ -25,7 +25,7 @@ import { mockCameras } from './cameras';
 import { mockEvents } from './events';
 import { mockAlerts } from './alerts';
 import { mockWatchlist, watchlistByPlate } from './watchlist';
-import { currentOfficerId, officerById } from './officer';
+import { currentOfficerId, mockOfficers, officerById } from './officer';
 import { buildMockHealth } from './health';
 import { haversineKm, minutesBetween, normalisePlate, sleep } from '@/lib/utils';
 import { config } from '@/lib/config';
@@ -302,6 +302,12 @@ export async function getCurrentOfficer(): Promise<OfficerProfile> {
   const officer = officerById(currentOfficerId);
   if (!officer) throw new Error('Current officer profile not found');
   return officer;
+}
+
+/** Roster of officers the control room can be signed in as. */
+export async function listOfficers(): Promise<OfficerProfile[]> {
+  await latency(140);
+  return mockOfficers;
 }
 
 /** Returns a specific officer's profile (their own data only). */

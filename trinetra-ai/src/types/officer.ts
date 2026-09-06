@@ -15,6 +15,8 @@ export interface OfficerProfile {
   policeId: string;
   department: string;
   designation: string;
+  /** Rank/position label shown in the officer switcher, e.g. "Senior Officer". */
+  position: string;
   /** Total unique vehicles caught/detected by this officer. */
   vehiclesCaught: number;
   /** Total number of challans issued by this officer. */

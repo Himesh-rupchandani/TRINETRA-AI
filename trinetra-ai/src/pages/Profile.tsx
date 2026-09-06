@@ -1,14 +1,13 @@
 import { BadgeCheck, Car, FileText, Receipt, TrendingUp, UserRound, Wallet } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Panel, AsyncBoundary, KeyValue } from '@/components/common/Panel';
+import { OfficerSwitcher } from '@/components/common/OfficerSwitcher';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { useAsync } from '@/hooks/useAsync';
-import { officerService } from '@/services/officerService';
+import { refreshOfficers, useOfficerState } from '@/hooks/useCurrentOfficer';
 import { formatNumber, prettyPlate } from '@/lib/utils';
 
 export default function Profile() {
-  const profile = useAsync(() => officerService.current(), []);
-  const p = profile.data;
+  const { current: p, loading, error } = useOfficerState();
 
   return (
     <div className="flex h-full flex-col">
@@ -21,20 +20,16 @@ export default function Profile() {
 
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
         <AsyncBoundary
-          loading={profile.loading}
-          error={profile.error}
-          onRetry={profile.refresh}
+          loading={loading}
+          error={error}
+          onRetry={refreshOfficers}
           loadingLabel="Loading officer profile"
         >
           {p && (
             <div className="flex flex-col gap-3 sm:gap-4">
-              {/* Officer identity */}
+              {/* Officer identity — the photo also switches the active officer. */}
               <section className="panel flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:gap-5">
-                <img
-                  src={p.photoUrl}
-                  alt={`${p.name} profile photo`}
-                  className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-line"
-                />
+                <OfficerSwitcher size={80} placement="bottom-start" avatarClassName="ring-2 ring-line" />
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-ink-faint">
                     <BadgeCheck size={13} aria-hidden />

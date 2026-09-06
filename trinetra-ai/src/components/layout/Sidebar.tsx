@@ -13,9 +13,10 @@ import {
   X,
 } from 'lucide-react';
 import { IconTile, type TileTone } from '@/components/common/IconTile';
-import { OfficerAvatar } from '@/components/common/OfficerAvatar';
+import { OfficerSwitcher } from '@/components/common/OfficerSwitcher';
 import { cn } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useCurrentOfficer } from '@/hooks/useCurrentOfficer';
 
 interface NavItem {
   to: string;
@@ -61,6 +62,7 @@ export function Sidebar({
   collapsed: boolean;
 }) {
   const { counts } = useAlerts();
+  const officer = useCurrentOfficer();
 
   return (
     <>
@@ -174,36 +176,34 @@ export function Sidebar({
 
         {!collapsed && (
           <div className="px-3 pb-4">
-            {/* Opens the officer's own Profile section. */}
-            <NavLink
-              to="/profile"
-              onClick={onClose}
-              aria-label="Open officer profile"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2.5 rounded-xl border p-3 transition-colors',
-                  isActive
-                    ? 'border-brand/30 bg-brand/10'
-                    : 'border-line bg-surface-2/70 hover:border-brand/25 hover:bg-surface-2',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <OfficerAvatar size={36} />
-                  <div className="min-w-0 flex-1">
-                    <p className={cn('truncate text-xs font-semibold', isActive ? 'text-brand' : 'text-ink')}>
-                      System Operator
+            {/* Photo switches officer; the rest of the card opens the Profile page. */}
+            <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface-2/70 p-3">
+              <OfficerSwitcher size={36} placement="top-start" />
+              <NavLink
+                to="/profile"
+                onClick={onClose}
+                aria-label="Open officer profile"
+                className="group min-w-0 flex-1"
+              >
+                {({ isActive }) => (
+                  <>
+                    <p
+                      className={cn(
+                        'truncate text-xs font-semibold transition-colors',
+                        isActive ? 'text-brand' : 'text-ink group-hover:text-brand',
+                      )}
+                    >
+                      {officer?.name ?? 'System Operator'}
                     </p>
-                    <p className="truncate text-2xs text-ink-faint">Control Center</p>
-                  </div>
-                  <span className="chip border-online/30 bg-online/10 text-online">
-                    <span className="h-1.5 w-1.5 rounded-full bg-online" aria-hidden />
-                    Online
-                  </span>
-                </>
-              )}
-            </NavLink>
+                    <p className="truncate text-2xs text-ink-faint">{officer?.position ?? 'Control Center'}</p>
+                  </>
+                )}
+              </NavLink>
+              <span className="chip border-online/30 bg-online/10 text-online">
+                <span className="h-1.5 w-1.5 rounded-full bg-online" aria-hidden />
+                Online
+              </span>
+            </div>
           </div>
         )}
       </aside>

@@ -7,9 +7,10 @@ import {
   PanelLeftOpen,
   Search,
 } from 'lucide-react';
-import { OfficerAvatar } from '@/components/common/OfficerAvatar';
+import { OfficerSwitcher } from '@/components/common/OfficerSwitcher';
 import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useCurrentOfficer } from '@/hooks/useCurrentOfficer';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { config } from '@/lib/config';
 
@@ -32,6 +33,7 @@ export function Header({
   const navigate = useNavigate();
   const { counts } = useAlerts();
   const { connection } = useLiveEvents();
+  const officer = useCurrentOfficer();
   const [quick, setQuick] = useState('');
 
   const submitQuick = (e: React.FormEvent) => {
@@ -116,29 +118,27 @@ export function Header({
           )}
         </button>
 
-        {/* System Operator area — opens the officer's Profile page. */}
-        <NavLink
-          to="/profile"
-          aria-label="Open officer profile"
-          className="group hidden items-center gap-2.5 border-l border-line pl-3 xl:flex"
-        >
-          {({ isActive }) => (
-            <>
-              <OfficerAvatar size={32} />
-              <div className="leading-tight">
+        {/* System Operator area — photo switches officer, the rest opens Profile. */}
+        <div className="hidden items-center gap-2.5 border-l border-line pl-3 xl:flex">
+          <OfficerSwitcher size={32} placement="bottom-end" />
+          <NavLink to="/profile" aria-label="Open officer profile" className="group leading-tight">
+            {({ isActive }) => (
+              <>
                 <p
                   className={cn(
-                    'text-xs font-semibold transition-colors',
+                    'max-w-[11rem] truncate text-xs font-semibold transition-colors',
                     isActive ? 'text-brand' : 'text-ink group-hover:text-brand',
                   )}
                 >
-                  System Operator
+                  {officer?.name ?? 'System Operator'}
                 </p>
-                <p className="text-2xs text-ink-faint">Control Center</p>
-              </div>
-            </>
-          )}
-        </NavLink>
+                <p className="max-w-[11rem] truncate text-2xs text-ink-faint">
+                  {officer?.position ?? 'Control Center'}
+                </p>
+              </>
+            )}
+          </NavLink>
+        </div>
       </div>
     </header>
   );

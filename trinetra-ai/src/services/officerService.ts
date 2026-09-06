@@ -13,6 +13,8 @@ interface OfficerDto {
   police_id: string;
   department: string;
   designation: string;
+  /** Rank/position label; falls back to the designation when absent. */
+  position?: string;
   vehicles_caught: number;
   total_challans: number;
   total_challan_amount: number;
@@ -29,6 +31,7 @@ function toOfficerProfile(dto: OfficerDto): OfficerProfile {
     policeId: dto.police_id,
     department: dto.department,
     designation: dto.designation,
+    position: dto.position ?? dto.designation,
     vehiclesCaught: dto.vehicles_caught,
     totalChallans: dto.total_challans,
     totalChallanAmount: dto.total_challan_amount,
@@ -49,5 +52,13 @@ export const officerService = {
   async byId(id: string): Promise<OfficerProfile> {
     if (isMockMode) return mock.getOfficerProfile(id);
     return toOfficerProfile(await get<OfficerDto>(`/officers/${encodeURIComponent(id)}`));
+  },
+
+  /** Roster the control room can switch between. */
+  async list(): Promise<OfficerProfile[]> {
+    if (isMockMode) return mock.listOfficers();
+    const res = await get<OfficerDto[] | { items: OfficerDto[] }>('/officers');
+    const items = Array.isArray(res) ? res : (res.items ?? []);
+    return items.map(toOfficerProfile);
   },
 };
