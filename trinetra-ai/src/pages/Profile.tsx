@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { BadgeCheck, Car, ChevronDown, ChevronRight, FileText, Receipt, TrendingUp, UserRound, Users, Wallet } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { BadgeCheck, Car, ChevronRight, FileText, Receipt, TrendingUp, UserRound, Users, Wallet } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Panel, AsyncBoundary, KeyValue } from '@/components/common/Panel';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -8,7 +9,13 @@ import { cn, formatNumber, prettyPlate } from '@/lib/utils';
 
 export default function Profile() {
   const { active: p, others, loading, error, refresh, selectOfficer } = useOfficer();
-  const [showOthers, setShowOthers] = useState(false);
+  const location = useLocation();
+  /* Opening Profile always starts on the officer selection list. */
+  const [showOthers, setShowOthers] = useState(true);
+
+  useEffect(() => {
+    setShowOthers(true);
+  }, [location.key]);
 
   const handleSelect = (officerId: string) => {
     selectOfficer(officerId);
@@ -21,7 +28,9 @@ export default function Profile() {
         title="Officer Profile"
         icon={UserRound}
         tone="blue"
-        subtitle={p ? `${p.designation} · ${p.department}` : 'Loading your profile…'}
+        subtitle={
+          p && !showOthers ? `${p.designation} · ${p.department}` : p ? 'Select an officer to view their profile' : 'Loading your profile…'
+        }
       />
 
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
@@ -31,16 +40,49 @@ export default function Profile() {
           onRetry={refresh}
           loadingLabel="Loading officer profile"
         >
-          {p && (
+          {p && showOthers && (
+            <Panel title="Other Officers" icon={Users}>
+              {others.length ? (
+                <ul className="divide-y divide-line">
+                  {others.map((o) => (
+                    <li key={o.officerId}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelect(o.officerId)}
+                        className={cn(
+                          'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
+                          'hover:bg-brand/5 focus-visible:bg-brand/5 focus-visible:outline-none',
+                        )}
+                      >
+                        <img
+                          src={o.photoUrl}
+                          alt=""
+                          className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-line"
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-ink">{o.name}</span>
+                          <span className="block truncate text-2xs text-ink-faint">{o.designation}</span>
+                        </span>
+                        <ChevronRight size={15} className="shrink-0 text-ink-faint" aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-4 py-6 text-2xs text-ink-faint">No other officers available.</p>
+              )}
+            </Panel>
+          )}
+
+          {p && !showOthers && (
             <div className="flex flex-col gap-3 sm:gap-4">
-              {/* Officer identity — click to open the officer selection list */}
+              {/* Officer identity — click to return to the officer selection list */}
               <section className="panel overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setShowOthers((v) => !v)}
-                  aria-expanded={showOthers}
-                  aria-controls="other-officers"
-                  title={showOthers ? 'Hide other officers' : 'Switch officer'}
+                  onClick={() => setShowOthers(true)}
+                  title="Switch officer"
                   className="flex w-full flex-col gap-4 p-5 text-left transition-colors hover:bg-surface-2/60 sm:flex-row sm:items-center sm:gap-5"
                 >
                   <img
@@ -61,51 +103,11 @@ export default function Profile() {
                       <span className="font-mono text-sm font-semibold text-ink">{p.policeId}</span>
                     </KeyValue>
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-ink-muted" aria-hidden>
-                      {showOthers ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                      <ChevronRight size={15} />
                     </span>
                   </div>
                 </button>
 
-                {showOthers && (
-                  <div id="other-officers" className="border-t border-line">
-                    <header className="panel-header">
-                      <h3 className="panel-title flex items-center gap-1.5">
-                        <Users size={13} className="text-ink-faint" aria-hidden />
-                        Other Officers
-                      </h3>
-                    </header>
-                    {others.length ? (
-                      <ul className="divide-y divide-line">
-                        {others.map((o) => (
-                          <li key={o.officerId}>
-                            <button
-                              type="button"
-                              onClick={() => handleSelect(o.officerId)}
-                              className={cn(
-                                'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
-                                'hover:bg-brand/5 focus-visible:bg-brand/5 focus-visible:outline-none',
-                              )}
-                            >
-                              <img
-                                src={o.photoUrl}
-                                alt=""
-                                className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-line"
-                                aria-hidden
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-semibold text-ink">{o.name}</span>
-                                <span className="block truncate text-2xs text-ink-faint">{o.designation}</span>
-                              </span>
-                              <ChevronRight size={15} className="shrink-0 text-ink-faint" aria-hidden />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="px-4 py-6 text-2xs text-ink-faint">No other officers available.</p>
-                    )}
-                  </div>
-                )}
               </section>
 
               {/* Officer statistics */}
