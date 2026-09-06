@@ -65,7 +65,7 @@ export const mockOfficers: OfficerProfile[] = [
   buildOfficer({
     officerId: 'OFF-02471',
     name: 'Insp. Anjali Deshmukh',
-    photoUrl: '/officer-profile.jpg',
+    photoUrl: '/officers/anjali-deshmukh.jpg',
     policeId: 'GJ-02471',
     department: DEPARTMENT,
     designation: 'Inspector',
@@ -101,12 +101,12 @@ export const mockOfficers: OfficerProfile[] = [
   }),
   buildOfficer({
     officerId: 'OFF-03318',
-    name: 'Insp. Priya Sharma',
+    name: 'SI Priya Sharma',
     photoUrl: '/officers/priya-sharma.jpg',
     policeId: 'GJ-03318',
     department: DEPARTMENT,
-    designation: 'Inspector',
-    position: 'Senior Officer',
+    designation: 'Sub-Inspector',
+    position: 'Junior Officer',
     plates: ['GJ01KL2277', 'GJ27NB9014', 'GJ05DC7742', 'MH02RS4108', 'GJ16TY6390', 'GJ11QA5528'],
     challans: [
       { plate: 'GJ01KL2277', amount: 3000, amountPaid: 3000, status: 'PAID' },
@@ -126,7 +126,7 @@ export const mockOfficers: OfficerProfile[] = [
     policeId: 'GJ-04192',
     department: DEPARTMENT,
     designation: 'Sub-Inspector',
-    position: 'Police Officer',
+    position: 'Junior Officer',
     plates: ['GJ02MN5588', 'GJ21CV1190', 'MH14KD7788', 'GJ08HP3160'],
     challans: [
       { plate: 'GJ02MN5588', amount: 1000, amountPaid: 1000, status: 'PAID' },
@@ -138,12 +138,12 @@ export const mockOfficers: OfficerProfile[] = [
   }),
   buildOfficer({
     officerId: 'OFF-05127',
-    name: 'Insp. Amit Kumar',
+    name: 'ASI Amit Kumar',
     photoUrl: '/officers/amit-kumar.jpg',
     policeId: 'GJ-05127',
     department: DEPARTMENT,
-    designation: 'Inspector',
-    position: 'Senior Officer',
+    designation: 'Assistant Sub-Inspector',
+    position: 'Junior Officer',
     plates: ['GJ04FG8821', 'GJ13ZP3376', 'RJ09LM2204', 'GJ18UV7719', 'GJ06EK4462', 'GJ23WX1085', 'MH31JN6603'],
     challans: [
       { plate: 'GJ04FG8821', amount: 2500, amountPaid: 2500, status: 'PAID' },
@@ -159,12 +159,12 @@ export const mockOfficers: OfficerProfile[] = [
   }),
   buildOfficer({
     officerId: 'OFF-06044',
-    name: 'SI Neha Joshi',
+    name: 'ASI Neha Joshi',
     photoUrl: '/officers/neha-joshi.jpg',
     policeId: 'GJ-06044',
     department: DEPARTMENT,
-    designation: 'Sub-Inspector',
-    position: 'Police Officer',
+    designation: 'Assistant Sub-Inspector',
+    position: 'Junior Officer',
     plates: ['GJ10BQ3341', 'GJ15SD9962', 'GJ01YH5507'],
     challans: [
       { plate: 'GJ10BQ3341', amount: 1000, amountPaid: 1000, status: 'PAID' },
@@ -175,12 +175,12 @@ export const mockOfficers: OfficerProfile[] = [
   }),
   buildOfficer({
     officerId: 'OFF-07310',
-    name: 'Insp. Vikram Singh',
+    name: 'HC Vikram Singh',
     photoUrl: '/officers/vikram-singh.jpg',
     policeId: 'GJ-07310',
     department: DEPARTMENT,
-    designation: 'Inspector',
-    position: 'Senior Officer',
+    designation: 'Head Constable',
+    position: 'Junior Officer',
     plates: ['GJ03TR6648', 'GJ07MG2295', 'GJ12AC8830', 'MH04PD1177', 'GJ19FS4423'],
     challans: [
       { plate: 'GJ03TR6648', amount: 5000, amountPaid: 5000, status: 'PAID' },
