@@ -9,7 +9,7 @@ interface OfficerContextValue {
   current: OfficerProfile | null;
   /** The officer whose profile is currently being viewed in the Profile section. */
   active: OfficerProfile | null;
-  /** Officers other than the active one (for the selection list). */
+  /** Officers other than the signed-in Senior Officer (for the selection list). */
   others: OfficerProfile[];
   loading: boolean;
   error: string | null;
@@ -64,7 +64,7 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
       officers,
       current,
       active,
-      others: officers.filter((o) => o.officerId !== activeId),
+      others: officers.filter((o) => o.officerId !== currentId),
       loading,
       error,
       selectOfficer,
