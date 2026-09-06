@@ -33,7 +33,7 @@ export function Header({
   const navigate = useNavigate();
   const { counts } = useAlerts();
   const { connection } = useLiveEvents();
-  const { active: officer } = useOfficer();
+  const { current: officer } = useOfficer();
   const [quick, setQuick] = useState('');
 
   const submitQuick = (e: React.FormEvent) => {

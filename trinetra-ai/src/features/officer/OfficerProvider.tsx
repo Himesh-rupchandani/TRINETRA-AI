@@ -5,7 +5,9 @@ import { officerService } from '@/services/officerService';
 interface OfficerContextValue {
   /** Every officer available for selection. */
   officers: OfficerProfile[];
-  /** The officer whose profile is currently active across the app. */
+  /** The officer signed into the control room (shown in header/sidebar). */
+  current: OfficerProfile | null;
+  /** The officer whose profile is currently being viewed in the Profile section. */
   active: OfficerProfile | null;
   /** Officers other than the active one (for the selection list). */
   others: OfficerProfile[];
@@ -23,6 +25,7 @@ const OfficerContext = createContext<OfficerContextValue | null>(null);
  */
 export function OfficerProvider({ children }: { children: ReactNode }) {
   const [officers, setOfficers] = useState<OfficerProfile[]>([]);
+  const [currentId, setCurrentId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +40,7 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const roster = list.some((o) => o.officerId === current.officerId) ? list : [current, ...list];
         setOfficers(roster);
+        setCurrentId(current.officerId);
         setActiveId((prev) => (prev && roster.some((o) => o.officerId === prev) ? prev : current.officerId));
       })
       .catch((e: unknown) => {
@@ -55,8 +59,10 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<OfficerContextValue>(() => {
     const active = officers.find((o) => o.officerId === activeId) ?? null;
+    const current = officers.find((o) => o.officerId === currentId) ?? null;
     return {
       officers,
+      current,
       active,
       others: officers.filter((o) => o.officerId !== activeId),
       loading,
@@ -64,7 +70,7 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
       selectOfficer,
       refresh,
     };
-  }, [officers, activeId, loading, error, selectOfficer, refresh]);
+  }, [officers, activeId, currentId, loading, error, selectOfficer, refresh]);
 
   return <OfficerContext.Provider value={value}>{children}</OfficerContext.Provider>;
 }

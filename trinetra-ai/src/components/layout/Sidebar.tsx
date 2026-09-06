@@ -61,7 +61,7 @@ export function Sidebar({
   collapsed: boolean;
 }) {
   const { counts } = useAlerts();
-  const { active: officer } = useOfficer();
+  const { current: officer } = useOfficer();
   const navigate = useNavigate();
 
   return (
