@@ -12,6 +12,8 @@ Stream capture base (spec §8, §10, §14).
 from __future__ import annotations
 
 import logging
+import os
+import threading
 import time
 from typing import Optional
 
@@ -19,6 +21,7 @@ import cv2
 import numpy as np
 
 from .frame_packet import CaptureState, FramePacket
+from .sentinel_catalogue import redact_text, redact_url
 
 logger = logging.getLogger("cv_engine.capture")
 
@@ -27,6 +30,11 @@ PTS_ROLLBACK_MS = 500.0     # PTS moved backwards -> stream loop / reset
 PTS_GAP_MS = 5000.0         # PTS jumped forward -> stream gap
 MAX_CONSECUTIVE_FAILS = 15  # sustained read failures -> needs reconnect
 DEGRADED_AFTER_FAILS = 3
+
+# OpenCV reads OPENCV_FFMPEG_CAPTURE_OPTIONS while it constructs a capture.
+# The variable is process-global, so serialize only those short construction
+# windows; frame reads/inference remain concurrent across cameras.
+_FFMPEG_OPEN_LOCK = threading.Lock()
 
 
 class StreamCaptureBase:
@@ -66,7 +74,7 @@ class StreamCaptureBase:
 
     # -- connection -----------------------------------------------------------
     def _capture_kwargs(self) -> dict:
-        """Override in subclasses to set protocol-specific FFmpeg options."""
+        """Override in subclasses to return protocol-specific FFmpeg options."""
         return {}
 
     def open(self) -> bool:
@@ -75,20 +83,33 @@ class StreamCaptureBase:
         self.close_capture_object()
 
         try:
-            kwargs = self._capture_kwargs()
-            if kwargs:
-                self.cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG, kwargs)
-            else:
-                self.cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+            # Python OpenCV's third VideoCapture argument is a sequence of
+            # numeric CAP_PROP values, not an FFmpeg option dict. Feed protocol
+            # options through OpenCV's documented FFmpeg environment variable
+            # instead, and restore the caller's process setting immediately.
+            options = self._capture_kwargs()
+            with _FFMPEG_OPEN_LOCK:
+                previous_options = os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS")
+                try:
+                    if options:
+                        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "|".join(
+                            f"{key};{value}" for key, value in options.items()
+                        )
+                    self.cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+                finally:
+                    if previous_options is None:
+                        os.environ.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
+                    else:
+                        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = previous_options
         except Exception as exc:
             self.state = CaptureState.OFFLINE
-            self.last_error = f"capture open raised: {exc}"
+            self.last_error = f"capture open raised: {redact_text(exc)}"
             logger.warning("[%s] %s", self.camera_id, self.last_error)
             return False
 
         if self.cap is None or not self.cap.isOpened():
             self.state = CaptureState.OFFLINE
-            self.last_error = f"cannot open {self.source_type.upper()} stream: {self.url}"
+            self.last_error = f"cannot open {self.source_type.upper()} stream: {redact_url(self.url)}"
             logger.warning("[%s] %s", self.camera_id, self.last_error)
             return False
 
@@ -112,7 +133,7 @@ class StreamCaptureBase:
         self._pos_msec_reliable = False
         self._reads_since_open = 1  # validation frame
         self._prev_thumb = None
-        logger.info("[%s] %s connected: %s", self.camera_id, self.source_type.upper(), self.url)
+        logger.info("[%s] %s connected: %s", self.camera_id, self.source_type.upper(), redact_url(self.url))
         return True
 
     def close_capture_object(self) -> None:
@@ -196,7 +217,7 @@ class StreamCaptureBase:
         try:
             return self.cap.read()
         except Exception as exc:
-            logger.warning("[%s] cap.read() raised: %s", self.camera_id, exc)
+            logger.warning("[%s] cap.read() raised: %s", self.camera_id, redact_text(exc))
             return False, None
 
     def read_packet(self) -> Optional[FramePacket]:

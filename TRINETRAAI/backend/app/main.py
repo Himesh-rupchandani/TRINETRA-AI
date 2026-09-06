@@ -12,8 +12,11 @@ if __name__ == "__main__" and not __package__:
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from fastapi import FastAPI, Depends, APIRouter
+from fastapi import FastAPI, Depends, APIRouter, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -24,6 +27,16 @@ from .database.models import Camera
 from .database.schemas import HealthResponse
 from .camera.manager import camera_manager
 from .camera.live_source import sync_live_camera
+from .services.sentinel_catalogue_service import sync_sentinel_catalogue
+from .services.sentinel_stream_service import (
+    can_decode_for_detection,
+    credentials_configured,
+    has_embedded_credentials,
+    redact,
+    redact_text,
+    resolve_ingest_source,
+    resolve_ingest_stream_type,
+)
 from .api.cameras import router as cameras_router
 from .api.watchlist import router as watchlist_router
 from .api.alerts import router as alerts_router
@@ -49,11 +62,49 @@ async def lifespan(app: FastAPI):
     # register existing cameras into CameraManager
     db = SessionLocal()
     try:
+        # A fresh real database must obtain its camera directory from the
+        # authorised source instead of showing four demo placeholders. The
+        # sync itself attaches credentials only to the exact configured
+        # Sentinel host and retains only credential-free references.
+        if not settings.DEMO_MODE and settings.SENTINEL_AUTO_SYNC:
+            if credentials_configured():
+                result = sync_sentinel_catalogue(db)
+                logger.info(
+                    "Sentinel startup catalogue sync: %s (%s camera(s) updated; %s total).",
+                    result.get("status", "unknown"),
+                    result.get("synced_count", 0),
+                    result.get("total_cameras", 0),
+                )
+            else:
+                logger.warning(
+                    "Live mode Sentinel startup sync skipped: server-side Sentinel credentials are not configured."
+                )
+
         try:
             sync_live_camera(db)
         except Exception as e:
-            logger.error(f"Error syncing live camera source: {e}")
+            logger.error("Error syncing live camera source: %s", redact_text(e))
+
         cameras = db.query(Camera).all()
+        # Older deployments may have persisted a full signed/authenticated URL
+        # before secure connection-time resolution existed. Remove it before
+        # any API/manager path can inspect the record. Sentinel/live sources
+        # remain connectable through server environment configuration; another
+        # legacy source must be reconfigured through approved secret storage.
+        scrubbed = 0
+        for cam in cameras:
+            if has_embedded_credentials(cam.stream_url):
+                cam.stream_url = redact(cam.stream_url)
+                scrubbed += 1
+                logger.warning(
+                    "[%s] Removed a legacy embedded stream credential from the camera registry; "
+                    "configure its authorized ingest server-side before starting it.",
+                    cam.camera_id,
+                )
+        if scrubbed:
+            db.commit()
+            logger.info("Scrubbed %d legacy credential-bearing camera reference(s).", scrubbed)
+
         logger.info(f"Registering {len(cameras)} CCTV cameras into CameraManager...")
         for cam in cameras:
             # Resident ingest workers are for REAL network cameras only
@@ -63,15 +114,21 @@ async def lifespan(app: FastAPI):
                 settings.AUTO_START_CAMERAS
                 and (cam.stream_url or "").strip() != ""
                 and (cam.stream_type or "").lower() != "file"
+                and can_decode_for_detection(cam.camera_id, cam.stream_type)
             )
+            # Resolve authentication only inside the backend process. The DB
+            # keeps a credential-free source reference, while OpenCV receives
+            # the authorized URL immediately before it connects.
+            source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
+            source_type = resolve_ingest_stream_type(cam.camera_id, cam.stream_url, cam.stream_type)
             camera_manager.add_camera(
                 camera_id=cam.camera_id,
-                source=cam.stream_url,
-                source_type=cam.stream_type,
+                source=source,
+                source_type=source_type,
                 auto_start=auto_start,
             )
     except Exception as e:
-        logger.error(f"Error initializing cameras from DB: {e}")
+        logger.error("Error initializing cameras from DB: %s", redact_text(e))
     finally:
         db.close()
 
@@ -95,6 +152,41 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+
+# Validation errors are public API responses. FastAPI/Pydantic normally echo
+# invalid field input, so scrub secret-shaped request fields before serializing
+# them. This protects malformed camera requests too (the endpoint-level URL
+# check runs only after payload validation has succeeded).
+_SENSITIVE_REQUEST_KEYS = {
+    "access_token", "api_key", "auth", "authorization", "credential", "key",
+    "password", "passwd", "secret", "signature", "sig", "token",
+}
+
+
+def _safe_validation_value(value, field_name: str = ""):
+    if field_name.lower() in _SENSITIVE_REQUEST_KEYS:
+        return "***"
+    if isinstance(value, str):
+        return redact(value) if "://" in value else redact_text(value)
+    if isinstance(value, dict):
+        return {str(key): _safe_validation_value(item, str(key)) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_safe_validation_value(item, field_name) for item in value]
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_request_validation_error(_request: Request, exc: RequestValidationError):
+    safe_errors = []
+    for error in exc.errors():
+        encoded = jsonable_encoder(error)
+        if "input" in encoded:
+            encoded["input"] = _safe_validation_value(encoded["input"])
+        if isinstance(encoded.get("msg"), str):
+            encoded["msg"] = redact_text(encoded["msg"])
+        safe_errors.append(encoded)
+    return JSONResponse(status_code=422, content={"detail": safe_errors})
+
 
 # CORS Middleware Configuration
 app.add_middleware(

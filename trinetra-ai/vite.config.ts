@@ -8,8 +8,9 @@ import path from 'node:path';
 //
 // The Sentinel origin and credentials live in NON-VITE_ variables so they are
 // resolved by the dev server / reverse proxy and never compiled into the
-// public bundle. loadEnv() reads them from trinetra-ai/.env (or the real
-// shell environment, which wins); only VITE_-prefixed variables ever reach
+// public bundle. Server-only values must be supplied through ignored
+// trinetra-ai/.env.local (or the real shell environment, which wins); only
+// VITE_-prefixed variables ever reach
 // the browser. Proxying keeps the app same-origin: no mixed-content block
 // when the UI is served over HTTPS, no CORS preflight failures, and the
 // Sentinel gateway still authenticates every connection (integrator guide):
@@ -32,7 +33,7 @@ function sentinelProxy(env: Record<string, string | undefined>): ProxyOptions {
     // eslint-disable-next-line no-console
     console.warn(
       '[vite] Sentinel WHEP credentials missing — the gateway requires them. ' +
-        'Set SENTINEL_EMAIL and SENTINEL_PASSWORD in trinetra-ai/.env (server-side only, no VITE_ prefix).',
+        'Set SENTINEL_EMAIL and SENTINEL_PASSWORD in ignored trinetra-ai/.env.local (server-side only, no VITE_ prefix).',
     );
   }
 
@@ -71,13 +72,18 @@ function sentinelProxy(env: Record<string, string | undefined>): ProxyOptions {
 }
 
 export default defineConfig(({ mode }) => {
-  // Read the NON-VITE_ server-side Sentinel vars from trinetra-ai/.env, with
-  // real shell environment variables taking precedence over the file.
+  // Read env files and shell values; Sentinel secrets are documented for the
+  // ignored .env.local, never browser-exposed VITE_ configuration.
   const env: Record<string, string | undefined> = {
     ...loadEnv(mode, process.cwd(), ''),
     ...process.env,
   };
   const proxy = sentinelProxy(env);
+  // These are deliberately non-VITE_ server settings. `loadEnv` is required
+  // here so values kept in ignored .env.local work just like shell exports;
+  // reading process.env alone skips Vite's local environment files.
+  const backendOrigin = env.BACKEND_ORIGIN?.trim();
+  const cvFeedOrigin = env.CV_FEED_ORIGIN?.trim() || 'http://localhost:8555';
 
   return {
     plugins: [react()],
@@ -94,14 +100,14 @@ export default defineConfig(({ mode }) => {
         '/sentinel': proxy,
         // CV engine's annotated MJPEG preview (live detection boxes).
         '/cvfeed': {
-          target: process.env.CV_FEED_ORIGIN ?? 'http://localhost:8555',
+          target: cvFeedOrigin,
           changeOrigin: true,
           secure: false,
         },
-        ...(mode === 'development' && process.env.BACKEND_ORIGIN
+        ...(mode === 'development' && backendOrigin
           ? {
               '/api': {
-                target: process.env.BACKEND_ORIGIN,
+                target: backendOrigin,
                 changeOrigin: true,
                 secure: false,
                 // Also proxy WebSocket upgrades (/api/ws/events) when the
@@ -119,16 +125,16 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/sentinel': proxy,
         '/cvfeed': {
-          target: process.env.CV_FEED_ORIGIN ?? 'http://localhost:8555',
+          target: cvFeedOrigin,
           changeOrigin: true,
           secure: false,
         },
         // Serve the verified production build against a real backend: same-origin
         // /api so the browser never needs to know where the API lives.
-        ...(process.env.BACKEND_ORIGIN
+        ...(backendOrigin
           ? {
               '/api': {
-                target: process.env.BACKEND_ORIGIN,
+                target: backendOrigin,
                 changeOrigin: true,
                 ws: true,
               },

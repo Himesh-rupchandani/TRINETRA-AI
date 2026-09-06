@@ -21,20 +21,25 @@ from sqlalchemy import func
 from ..core.config import settings
 from ..database.models import Camera
 from ..camera.manager import camera_manager
+from .sentinel_stream_service import credentials_configured, is_sentinel_camera, redact, redact_text
 
 logger = logging.getLogger("trinetra")
 
 
+def _catalogue_auth(url: str) -> Optional[httpx.BasicAuth]:
+    """Return server-side Basic auth only for an approved Sentinel host.
+
+    ``catalogue_url`` can be supplied through an internal API, so credentials
+    must never be attached based on a substring or sent to an arbitrary URL.
+    """
+    if not (credentials_configured() and is_sentinel_camera(url)):
+        return None
+    return httpx.BasicAuth(settings.SENTINEL_EMAIL.strip(), settings.SENTINEL_PASSWORD.strip())
+
+
 def _sanitize_url(url: str) -> str:
-    """Strips credentials or passwords from URLs if present."""
-    if not url:
-        return ""
-    # Example: rtsp://user:pass@host:port/path -> rtsp://host:port/path
-    if "@" in url and "://" in url:
-        scheme, rest = url.split("://", 1)
-        _, host_path = rest.split("@", 1)
-        return f"{scheme}://{host_path}"
-    return url
+    """Keep only a credential-free registry reference for a catalogue URL."""
+    return redact(url)
 
 
 def normalize_sentinel_camera(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -128,9 +133,17 @@ def sync_sentinel_catalogue(
         fetch_success = True
     else:
         try:
-            logger.info(f"[SENTINEL SYNC] Fetching camera catalogue from {url}...")
-            with httpx.Client(timeout=2.0, follow_redirects=True) as client:
-                resp = client.get(url)
+            auth = _catalogue_auth(url)
+            logger.info(
+                "[SENTINEL SYNC] Fetching camera catalogue from %s%s...",
+                redact(url),
+                " with approved server-side authentication" if auth is not None else "",
+            )
+            # Do not follow redirects while credentials are attached. A caller
+            # can only cause the configured credentials to go to an exact
+            # approved Sentinel host, never to a redirect destination.
+            with httpx.Client(timeout=5.0, follow_redirects=False) as client:
+                resp = client.get(url, auth=auth)
                 if resp.status_code == 200:
                     data = resp.json()
                     if isinstance(data, list):
@@ -143,8 +156,8 @@ def sync_sentinel_catalogue(
                     error_detail = f"Sentinel returned HTTP {resp.status_code}"
                     logger.warning(f"[SENTINEL SYNC] {error_detail}")
         except Exception as exc:
-            error_detail = f"Catalogue fetch failed: {exc}"
-            logger.warning(f"[SENTINEL SYNC] {error_detail}. Proceeding with existing camera registry.")
+            error_detail = f"Catalogue fetch failed: {redact_text(exc)}"
+            logger.warning("[SENTINEL SYNC] %s. Proceeding with existing camera registry.", error_detail)
 
     # If fetch failed and we have no payload, fall back to existing database cameras
     if not fetch_success and not camera_entries:
@@ -154,7 +167,7 @@ def sync_sentinel_catalogue(
             "message": f"{error_detail} (using {len(existing_cams)} existing registry cameras)",
             "synced_count": 0,
             "total_cameras": len(existing_cams),
-            "source_url": url,
+            "source_url": redact(url),
             "cameras": [
                 {
                     "id": c.camera_id.lower(),
@@ -168,7 +181,7 @@ def sync_sentinel_catalogue(
                     "width": c.width or 1920,
                     "height": c.height or 1080,
                     "stream_type": c.stream_type.upper(),
-                    "stream_url": c.stream_url,
+                    "stream_url": redact(c.stream_url),
                 }
                 for c in existing_cams
             ],
@@ -223,7 +236,7 @@ def sync_sentinel_catalogue(
                 auto_start=False,
             )
         except Exception as cm_err:
-            logger.debug(f"CameraManager registration for {cam_id}: {cm_err}")
+            logger.debug("CameraManager registration for %s: %s", cam_id, redact_text(cm_err))
 
     db.commit()
     for c in upserted:
@@ -236,7 +249,7 @@ def sync_sentinel_catalogue(
         "message": f"Successfully synchronized {len(upserted)} cameras from Sentinel catalogue.",
         "synced_count": len(upserted),
         "total_cameras": db.query(Camera).count(),
-        "source_url": url,
+        "source_url": redact(url),
         "cameras": [
             {
                 "id": c.camera_id.lower(),
@@ -250,7 +263,7 @@ def sync_sentinel_catalogue(
                 "width": c.width or 1920,
                 "height": c.height or 1080,
                 "stream_type": c.stream_type.upper(),
-                "stream_url": c.stream_url,
+                "stream_url": redact(c.stream_url),
             }
             for c in upserted
         ],

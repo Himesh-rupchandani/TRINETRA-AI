@@ -151,7 +151,7 @@ def test_select_test_subset_covers_diversity():
 
 def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
     from config.settings import Settings
-    from capture.sentinel_catalogue import sentinel_stream_urls, redact_url
+    from capture.sentinel_catalogue import redact_text, sentinel_stream_urls, redact_url
 
     s = Settings.from_env()
     monkeypatch.setattr(s, "sentinel_email", "officer@gujaratpolice.gov.in", raising=False)
@@ -161,6 +161,9 @@ def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
     assert urls["rtsp"].endswith("@103.250.160.189:8554/stream/cam04")
     assert urls["hls"] == "https://cctv.corp8.cloud/cam04/index.m3u8"
     assert redact_url(urls["rtsp"]) == "rtsp://103.250.160.189:8554/stream/cam04"
+    private = "https://operator:top-secret@example.test/live.m3u8?token=abc123#fragment"
+    assert redact_url(private) == "https://example.test/live.m3u8"
+    assert "top-secret" not in redact_text(f"decoder failed for {private}")
 
     # without credentials: HLS only, no authenticated URL is produced
     monkeypatch.setattr(s, "sentinel_email", "", raising=False)

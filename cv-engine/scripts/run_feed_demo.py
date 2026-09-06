@@ -40,7 +40,7 @@ import cv2
 import numpy as np
 
 from capture.frame_packet import CaptureState, FramePacket
-from capture.sentinel_catalogue import Camera
+from capture.sentinel_catalogue import Camera, redact_text, redact_url
 from config.settings import Settings
 from detection.vehicle_detector import VehicleDetector
 from evidence.evidence_writer import EvidenceWriter
@@ -164,15 +164,22 @@ _ONDEMAND_DETECTOR_LOCK = threading.Lock()
 
 
 def _ondemand_detector(settings):
-    """One shared cheap-settings detector for all on-demand views."""
+    """One shared configured detector for on-demand annotated views."""
     global _ONDEMAND_DETECTOR
     with _ONDEMAND_DETECTOR_LOCK:
         if _ONDEMAND_DETECTOR is None:
             _ONDEMAND_DETECTOR = VehicleDetector(
                 model_path=settings.model_path,
-                conf_threshold=0.35,
-                imgsz=416,
-                device="cpu",
+                conf_threshold=settings.conf_threshold,
+                imgsz=settings.inference_imgsz,
+                device=settings.device,
+                include_bicycles=settings.include_bicycles,
+                nms_iou_threshold=settings.nms_iou_threshold,
+                duplicate_iou_threshold=settings.duplicate_iou_threshold,
+                max_detections=settings.max_detections,
+                tile_grid=settings.tile_grid,
+                tile_overlap=settings.tile_overlap,
+                tile_min_frame_edge=settings.tile_min_frame_edge,
             )
         return _ONDEMAND_DETECTOR
 
@@ -224,7 +231,7 @@ class OndemandWatchManager:
             if stype in ("rtsp", "hls"):
                 return (url, False)  # real network camera
         except Exception as exc:
-            logger.warning("[ondemand:%s] registry lookup failed: %s", camera_id, exc)
+            logger.warning("[ondemand:%s] registry lookup failed: %s", camera_id, redact_text(exc))
         return None
 
     def exists(self, camera_id: str) -> bool:
@@ -261,7 +268,7 @@ class OndemandWatchManager:
                                         name=f"ondemand-{camera_id}", daemon=True)
             self._watches[camera_id] = w
             w.thread.start()
-        logger.info("[ondemand:%s] live AI view started: %s", camera_id, source)
+        logger.info("[ondemand:%s] live AI view started: %s", camera_id, redact_url(source))
         return True
 
     def release(self, camera_id: str) -> None:
@@ -282,8 +289,9 @@ class OndemandWatchManager:
             min_hits=self.settings.track_min_hits,
             iou_threshold=self.settings.track_iou_threshold,
         )
-        pts = 0.0
         idx = 0
+        last_pts = None
+        opened_mono = time.monotonic()
         try:
             detector = _ondemand_detector(self.settings)
             while not w.stop.is_set():
@@ -293,14 +301,30 @@ class OndemandWatchManager:
                         cap.release()
                     except Exception:
                         pass
-                    cap = cv2.VideoCapture(w.source)  # loop the clip (reopen)
+                    cap = cv2.VideoCapture(w.source)  # loop/reconnect the source
+                    tracker.reset()  # a reopened feed is a new temporal scene
+                    last_pts = None
+                    opened_mono = time.monotonic()
+                    time.sleep(0.2)
                     continue
                 idx += 1
-                pts += 40.0
-                if idx % 3 != 0:  # light CPU budget for on-demand views
-                    time.sleep(0.01)
-                    continue
-                detections = detector.detect(frame, camera_id=w.camera_id, pts_ms=pts)
+                try:
+                    source_pts = float(cap.get(cv2.CAP_PROP_POS_MSEC))
+                except Exception:
+                    source_pts = 0.0
+                pts = source_pts if source_pts > 0.0 else (time.monotonic() - opened_mono) * 1000.0
+                if last_pts is not None and (pts < last_pts - 500.0 or pts - last_pts > 5000.0):
+                    tracker.reset()
+                last_pts = pts
+
+                # Inference is paced for the optional demo server, but tracking
+                # and annotation continue on every decoded frame. This avoids a
+                # static/flickering box between model passes.
+                detections = (
+                    detector.detect(frame, camera_id=w.camera_id, pts_ms=pts)
+                    if idx % 3 == 0
+                    else []
+                )
                 tracks = tracker.update(detections, pts_ms=pts)
                 annotated = annotate_green(frame, w.camera_id, tracks, demo=w.is_file)
                 ok2, buf = cv2.imencode(".jpg", annotated,
@@ -309,7 +333,7 @@ class OndemandWatchManager:
                     self.store.publish(w.camera_id, buf.tobytes())
                 time.sleep(0.02)
         except Exception as exc:
-            logger.warning("[ondemand:%s] watch failed: %s", w.camera_id, exc)
+            logger.warning("[ondemand:%s] watch failed: %s", w.camera_id, redact_text(exc))
         finally:
             try:
                 cap.release()
@@ -446,6 +470,13 @@ def run_feed(camera_id: str, cfg: dict, settings: Settings, annotate_feed: bool)
         conf_threshold=settings.conf_threshold,
         imgsz=settings.inference_imgsz,
         device=settings.device,
+        include_bicycles=settings.include_bicycles,
+        nms_iou_threshold=settings.nms_iou_threshold,
+        duplicate_iou_threshold=settings.duplicate_iou_threshold,
+        max_detections=settings.max_detections,
+        tile_grid=settings.tile_grid,
+        tile_overlap=settings.tile_overlap,
+        tile_min_frame_edge=settings.tile_min_frame_edge,
     )
     backend = BackendClient(
         base_url=settings.backend_base_url,

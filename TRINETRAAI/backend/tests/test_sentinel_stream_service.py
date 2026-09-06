@@ -58,6 +58,16 @@ def test_redact_strips_credentials(creds):
     assert red == "rtsp://103.250.160.189:8554/stream/cam04"
 
 
+def test_redact_strips_signed_query_and_scrubs_exception_text(creds):
+    private = "https://operator:top-secret@example.test/live.m3u8?token=abc123&expires=999#frag"
+    red = svc.redact(private)
+    assert red == "https://example.test/live.m3u8"
+    assert "top-secret" not in red and "token" not in red and "abc123" not in red
+    assert svc.has_embedded_credentials(private)
+    assert svc.has_embedded_credentials("https://example.test/live.m3u8?X-Amz-Signature=abc")
+    assert "top-secret" not in svc.redact_text(f"decoder failed for {private}")
+
+
 def test_hls_and_whep_never_carry_credentials(creds):
     assert svc.get_hls_url("cam04") == "https://cctv.corp8.cloud/cam04/index.m3u8"
     assert svc.get_whep_path("cam04") == "/sentinel/stream/cam04/whep"
@@ -91,7 +101,33 @@ def test_resolve_ingest_source_ignores_non_sentinel_urls(creds):
     assert svc.resolve_ingest_source("CAM01", local, "file") == local
 
 
+def test_live_slot_keeps_private_ingest_only_in_environment(monkeypatch):
+    private = "rtsp://operator:top-secret@camera.example:8554/stream/live?token=abc123"
+    monkeypatch.setattr(settings, "LIVE_CAMERA_ID", "CAMLIVE", raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_STREAM_TYPE", "webrtc", raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_STREAM_URL", "https://viewer.example/live/whep?token=viewer", raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_INGEST_URL", private, raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_INGEST_TYPE", "rtsp", raising=False)
+
+    assert svc.can_decode_for_detection("camlive", "webrtc")
+    assert svc.resolve_ingest_source("CAMLIVE", "https://viewer.example/live/whep", "webrtc") == private
+    assert svc.resolve_ingest_stream_type("CAMLIVE", "https://viewer.example/live/whep", "webrtc") == "rtsp"
+    assert "top-secret" not in svc.redact(private)
+    assert svc.redact_text("decoder rejected token abc123") == "decoder rejected token ***"
+
+
 def test_is_sentinel_camera(creds):
     assert svc.is_sentinel_camera("https://cctv.corp8.cloud/cam04/index.m3u8")
+    assert not svc.is_sentinel_camera("https://example.test/path/103.250.160.189")
     assert not svc.is_sentinel_camera("/tmp/clip.mp4")
     assert not svc.is_sentinel_camera("")
+
+
+def test_whep_is_not_an_opencv_source_without_paired_ingest(monkeypatch):
+    monkeypatch.setattr(settings, "LIVE_CAMERA_ID", "CAMLIVE", raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_STREAM_TYPE", "whep", raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_STREAM_URL", "https://viewer.example/whep", raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_INGEST_URL", "", raising=False)
+    monkeypatch.setattr(settings, "LIVE_CAMERA_INGEST_TYPE", "", raising=False)
+    assert not svc.can_decode_for_detection("CAMLIVE", "whep")
+    assert not svc.can_decode_for_detection("OTHER", "whep")

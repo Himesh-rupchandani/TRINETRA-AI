@@ -12,6 +12,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger("cv_engine.catalogue")
 
@@ -136,13 +137,37 @@ def sentinel_stream_urls(camera_id: str, settings) -> Dict[str, Optional[str]]:
 
 
 def redact_url(url: Optional[str]) -> Optional[str]:
-    """Strip userinfo for safe logging: rtsp://u:p@h/x -> rtsp://h/x."""
-    if not url or "://" not in url:
+    """Remove userinfo, signed query values and fragments before diagnostics."""
+    if not url:
         return url
-    scheme, rest = url.split("://", 1)
-    if "@" in rest:
-        rest = rest.split("@", 1)[1]
-    return f"{scheme}://{rest}"
+    raw = str(url).strip()
+    if "://" not in raw:
+        return raw
+    try:
+        parts = urlsplit(raw)
+        host = parts.hostname or parts.netloc.rsplit("@", 1)[-1]
+        try:
+            port = parts.port
+        except ValueError:
+            port = None
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        netloc = f"{host}:{port}" if port is not None else host
+        return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    except Exception:
+        scheme, rest = raw.split("://", 1)
+        return f"{scheme}://{rest.rsplit('@', 1)[-1].split('?', 1)[0].split('#', 1)[0]}"
+
+
+def redact_text(value: object) -> str:
+    """Best-effort scrubber for library exceptions that repeat an input URL."""
+    text = str(value or "")
+    return re.sub(
+        r"(?:rtsps?|https?|webrtc)://[^\s'\"<>]+",
+        lambda match: redact_url(match.group(0)) or "",
+        text,
+        flags=re.IGNORECASE,
+    )
 
 
 def parse_camera(raw: Dict[str, Any]) -> Optional[Camera]:
@@ -244,7 +269,7 @@ class SentinelCatalogue:
         try:
             resp = httpx.get(self.url, timeout=self.timeout_sec, follow_redirects=True)
         except Exception as exc:
-            self.last_error = f"catalogue request failed: {exc}"
+            self.last_error = f"catalogue request failed: {redact_text(exc)}"
             self.last_fetch_ok = False
             logger.warning("[CATALOGUE] %s", self.last_error)
             raise CatalogueError(self.last_error) from exc
@@ -278,7 +303,7 @@ class SentinelCatalogue:
         self._by_id = {c.camera_id.upper(): c for c in cameras}
         self.last_error = None
         self.last_fetch_ok = True
-        logger.info("[CATALOGUE] fetched %d cameras from %s", len(cameras), self.url)
+        logger.info("[CATALOGUE] fetched %d cameras from %s", len(cameras), redact_url(self.url))
         return cameras
 
     def load_payload(self, payload: Any) -> List[Camera]:
