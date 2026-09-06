@@ -12,6 +12,7 @@ import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { config } from '@/lib/config';
+import { useOfficer } from '@/features/officer/OfficerProvider';
 
 const CONNECTION_TONE: Record<string, string> = {
   LIVE: 'text-online',
@@ -32,6 +33,7 @@ export function Header({
   const navigate = useNavigate();
   const { counts } = useAlerts();
   const { connection } = useLiveEvents();
+  const { active: officer } = useOfficer();
   const [quick, setQuick] = useState('');
 
   const submitQuick = (e: React.FormEvent) => {
@@ -116,15 +118,29 @@ export function Header({
           )}
         </button>
 
-        <div className="hidden items-center gap-2.5 border-l border-line pl-3 xl:flex">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
-            <UserRound size={15} />
-          </span>
+        <button
+          type="button"
+          onClick={() => navigate('/profile')}
+          className="hidden items-center gap-2.5 border-l border-line pl-3 text-left xl:flex"
+          aria-label="Open officer profile"
+        >
+          {officer ? (
+            <img
+              src={officer.photoUrl}
+              alt=""
+              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-line"
+              aria-hidden
+            />
+          ) : (
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
+              <UserRound size={15} />
+            </span>
+          )}
           <div className="leading-tight">
-            <p className="text-xs font-semibold text-ink">System Operator</p>
-            <p className="text-2xs text-ink-faint">Control Center</p>
+            <p className="max-w-[160px] truncate text-xs font-semibold text-ink">{officer?.name ?? 'System Operator'}</p>
+            <p className="text-2xs text-ink-faint">{officer?.designation ?? 'Control Center'}</p>
           </div>
-        </div>
+        </button>
       </div>
     </header>
   );

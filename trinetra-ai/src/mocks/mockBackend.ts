@@ -25,7 +25,7 @@ import { mockCameras } from './cameras';
 import { mockEvents } from './events';
 import { mockAlerts } from './alerts';
 import { mockWatchlist, watchlistByPlate } from './watchlist';
-import { currentOfficerId, officerById } from './officer';
+import { currentOfficerId, mockOfficers, officerById } from './officer';
 import { buildMockHealth } from './health';
 import { haversineKm, minutesBetween, normalisePlate, sleep } from '@/lib/utils';
 import { config } from '@/lib/config';
@@ -310,6 +310,12 @@ export async function getOfficerProfile(id: string): Promise<OfficerProfile> {
   const officer = officerById(id);
   if (!officer) throw new Error(`Officer ${id} not found`);
   return officer;
+}
+
+/** Returns every officer available for selection in the Profile section. */
+export async function listOfficers(): Promise<OfficerProfile[]> {
+  await latency(120);
+  return mockOfficers;
 }
 
 /* --------------------------------- HEALTH API --------------------------------- */
