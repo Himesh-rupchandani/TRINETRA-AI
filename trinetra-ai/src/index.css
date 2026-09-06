@@ -9,6 +9,8 @@
 @layer base {
   :root {
     /* Light operational theme (always active — Night/Dark Mode removed) */
+    /* Hard opt-out of browser/OS auto-darkening (incl. fullscreen views). */
+    color-scheme: light;
     --surface-0: 243 246 250;
     --surface-1: 255 255 255;
     --surface-2: 248 250 253;
