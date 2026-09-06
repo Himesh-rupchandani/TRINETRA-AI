@@ -12,7 +12,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config } from '@/lib/config';
-import { useTheme } from '@/features/system/ThemeProvider';
+import { cn } from '@/lib/utils';
 import { cameraIcon, eventIcon, routeIcon } from './mapIcons';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
@@ -109,8 +109,7 @@ export function MapView({
   className,
   showCoverage = false,
 }: MapViewProps) {
-  const { theme } = useTheme();
-  const tiles = theme === 'dark' ? config.map.tiles.dark : config.map.tiles.light;
+  const tiles = config.map.tiles.light;
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],
@@ -123,7 +122,11 @@ export function MapView({
   }, [routeLine, cameras, events]);
 
   return (
-    <div className={className ?? 'h-full w-full'}>
+    // `isolate` creates a fresh stacking context so Leaflet's high z-index panes
+    // (tiles/markers/controls, z-index up to 1000) are confined to the map and
+    // never paint over the panel content above or below it. `overflow-hidden`
+    // additionally guarantees the map stays boxed inside its container.
+    <div className={cn('isolate overflow-hidden', className ?? 'h-full w-full')}>
       <MapContainer
         center={center}
         zoom={zoom}
@@ -134,13 +137,12 @@ export function MapView({
         attributionControl
       >
         <TileLayer
-          key={`base-${theme}`}
           url={tiles.base}
           attribution={config.map.tileAttribution}
           maxZoom={18}
           errorTileUrl={ERROR_TILE}
         />
-        <TileLayer key={`labels-${theme}`} url={tiles.labels} maxZoom={18} errorTileUrl={ERROR_TILE} />
+        <TileLayer url={tiles.labels} maxZoom={18} errorTileUrl={ERROR_TILE} />
         <ResizeGuard />
         <FitBounds points={fitPoints} enabled={fit} />
         <PanTo target={panTo} />
