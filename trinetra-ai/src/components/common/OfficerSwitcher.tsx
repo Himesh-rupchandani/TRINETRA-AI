@@ -91,7 +91,7 @@ export function OfficerSwitcher({
                       setCurrentOfficer(officer);
                       setOpen(false);
                       onSelected?.();
-                      navigate('/profile');
+                      navigate('/profile', { state: { officerId: officer.officerId } });
                     }}
                     className="flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition-colors hover:bg-surface-2"
                   >

@@ -1,14 +1,41 @@
+import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { BadgeCheck, Car, FileText, Receipt, TrendingUp, UserRound, Wallet } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Panel, AsyncBoundary, KeyValue } from '@/components/common/Panel';
 import { OfficerAvatar } from '@/components/common/OfficerAvatar';
 import { OfficerSwitcher } from '@/components/common/OfficerSwitcher';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { refreshOfficers, useOfficerState } from '@/hooks/useCurrentOfficer';
+import { refreshOfficers, setCurrentOfficer, useOfficerState } from '@/hooks/useCurrentOfficer';
 import { formatNumber, prettyPlate } from '@/lib/utils';
 
+/**
+ * Officer Profile.
+ *
+ * Opening this page from the sidebar shows the officer selection list first —
+ * only photo, name and rank. Picking an officer replaces the list with that
+ * officer's complete profile. Arriving here from the profile-area picker
+ * carries the chosen officer in the navigation state and skips straight to
+ * their details.
+ */
 export default function Profile() {
-  const { current: p, loading, error } = useOfficerState();
+  const { current, roster, loading, error } = useOfficerState();
+  const location = useLocation();
+  const requestedId = (location.state as { officerId?: string } | null)?.officerId ?? null;
+
+  // Re-entering the page (e.g. the sidebar "Profile" item) resets to the list.
+  // Derived during render — React's documented "reset state on prop change"
+  // pattern, which avoids a cascading effect render.
+  const [visit, setVisit] = useState({ key: location.key, selectedId: requestedId });
+  if (visit.key !== location.key) setVisit({ key: location.key, selectedId: requestedId });
+  const selectedId = visit.selectedId;
+  const selectOfficer = (id: string) => setVisit({ key: location.key, selectedId: id });
+
+  const byId = (id: string | null) =>
+    id ? (roster.find((o) => o.officerId === id) ?? (current?.officerId === id ? current : null)) : null;
+
+  const p = byId(selectedId);
+  const others = roster.filter((o) => o.officerId !== current?.officerId);
 
   return (
     <div className="flex h-full flex-col">
@@ -16,7 +43,7 @@ export default function Profile() {
         title="Officer Profile"
         icon={UserRound}
         tone="blue"
-        subtitle={p ? `${p.designation} · ${p.department}` : 'Loading your profile…'}
+        subtitle={p ? `${p.designation} · ${p.department}` : 'Select an officer'}
       />
 
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
@@ -26,16 +53,16 @@ export default function Profile() {
           onRetry={refreshOfficers}
           loadingLabel="Loading officer profile"
         >
-          {p && (
+          {p ? (
             <div className="flex flex-col gap-3 sm:gap-4">
-              {/* Officer identity — the photo also switches the active officer. */}
+              {/* Officer identity */}
               <section className="panel flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:gap-5">
                 <OfficerSwitcher
                   placement="bottom-start"
                   className="shrink-0"
                   buttonClassName="block rounded-full outline-none ring-brand/40 transition-shadow hover:ring-2 focus-visible:ring-2"
                 >
-                  <OfficerAvatar size={80} className="ring-2 ring-line" />
+                  <OfficerAvatar officer={p} size={80} className="ring-2 ring-line" />
                 </OfficerSwitcher>
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-ink-faint">
@@ -80,6 +107,36 @@ export default function Profile() {
                 )}
               </Panel>
             </div>
+          ) : (
+            /* Officer selection list — photo, name and rank only. */
+            <Panel title="Other Officers" icon={UserRound}>
+              {others.length ? (
+                <ul className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {others.map((officer) => (
+                    <li key={officer.officerId}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentOfficer(officer);
+                          selectOfficer(officer.officerId);
+                        }}
+                        className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface-1 p-3 text-left transition-colors hover:border-brand/25 hover:bg-surface-2"
+                      >
+                        <OfficerAvatar officer={officer} size={44} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold leading-tight text-ink">
+                            {officer.name}
+                          </span>
+                          <span className="block truncate text-2xs text-ink-faint">{officer.position}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-4 py-6 text-2xs text-ink-faint">No other officers available.</p>
+              )}
+            </Panel>
           )}
         </AsyncBoundary>
       </div>
