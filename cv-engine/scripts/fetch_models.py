@@ -29,6 +29,18 @@ def fetch_yolo(model_name: str) -> bool:
         model = YOLO(model_name)  # triggers official asset download if missing
         model.predict(np.zeros((320, 320, 3), dtype=np.uint8), verbose=False, imgsz=320)
         print(f"[OK] YOLO {model_name} ready in {time.time()-t0:.1f}s")
+        try:
+            from detection.model_paths import backup_original, ORIGINAL_VEHICLE
+            from pathlib import Path
+
+            src = Path(model_name)
+            if not src.is_file():
+                src = Path.cwd() / Path(model_name).name
+            if src.is_file():
+                backup_original(src, ORIGINAL_VEHICLE)
+                print(f"[OK] original backup at {ORIGINAL_VEHICLE}")
+        except Exception as exc:
+            print(f"[warn] could not snapshot original weights: {exc}")
         return True
     except Exception as exc:
         print(f"[FAIL] YOLO {model_name}: {exc}")

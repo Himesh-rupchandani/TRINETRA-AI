@@ -1,0 +1,12 @@
+# Fine-tuned TRINETRA vehicle detector (copy of datasets/vehicles/data.yaml template).
+# path is rewritten by auto_label.py to an absolute dataset root.
+path: ../datasets/vehicles
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: car
+  1: motorcycle
+  2: bus
+  3: truck
+  4: autorickshaw

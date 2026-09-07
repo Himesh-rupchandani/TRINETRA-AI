@@ -58,10 +58,17 @@ class Settings:
     backend_queue_size: int = 1000
 
     # --- Models / detection ----------------------------------------------
+    # Default name is the stock COCO YOLO11s. At load time the detector
+    # prefers models/trained/vehicles/best.pt when present so a fine-tune
+    # is picked up without rewriting callers. The original file is never
+    # overwritten (see detection/model_paths.py).
     model_path: str = "yolo11s.pt"
+    prefer_trained_model: bool = True
     conf_threshold: float = 0.35
-    inference_imgsz: int = 640
+    iou_threshold: float = 0.50     # NMS; 0.50 keeps overlapping vehicles in dense Gujarat traffic
+    inference_imgsz: int = 640      # live CPU default; uploaded / ANPR jobs should use 960
     device: str = "cpu"  # "cpu" | "cuda" | "0" ...
+    plate_model_path: str = ""      # empty -> models/trained/plates/best.pt if it exists
 
     # --- Capture / pacing -------------------------------------------------
     frame_skip: int = 1            # process every Nth frame (1 = every frame)
@@ -126,9 +133,12 @@ class Settings:
             backend_max_retries=_env_int("BACKEND_MAX_RETRIES", 3),
             backend_queue_size=_env_int("BACKEND_QUEUE_SIZE", 1000),
             model_path=_env_str("MODEL_PATH", "yolo11s.pt"),
+            prefer_trained_model=_env_bool("PREFER_TRAINED_MODEL", True),
             conf_threshold=_env_float("CONF_THRESHOLD", 0.35),
+            iou_threshold=_env_float("IOU_THRESHOLD", 0.50),
             inference_imgsz=_env_int("INFERENCE_IMGSZ", 640),
             device=_env_str("CV_DEVICE", "cpu"),
+            plate_model_path=_env_str("PLATE_MODEL_PATH", ""),
             frame_skip=_env_int("FRAME_SKIP", 1),
             process_interval_ms=_env_float("PROCESS_INTERVAL_MS", 0.0),
             rtsp_transport=_env_str("RTSP_TRANSPORT", "tcp"),

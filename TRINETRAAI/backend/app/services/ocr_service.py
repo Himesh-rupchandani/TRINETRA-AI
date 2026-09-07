@@ -188,7 +188,15 @@ class OcrService:
             return None
         min_conf = float(getattr(settings, "OCR_MIN_CONFIDENCE", 0.60))
         best: Optional[PlateReading] = None
-        for crop in extract_plate_crops(frame, bbox, vehicle_class):
+        try:
+            from .plate_detector import plate_crops as _plate_crops
+
+            crops = _plate_crops(frame, bbox, vehicle_class)
+        except Exception:
+            crops = extract_plate_crops(frame, bbox, vehicle_class)
+        if not crops:
+            crops = extract_plate_crops(frame, bbox, vehicle_class)
+        for crop in crops:
             if crop is None or crop.size == 0:
                 continue
             # Skip tiny crops: OCR on them only produces garbage.

@@ -173,6 +173,8 @@ def _ondemand_detector(settings):
                 conf_threshold=0.35,
                 imgsz=416,
                 device="cpu",
+                iou_threshold=getattr(settings, "iou_threshold", 0.50),
+                prefer_trained=getattr(settings, "prefer_trained_model", True),
             )
         return _ONDEMAND_DETECTOR
 
@@ -446,6 +448,8 @@ def run_feed(camera_id: str, cfg: dict, settings: Settings, annotate_feed: bool)
         conf_threshold=settings.conf_threshold,
         imgsz=settings.inference_imgsz,
         device=settings.device,
+        iou_threshold=getattr(settings, "iou_threshold", 0.50),
+        prefer_trained=getattr(settings, "prefer_trained_model", True),
     )
     backend = BackendClient(
         base_url=settings.backend_base_url,

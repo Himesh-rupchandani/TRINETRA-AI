@@ -30,7 +30,7 @@ def main():
     from config.settings import Settings
     from detection.vehicle_detector import VehicleDetector
     from anpr.ocr import OcrEngine
-    from anpr.plate_detector import extract_plate_candidates, preprocess_for_ocr
+    from anpr.plate_detector import plate_crops_for_vehicle, preprocess_for_ocr
     from anpr.normalizer import candidate_from_ocr_text, is_indian_plate_format
 
     settings = Settings.from_env()

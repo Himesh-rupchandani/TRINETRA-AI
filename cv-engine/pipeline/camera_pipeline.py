@@ -18,7 +18,7 @@ import numpy as np
 
 from anpr.confidence import PlateReading, classify_confidence, is_usable, ConfidenceTier
 from anpr.normalizer import candidate_from_ocr_text, plate_format_score
-from anpr.plate_detector import extract_plate_candidates, preprocess_for_ocr
+from anpr.plate_detector import plate_crops_for_vehicle, preprocess_for_ocr
 from anpr.plate_memory import PlateMemory
 from events.dedup import SightingDeduplicator
 from events.event_builder import build_event
@@ -186,10 +186,13 @@ class CameraPipeline:
         for track in candidates:
             if budget <= 0:
                 break
-            crops = extract_plate_candidates(self._current_frame, track.bbox, track.class_name)
+            crops = plate_crops_for_vehicle(self._current_frame, track.bbox, track.class_name)
             if not crops:
                 continue
+            # Prefer a detected plate crop (first) over the heuristic vehicle crop.
             crop = crops[0]
+            if crop.shape[1] < 20 or crop.shape[0] < 8:
+                continue  # too small to read — do not invent a plate
             prep = preprocess_for_ocr(crop)
             lines = self.ocr_engine.read(prep)
             self._last_ocr_pts = pts_ms

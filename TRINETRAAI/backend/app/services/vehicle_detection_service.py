@@ -32,7 +32,38 @@ from ..core.logging_config import logger
 
 # COCO class id -> label, restricted to road vehicles.
 VEHICLE_CLASS_IDS: Dict[int, str] = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
+VEHICLE_NAME_ALIASES = {
+    "motorbike": "motorcycle",
+    "bike": "motorcycle",
+    "scooter": "motorcycle",
+    "lorry": "truck",
+    "pickup": "truck",
+    "van": "truck",
+    "auto": "autorickshaw",
+    "auto-rickshaw": "autorickshaw",
+    "autorickshaw": "autorickshaw",
+    "rickshaw": "autorickshaw",
+    "three-wheeler": "autorickshaw",
+}
+VEHICLE_NAMES = {"car", "motorcycle", "bus", "truck", "autorickshaw"}
 GREEN = (0, 255, 0)  # BGR
+
+
+def _normalize_vehicle_name(name: Optional[str]) -> Optional[str]:
+    if not name:
+        return None
+    key = str(name).strip().lower().replace("_", "-").replace(" ", "-")
+    if key in VEHICLE_NAMES:
+        return key
+    return VEHICLE_NAME_ALIASES.get(key)
+
+
+def _backend_root() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _repo_root() -> str:
+    return os.path.abspath(os.path.join(_backend_root(), "..", ".."))
 
 
 @dataclass
@@ -56,6 +87,8 @@ class VehicleDetectionService:
         self._infer_lock = threading.Lock()
         self._disabled_reason: Optional[str] = None
         self._state_lock = threading.Lock()
+        self._coco_layout = True
+        self._class_filter: Optional[List[int]] = list(VEHICLE_CLASS_IDS.keys())
         # camera_id -> (frame counter, last detections, last inference ms)
         self._frame_counter: Dict[str, int] = {}
         self._last_detections: Dict[str, List[VehicleDetection]] = {}
@@ -67,13 +100,37 @@ class VehicleDetectionService:
         return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", True)) and self._disabled_reason is None
 
     def _resolve_model_path(self) -> str:
-        """Find the weights: configured path (relative to backend root) or bare name (auto-download)."""
+        """Find the weights without ever overwriting the original checkpoint.
+
+        Prefer a fine-tuned ``models/trained/vehicles/best.pt`` when
+        ``PREFER_TRAINED_MODEL`` is true; otherwise honour YOLO_MODEL_PATH,
+        then the original backup, then a stock ``yolo11s.pt``.
+        """
         configured = (getattr(settings, "YOLO_MODEL_PATH", "") or "yolo11s.pt").strip()
-        candidates = [configured]
-        backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        prefer = bool(getattr(settings, "PREFER_TRAINED_MODEL", True))
+        backend_root = _backend_root()
+        cv_root = os.path.join(_repo_root(), "cv-engine")
+        candidates = []
+        if os.path.isfile(configured):
+            return configured
         candidates.append(os.path.join(backend_root, configured))
+        if prefer:
+            candidates.extend(
+                [
+                    os.path.join(backend_root, "models", "trained", "vehicles", "best.pt"),
+                    os.path.join(cv_root, "models", "trained", "vehicles", "best.pt"),
+                ]
+            )
+        candidates.extend(
+            [
+                os.path.join(backend_root, "models", "original", "yolo11s.pt"),
+                os.path.join(cv_root, "models", "original", "yolo11s.pt"),
+                os.path.join(backend_root, "models", "yolo11s.pt"),
+                os.path.join(cv_root, "models", "yolo11s.pt"),
+            ]
+        )
         for c in candidates:
-            if os.path.isfile(c):
+            if c and os.path.isfile(c) and os.path.getsize(c) > 1024:
                 return c
         # Not on disk: fall back to the bare weight name so Ultralytics can
         # fetch the official asset once and cache it.
@@ -99,7 +156,22 @@ class VehicleDetectionService:
                     verbose=False, imgsz=imgsz, device="cpu",
                 )
                 self._model = model
-                logger.info(f"[DETECTION] Model ready in {time.perf_counter() - t0:.1f}s")
+                names = getattr(model, "names", {}) or {}
+                name_set = {str(v).lower() for v in names.values()}
+                self._coco_layout = "person" in name_set or len(name_set) >= 70
+                if self._coco_layout:
+                    self._class_filter = list(VEHICLE_CLASS_IDS.keys())
+                else:
+                    ids = []
+                    for i, n in names.items():
+                        mapped = _normalize_vehicle_name(n) or str(n).lower()
+                        if mapped in VEHICLE_NAMES:
+                            ids.append(int(i))
+                    self._class_filter = ids or None
+                logger.info(
+                    f"[DETECTION] Model ready in {time.perf_counter() - t0:.1f}s "
+                    f"(layout={'coco' if self._coco_layout else 'custom'})"
+                )
             except Exception as exc:  # missing ultralytics/torch, no weights, no network…
                 self._disabled_reason = str(exc)
                 logger.warning(
@@ -108,13 +180,14 @@ class VehicleDetectionService:
         return self._model
 
     # -------------------------------------------------------------- inference
-    def detect(self, frame: np.ndarray) -> List[VehicleDetection]:
+    def detect(self, frame: np.ndarray, imgsz: Optional[int] = None) -> List[VehicleDetection]:
         """Run the detector on one BGR frame and return real vehicle boxes."""
         model = self._ensure_model()
         if model is None:
             return []
         conf = float(getattr(settings, "CONFIDENCE_THRESHOLD", 0.45))
-        imgsz = int(getattr(settings, "DETECTION_IMGSZ", 640))
+        imgsz = int(imgsz if imgsz is not None else getattr(settings, "DETECTION_IMGSZ", 640))
+        iou = float(getattr(settings, "DETECTION_IOU", 0.50))
         t0 = time.perf_counter()
         try:
             # One inference at a time keeps CPU usage bounded across cameras.
@@ -123,9 +196,10 @@ class VehicleDetectionService:
                     frame,
                     verbose=False,
                     conf=conf,
+                    iou=iou,
                     imgsz=imgsz,
                     device="cpu",
-                    classes=list(VEHICLE_CLASS_IDS.keys()),
+                    classes=self._class_filter,
                 )
         except Exception as exc:
             logger.error(f"[DETECTION] Inference failed: {exc}")
@@ -139,8 +213,13 @@ class VehicleDetectionService:
         xyxy = boxes.xyxy.cpu().numpy()
         confs = boxes.conf.cpu().numpy()
         clss = boxes.cls.cpu().numpy()
+        names = getattr(model, "names", {}) or {}
         for box, c, k in zip(xyxy, confs, clss):
-            name = VEHICLE_CLASS_IDS.get(int(k))
+            cls_id = int(k)
+            raw = names.get(cls_id)
+            name = _normalize_vehicle_name(raw) if raw else None
+            if name is None:
+                name = VEHICLE_CLASS_IDS.get(cls_id)
             if name is None or float(c) < conf:
                 continue
             detections.append(

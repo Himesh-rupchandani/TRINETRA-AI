@@ -17,7 +17,7 @@ import asyncio
 import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -259,6 +259,7 @@ def _process_video(camera_id: str) -> None:
         _set_job(camera_id, frames_total=total)
 
         every_n = max(1, int(getattr(settings, "PROCESS_EVERY_N_FRAMES", 3)))
+        upload_imgsz = int(getattr(settings, "UPLOAD_DETECTION_IMGSZ", 960))
         tracker = SimpleTracker(iou_threshold=0.25, max_misses=8)
         # track_id -> {normalized: [conf_sum, count, best_raw, best_conf]}
         plate_votes: Dict[int, Dict[str, list]] = {}

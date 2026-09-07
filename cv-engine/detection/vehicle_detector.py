@@ -3,9 +3,12 @@ Vehicle detection with Ultralytics YOLO11 (spec §11, §12).
 
 Design for hackathon hardware:
 - yolo11s by default, configurable via MODEL_PATH.
-- Vehicle classes only — `classes=` filter is passed to the model so non-vehicle
-  predictions are discarded early.
-- imgsz configurable; frame skipping is done upstream by the pipeline.
+- Fine-tuned weights at models/trained/vehicles/best.pt are preferred when
+  present; the stock COCO checkpoint is kept at models/original/yolo11s.pt.
+- Vehicle classes only — a class filter is passed so non-vehicle predictions
+  are discarded early (COCO layout). Custom fine-tuned models already have
+  a vehicle-only head, so we filter by name instead of COCO ids.
+- imgsz / NMS IoU configurable; frame skipping is done upstream.
 - Torch/ultralytics imports are lazy so the rest of the engine (and its unit
   tests) work without them installed.
 """
@@ -13,12 +16,19 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import List, Optional, Sequence
+from dataclasses import dataclass
+from typing import List, Optional
 
 import numpy as np
 
-from .classes import VEHICLE_CLASS_IDS, class_name_for
+from .classes import (
+    VEHICLE_CLASS_IDS,
+    VEHICLE_NAMES,
+    class_name_for,
+    is_coco_layout,
+    normalize_vehicle_class,
+)
+from .model_paths import resolve_vehicle_model_path
 
 logger = logging.getLogger("cv_engine.detection")
 
@@ -28,7 +38,7 @@ class Detection:
     """One detected vehicle in one frame (spec §11 example shape)."""
 
     bbox: List[float]            # [x1, y1, x2, y2] in frame pixels
-    class_name: str              # car | motorcycle | bus | truck
+    class_name: str              # car | motorcycle | bus | truck | autorickshaw
     confidence: float
     camera_id: Optional[str] = None
     pts_ms: Optional[float] = None
@@ -58,15 +68,22 @@ class VehicleDetector:
         imgsz: int = 640,
         device: str = "cpu",
         include_bicycles: bool = False,
+        iou_threshold: float = 0.50,
+        prefer_trained: bool = True,
     ):
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.imgsz = imgsz
         self.device = device
+        self.iou_threshold = iou_threshold
+        self.prefer_trained = prefer_trained
+        self.include_bicycles = include_bicycles
         self.class_ids = sorted(
             list(VEHICLE_CLASS_IDS.keys()) + ([1] if include_bicycles else [])
         )
         self._model = None
+        self._resolved_path: Optional[str] = None
+        self._coco_layout: Optional[bool] = None
         self.last_inference_ms: Optional[float] = None
         self.frames_inferred = 0
 
@@ -74,9 +91,36 @@ class VehicleDetector:
         if self._model is None:
             from ultralytics import YOLO  # lazy: heavy import
 
-            logger.info("[DETECTOR] loading YOLO model %s (device=%s)", self.model_path, self.device)
-            self._model = YOLO(self.model_path)
+            path = resolve_vehicle_model_path(
+                self.model_path, prefer_trained=self.prefer_trained
+            )
+            self._resolved_path = path
+            logger.info("[DETECTOR] loading YOLO model %s (device=%s)", path, self.device)
+            self._model = YOLO(path)
+            names = getattr(self._model, "names", {}) or {}
+            self._coco_layout = is_coco_layout(names)
+            logger.info(
+                "[DETECTOR] layout=%s names=%s",
+                "coco" if self._coco_layout else "custom",
+                list(names.values())[:12],
+            )
         return self._model
+
+    def _class_filter(self):
+        """Which class indices to request from the model this call."""
+        model = self._model
+        if model is None or self._coco_layout:
+            return self.class_ids
+        names = getattr(model, "names", {}) or {}
+        allowed = set(VEHICLE_NAMES)
+        if self.include_bicycles:
+            allowed.add("bicycle")
+        ids = []
+        for i, n in names.items():
+            mapped = normalize_vehicle_class(n) or str(n).lower()
+            if mapped in allowed:
+                ids.append(int(i))
+        return ids or None
 
     def warmup(self) -> None:
         """Run one dummy inference so the first real frame isn't slow."""
@@ -99,9 +143,10 @@ class VehicleDetector:
                 frame,
                 verbose=False,
                 conf=self.conf_threshold,
+                iou=self.iou_threshold,
                 imgsz=self.imgsz,
                 device=self.device,
-                classes=self.class_ids,
+                classes=self._class_filter(),
             )
         except Exception as exc:
             logger.error("[DETECTOR] inference failed: %s", exc)
@@ -119,10 +164,16 @@ class VehicleDetector:
         boxes = r.boxes.xyxy.cpu().numpy() if hasattr(r.boxes.xyxy, "cpu") else np.asarray(r.boxes.xyxy)
         confs = r.boxes.conf.cpu().numpy() if hasattr(r.boxes.conf, "cpu") else np.asarray(r.boxes.conf)
         clss = r.boxes.cls.cpu().numpy() if hasattr(r.boxes.cls, "cpu") else np.asarray(r.boxes.cls)
+        names = getattr(model, "names", {}) or {}
 
         for box, conf, cls in zip(boxes, confs, clss):
             cls_id = int(cls)
-            name = VEHICLE_CLASS_IDS.get(cls_id)
+            raw = names.get(cls_id)
+            if raw is None and hasattr(names, "get"):
+                raw = names.get(str(cls_id))
+            name = normalize_vehicle_class(raw) if raw else None
+            if name is None:
+                name = VEHICLE_CLASS_IDS.get(cls_id)
             if name is None and cls_id in self.class_ids:
                 name = class_name_for(cls_id)
             if name is None:

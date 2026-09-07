@@ -162,6 +162,23 @@ Location comes **only** from camera metadata; nothing is inferred from video.
 `ANPR_INTERVAL_MS`, `EVENT_SUPPRESSION_SEC`, `TRACK_MAX_AGE_SEC`, `LOG_LEVEL`…
 (full list in `config/settings.py`). No secrets are ever hard-coded.
 
+## Training a Gujarat-CCTV detector (fine-tune, not from scratch)
+
+The stock model is **YOLO11s (COCO)**. Fine-tune it on the Drive traffic clip
+rather than training a new architecture. A separate 1-class plate detector
+feeds OCR. Full write-up, commands, and footage analysis:
+
+```
+python training/prepare_all.py --video feeds/reference_traffic.mp4
+python training/train_vehicles.py --model models/original/yolo11s.pt --device 0
+python training/train_plates.py   --model yolo11n.pt --device 0
+python training/infer_video.py    --video feeds/reference_traffic.mp4
+```
+
+See [`training/README.md`](training/README.md). The original `yolo11s.pt` is
+copied to `models/original/` and never overwritten; the live pipeline picks up
+`models/trained/vehicles/best.pt` automatically.
+
 ## Tests
 
 ```bash
