@@ -243,17 +243,54 @@ export function mapBackendMessages(raw: unknown): RealtimeMessage[] {
 function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('CONNECTING');
   primeCameraDir();
-  const es = new EventSource(realtimeUrl('/stream'), { withCredentials: true });
-  es.onopen = () => onState('LIVE');
-  es.onerror = () => onState('OFFLINE');
-  es.onmessage = (e) => {
+  let closed = false;
+  let es: EventSource | null = null;
+  let retryTimer: number | undefined;
+
+  const open = () => {
+    if (closed) return;
     try {
-      mapBackendMessages(JSON.parse(e.data)).forEach(onMessage);
+      es = new EventSource(realtimeUrl('/stream'), { withCredentials: false });
+      es.onopen = () => {
+        onState('LIVE');
+      };
+      es.onerror = () => {
+        es?.close();
+        onState('OFFLINE');
+        // Retry after 3s - SSE should reconnect automatically, but some proxies need explicit retry
+        if (!closed) {
+          retryTimer = window.setTimeout(() => {
+            onState('CONNECTING');
+            open();
+          }, 3000) as unknown as number;
+        }
+      };
+      es.onmessage = (e) => {
+        try {
+          // Backend sends ": connected" keepalive which is not JSON - ignore
+          if (e.data.startsWith(':')) return;
+          mapBackendMessages(JSON.parse(e.data)).forEach(onMessage);
+        } catch {
+          /* ignore malformed frame / keepalive */
+        }
+      };
     } catch {
-      /* ignore malformed frame */
+      onState('OFFLINE');
+      if (!closed) {
+        retryTimer = window.setTimeout(open, 4000) as unknown as number;
+      }
     }
   };
-  return { close: () => es.close() };
+
+  open();
+
+  return {
+    close: () => {
+      closed = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
+      es?.close();
+    },
+  };
 }
 
 function connectWs(onMessage: Handler, onState: StateHandler): RealtimeChannel {

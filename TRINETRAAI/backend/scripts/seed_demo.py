@@ -56,9 +56,15 @@ def demo_base_time():
 
 
 def seed_cameras(db):
-    if db.query(Camera).count() > 0:
-        print("  → Cameras already seeded, skipping.")
+    count = db.query(Camera).count()
+    # Fix for stale local DBs (e.g. 4 cameras OFFLINE) — reseed if not 30
+    if count == 30:
+        print("  → Cameras already seeded (30), skipping.")
         return
+    if count > 0 and count != 30:
+        print(f"  → Found {count} cameras (stale/partial), clearing and reseeding 30...")
+        db.query(Camera).delete()
+        db.commit()
 
     # Canonical CCTV registry (Model 1 foundation). These 30 rows are the
     # single source of truth for camera identity / location / department:
@@ -291,9 +297,16 @@ def seed_watchlist(db):
 
 
 def seed_events(db):
-    if db.query(VehicleEvent).count() > 0:
-        print("  → Vehicle events already seeded, skipping.")
-        return
+    count = db.query(VehicleEvent).count()
+    if count > 0:
+        # If cameras were stale, events are also stale — reseed
+        cam_count = db.query(Camera).count()
+        if cam_count == 30 and count >= 20:
+            print("  → Vehicle events already seeded, skipping.")
+            return
+        print(f"  → Found {count} events with {cam_count} cameras, clearing and reseeding...")
+        db.query(VehicleEvent).delete()
+        db.commit()
 
     base_time = demo_base_time()
 
@@ -399,9 +412,15 @@ def seed_events(db):
 
 
 def seed_alerts(db):
-    if db.query(Alert).count() > 0:
-        print("  → Alerts already seeded, skipping.")
-        return
+    count = db.query(Alert).count()
+    if count > 0:
+        cam_count = db.query(Camera).count()
+        if cam_count == 30 and count >= 5:
+            print("  → Alerts already seeded, skipping.")
+            return
+        print(f"  → Found {count} alerts, clearing and reseeding...")
+        db.query(Alert).delete()
+        db.commit()
 
     base_time = demo_base_time()
 
