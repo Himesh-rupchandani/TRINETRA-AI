@@ -38,6 +38,9 @@ uploads/*
 !uploads/.gitkeep
 models/*.pt
 models/*.onnx
+models/**/*.pt
+models/**/*.onnx
+models/*.json
 !models/README.md
 
 # Logs
