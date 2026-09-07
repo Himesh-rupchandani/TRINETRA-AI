@@ -5,6 +5,7 @@ Uses a locally generated video file — no live Government feed needed.
 Timing MUST come from PTS, never arrival time and never CAP_PROP_FPS.
 """
 import os
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -139,6 +140,23 @@ def test_rtsp_capture_forces_tcp():
     cap = RTSPCapture("cam04", "rtsp://example.invalid/stream", transport="tcp")
     kwargs = cap._capture_kwargs()
     assert kwargs["rtsp_transport"] == "tcp"
+
+
+def test_rtsp_options_use_ffmpeg_environment_not_invalid_dict_argument(monkeypatch):
+    cap = RTSPCapture("cam04", "rtsp://example.invalid/stream", transport="tcp")
+    mock_capture = MagicMock()
+    mock_capture.isOpened.return_value = True
+    mock_capture.read.return_value = (True, np.zeros((10, 10, 3), dtype=np.uint8))
+    monkeypatch.setenv("OPENCV_FFMPEG_CAPTURE_OPTIONS", "caller;value")
+
+    with patch("cv2.VideoCapture", return_value=mock_capture) as construct:
+        assert cap.open() is True
+
+    construct.assert_called_once_with("rtsp://example.invalid/stream", cv2.CAP_FFMPEG)
+    # The caller's global setting is restored after construction, preventing
+    # one camera's transport choice from leaking into another connection.
+    assert os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] == "caller;value"
+    cap.close()
 
 
 def test_read_failure_degrades_then_reconnect_state(video_file):

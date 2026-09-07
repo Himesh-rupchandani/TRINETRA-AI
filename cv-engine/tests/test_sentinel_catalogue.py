@@ -151,7 +151,7 @@ def test_select_test_subset_covers_diversity():
 
 def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
     from config.settings import Settings
-    from capture.sentinel_catalogue import sentinel_stream_urls, redact_url
+    from capture.sentinel_catalogue import redact_text, sentinel_stream_urls, redact_url
 
     s = Settings.from_env()
     monkeypatch.setattr(s, "sentinel_email", "officer@gujaratpolice.gov.in", raising=False)
@@ -161,6 +161,9 @@ def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
     assert urls["rtsp"].endswith("@103.250.160.189:8554/stream/cam04")
     assert urls["hls"] == "https://cctv.corp8.cloud/cam04/index.m3u8"
     assert redact_url(urls["rtsp"]) == "rtsp://103.250.160.189:8554/stream/cam04"
+    private = "https://operator:top-secret@example.test/live.m3u8?token=abc123#fragment"
+    assert redact_url(private) == "https://example.test/live.m3u8"
+    assert "top-secret" not in redact_text(f"decoder failed for {private}")
 
     # without credentials: HLS only, no authenticated URL is produced
     monkeypatch.setattr(s, "sentinel_email", "", raising=False)
@@ -175,6 +178,7 @@ def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
 def test_fetch_attaches_basic_auth_and_never_follows_redirects(monkeypatch):
     """Catalogue is behind the access password (guide §0): fetch must send
     Basic auth and must NOT follow redirects while authenticated."""
+    import base64
     import httpx
 
     seen = {}
@@ -200,7 +204,6 @@ def test_fetch_attaches_basic_auth_and_never_follows_redirects(monkeypatch):
     assert seen["follow_redirects"] is False
     auth = seen["auth"]
     assert isinstance(auth, httpx.BasicAuth)
-    import base64
     expected = "Basic " + base64.b64encode(b"alice@example.com:s3cret-pw").decode()
     assert auth._auth_header == expected
     assert cat.last_fetch_ok is True
@@ -208,6 +211,7 @@ def test_fetch_attaches_basic_auth_and_never_follows_redirects(monkeypatch):
 
 def test_fetch_falls_back_to_env_credentials(monkeypatch):
     """Entry points that never pass credentials still authenticate via env."""
+    import base64
     import httpx
 
     monkeypatch.setenv("SENTINEL_EMAIL", "bob@example.com")
@@ -227,7 +231,6 @@ def test_fetch_falls_back_to_env_credentials(monkeypatch):
 
     SentinelCatalogue().fetch()
     assert isinstance(seen["auth"], httpx.BasicAuth)
-    import base64
     expected = "Basic " + base64.b64encode(b"bob@example.com:env-pw").decode()
     assert seen["auth"]._auth_header == expected
     assert seen["follow_redirects"] is False

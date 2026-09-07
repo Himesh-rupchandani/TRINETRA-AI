@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from capture.sentinel_catalogue import SentinelCatalogue, select_test_subset
+from capture.sentinel_catalogue import SentinelCatalogue, redact_text, redact_url, select_test_subset
 from config.settings import Settings
 
 
@@ -28,10 +28,10 @@ def main():
     try:
         cameras = cat.fetch()
     except Exception as exc:
-        print(f"CATALOGUE UNREACHABLE: {exc}")
+        print(f"CATALOGUE UNREACHABLE: {redact_text(exc)}")
         sys.exit(1)
 
-    print(f"Catalogue OK: {len(cameras)} cameras from {cat.url}\n")
+    print(f"Catalogue OK: {len(cameras)} cameras from {redact_url(cat.url)}\n")
     print(f"{'ID':<10} {'STATUS':<9} {'CODEC':<6} {'RES':<11} {'LOC':<28} RTSP/HLS")
     for cam in cameras:
         res = f"{cam.width}x{cam.height}" if cam.width else "?"

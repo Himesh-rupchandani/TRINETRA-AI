@@ -85,6 +85,13 @@ def run_live(args, settings: Settings):
         conf_threshold=settings.conf_threshold,
         imgsz=settings.inference_imgsz,
         device=settings.device,
+        include_bicycles=settings.include_bicycles,
+        nms_iou_threshold=settings.nms_iou_threshold,
+        duplicate_iou_threshold=settings.duplicate_iou_threshold,
+        max_detections=settings.max_detections,
+        tile_grid=settings.tile_grid,
+        tile_overlap=settings.tile_overlap,
+        tile_min_frame_edge=settings.tile_min_frame_edge,
     )
     detector.warmup()
     ocr = OcrEngine(gpu=settings.device != "cpu") if settings.anpr_enabled else None

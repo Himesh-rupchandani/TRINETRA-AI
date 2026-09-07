@@ -10,6 +10,8 @@ import logging
 import time
 from typing import Callable, Optional
 
+from .sentinel_catalogue import redact_text
+
 logger = logging.getLogger("cv_engine.reconnect")
 
 
@@ -94,7 +96,7 @@ class ReconnectLoop:
                     self.backoff.reset()
                     return True
             except Exception as exc:
-                logger.warning("[%s] connect attempt raised: %s", self.camera_id, exc)
+                logger.warning("[%s] connect attempt raised: %s", self.camera_id, redact_text(exc))
 
             delay = self.backoff.next_delay()
             logger.warning(
@@ -186,7 +188,7 @@ class ManagedCapture:
                 logger.warning(
                     "[%s] connection lost (%s) — entering reconnect loop",
                     self.camera.camera_id,
-                    self.capture.last_error if self.capture else "no capture",
+                    redact_text(self.capture.last_error) if self.capture else "no capture",
                 )
                 if self.capture is not None:
                     self.capture.close()

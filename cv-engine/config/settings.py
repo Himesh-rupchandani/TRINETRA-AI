@@ -60,8 +60,19 @@ class Settings:
     # --- Models / detection ----------------------------------------------
     model_path: str = "yolo11n.pt"
     conf_threshold: float = 0.35
-    inference_imgsz: int = 640
+    # 960 preserves more detail for small/distant road vehicles than the old
+    # 640 default. Lower it on CPU-only deployments if throughput is limited.
+    inference_imgsz: int = 960
     device: str = "cpu"  # "cpu" | "cuda" | "0" ...
+    include_bicycles: bool = True
+    nms_iou_threshold: float = 0.70
+    duplicate_iou_threshold: float = 0.82
+    max_detections: int = 300
+    # Optional full-frame + tile pass for dense high-resolution traffic.
+    # Keep 1 for the normal real-time path; use 2 on suitable hardware.
+    tile_grid: int = 1
+    tile_overlap: float = 0.20
+    tile_min_frame_edge: int = 1400
 
     # --- Capture / pacing -------------------------------------------------
     frame_skip: int = 1            # process every Nth frame (1 = every frame)
@@ -127,8 +138,15 @@ class Settings:
             backend_queue_size=_env_int("BACKEND_QUEUE_SIZE", 1000),
             model_path=_env_str("MODEL_PATH", "yolo11n.pt"),
             conf_threshold=_env_float("CONF_THRESHOLD", 0.35),
-            inference_imgsz=_env_int("INFERENCE_IMGSZ", 640),
+            inference_imgsz=_env_int("INFERENCE_IMGSZ", 960),
             device=_env_str("CV_DEVICE", "cpu"),
+            include_bicycles=_env_bool("DETECTION_INCLUDE_BICYCLES", True),
+            nms_iou_threshold=_env_float("DETECTION_NMS_IOU_THRESHOLD", 0.70),
+            duplicate_iou_threshold=_env_float("DETECTION_DUPLICATE_IOU_THRESHOLD", 0.82),
+            max_detections=_env_int("DETECTION_MAX_DETECTIONS", 300),
+            tile_grid=_env_int("DETECTION_TILE_GRID", 1),
+            tile_overlap=_env_float("DETECTION_TILE_OVERLAP", 0.20),
+            tile_min_frame_edge=_env_int("DETECTION_TILE_MIN_FRAME_EDGE", 1400),
             frame_skip=_env_int("FRAME_SKIP", 1),
             process_interval_ms=_env_float("PROCESS_INTERVAL_MS", 0.0),
             rtsp_transport=_env_str("RTSP_TRANSPORT", "tcp"),

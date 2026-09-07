@@ -92,7 +92,7 @@ python scripts/run_pipeline.py --mode demo --backend-url http://localhost:8000
 | `capture/rtsp_capture.py` / `hls_capture.py` | RTSP-over-TCP capture, HLS fallback |
 | `capture/stream_capture.py` | PTS extraction, scene-discontinuity detection, degraded/reconnect states |
 | `capture/reconnect.py` | exponential backoff (2→4→8→16→cap 30s), `ManagedCapture` loop |
-| `detection/vehicle_detector.py` | YOLO11 vehicle-only detection (car/motorcycle/bus/truck) |
+| `detection/vehicle_detector.py` | YOLO11 vehicle-only detection (car/motorcycle/bus/truck + configurable bicycle), class-aware NMS and conservative tile de-duplication |
 | `tracking/vehicle_tracker.py` | PTS-driven Kalman + two-stage IoU association (ByteTrack-style) |
 | `anpr/` | plate crops, EasyOCR wrapper, normalization, confidence tiers, per-track multi-frame aggregation |
 | `events/` | stable event schema, event builder, camera+track+plate dedup |
@@ -159,8 +159,14 @@ Location comes **only** from camera metadata; nothing is inferred from video.
 `SENTINEL_CATALOGUE_URL`, `BACKEND_BASE_URL`, `MODEL_PATH`, `CONF_THRESHOLD`,
 `ANPR_CONF_THRESHOLD`, `FRAME_SKIP`, `RECONNECT_MIN`, `RECONNECT_MAX`,
 `EVIDENCE_DIR`, plus: `INFERENCE_IMGSZ`, `CV_DEVICE`, `PROCESS_INTERVAL_MS`,
-`ANPR_INTERVAL_MS`, `EVENT_SUPPRESSION_SEC`, `TRACK_MAX_AGE_SEC`, `LOG_LEVEL`…
-(full list in `config/settings.py`). No secrets are ever hard-coded.
+`ANPR_INTERVAL_MS`, `EVENT_SUPPRESSION_SEC`, `TRACK_MAX_AGE_SEC`, `LOG_LEVEL`,
+`DETECTION_INCLUDE_BICYCLES`, `DETECTION_NMS_IOU_THRESHOLD`,
+`DETECTION_DUPLICATE_IOU_THRESHOLD`, and optional `DETECTION_TILE_GRID` /
+`DETECTION_TILE_OVERLAP` for high-resolution distant traffic (full list in
+`config/settings.py`). The default 960px input improves small-vehicle recall;
+leave the tile grid at `1` for normal real-time operation and use `2` only on
+hardware with enough inference capacity. No secrets are ever hard-coded, and
+stream diagnostics redact URL userinfo and signed query parameters.
 
 ## Tests
 
