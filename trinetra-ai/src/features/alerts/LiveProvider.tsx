@@ -51,8 +51,16 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const loadAlerts = useCallback(() => {
     alertService
       .list()
-      .then(setAlerts)
-      .catch(() => setAlerts([]));
+      .then((data) => {
+        setAlerts(data);
+        // If backend is reachable (alerts loaded), ensure we don't stay OFFLINE forever
+        // - SSE may fail in preview/proxy environments, but backend is still LIVE
+        setConnection((prev) => (prev === 'OFFLINE' && !isMockMode ? 'LIVE' : prev));
+      })
+      .catch(() => {
+        setAlerts([]);
+        // Keep OFFLINE if backend unreachable
+      });
   }, []);
 
   useEffect(loadAlerts, [loadAlerts]);
