@@ -58,7 +58,7 @@ class Settings:
     backend_queue_size: int = 1000
 
     # --- Models / detection ----------------------------------------------
-    model_path: str = "yolo11n.pt"
+    model_path: str = "yolo11s.pt"
     conf_threshold: float = 0.35
     inference_imgsz: int = 640
     device: str = "cpu"  # "cpu" | "cuda" | "0" ...
@@ -125,7 +125,7 @@ class Settings:
             backend_timeout_sec=_env_float("BACKEND_TIMEOUT", 5.0),
             backend_max_retries=_env_int("BACKEND_MAX_RETRIES", 3),
             backend_queue_size=_env_int("BACKEND_QUEUE_SIZE", 1000),
-            model_path=_env_str("MODEL_PATH", "yolo11n.pt"),
+            model_path=_env_str("MODEL_PATH", "yolo11s.pt"),
             conf_threshold=_env_float("CONF_THRESHOLD", 0.35),
             inference_imgsz=_env_int("INFERENCE_IMGSZ", 640),
             device=_env_str("CV_DEVICE", "cpu"),

@@ -2,7 +2,7 @@
 Vehicle detection with Ultralytics YOLO11 (spec §11, §12).
 
 Design for hackathon hardware:
-- yolo11n by default (smallest), configurable via MODEL_PATH.
+- yolo11s by default, configurable via MODEL_PATH.
 - Vehicle classes only — `classes=` filter is passed to the model so non-vehicle
   predictions are discarded early.
 - imgsz configurable; frame skipping is done upstream by the pipeline.
@@ -53,7 +53,7 @@ class VehicleDetector:
 
     def __init__(
         self,
-        model_path: str = "yolo11n.pt",
+        model_path: str = "yolo11s.pt",
         conf_threshold: float = 0.35,
         imgsz: int = 640,
         device: str = "cpu",
