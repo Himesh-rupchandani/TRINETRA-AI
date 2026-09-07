@@ -9,13 +9,27 @@ have heterogeneous fields per camera.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 logger = logging.getLogger("cv_engine.catalogue")
 
 DEFAULT_CATALOGUE_URL = "https://cctv.corp8.cloud/cameras.json"
+
+# Credentials may only ever be attached for the official Sentinel CDN host
+# (exact hostname match - never a substring, never a redirect target).
+APPROVED_CATALOGUE_HOSTS = {"cctv.corp8.cloud"}
+
+
+def _is_approved_catalogue_host(url: str) -> bool:
+    """True only when ``url`` sits on an approved Sentinel host."""
+    try:
+        return (urlsplit(url).hostname or "").lower() in APPROVED_CATALOGUE_HOSTS
+    except Exception:
+        return False
 
 
 class CatalogueError(Exception):
@@ -225,9 +239,17 @@ class SentinelCatalogue:
     callers can degrade instead of crashing.
     """
 
-    def __init__(self, url: str = DEFAULT_CATALOGUE_URL, timeout_sec: float = 10.0):
+    def __init__(
+        self,
+        url: str = DEFAULT_CATALOGUE_URL,
+        timeout_sec: float = 10.0,
+        email: str = "",
+        password: str = "",
+    ):
         self.url = url
         self.timeout_sec = timeout_sec
+        self.email = (email or os.environ.get("SENTINEL_EMAIL", "")).strip()
+        self.password = (password or os.environ.get("SENTINEL_PASSWORD", "")).strip()
         self._cameras: List[Camera] = []
         self._by_id: Dict[str, Camera] = {}
         self.last_error: Optional[str] = None
@@ -241,8 +263,32 @@ class SentinelCatalogue:
         except ImportError as exc:  # pragma: no cover
             raise CatalogueError("httpx is required for catalogue fetch") from exc
 
+        # The catalogue sits behind the same access password as the streams
+        # (integrator guide §0): the server 302-redirects unauthenticated
+        # requests to /auth/login. Attach Basic auth server-side, only to the
+        # approved host, and never follow redirects while authenticated so
+        # credentials can never leak to a redirect target.
+        auth = None
+        follow_redirects = True
+        if self.email and self.password:
+            if not _is_approved_catalogue_host(self.url):
+                self.last_error = (
+                    "refusing to send Sentinel credentials to an unapproved "
+                    f"host: {redact_url(self.url)}"
+                )
+                self.last_fetch_ok = False
+                logger.warning("[CATALOGUE] %s", self.last_error)
+                raise CatalogueError(self.last_error)
+            auth = httpx.BasicAuth(self.email, self.password)
+            follow_redirects = False
+
         try:
-            resp = httpx.get(self.url, timeout=self.timeout_sec, follow_redirects=True)
+            resp = httpx.get(
+                self.url,
+                timeout=self.timeout_sec,
+                follow_redirects=follow_redirects,
+                auth=auth,
+            )
         except Exception as exc:
             self.last_error = f"catalogue request failed: {exc}"
             self.last_fetch_ok = False
@@ -250,7 +296,9 @@ class SentinelCatalogue:
             raise CatalogueError(self.last_error) from exc
 
         if resp.status_code != 200:
-            self.last_error = f"catalogue HTTP {resp.status_code}"
+            location = resp.headers.get("location")
+            hint = f" (redirect to {redact_url(location)})" if location else ""
+            self.last_error = f"catalogue HTTP {resp.status_code}{hint}"
             self.last_fetch_ok = False
             logger.warning("[CATALOGUE] %s", self.last_error)
             raise CatalogueError(self.last_error)

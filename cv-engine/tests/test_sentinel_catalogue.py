@@ -170,3 +170,134 @@ def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
 
     # invalid ids are rejected
     assert sentinel_stream_urls("../etc", s) == {"rtsp": None, "hls": None}
+
+
+def test_fetch_attaches_basic_auth_and_never_follows_redirects(monkeypatch):
+    """Catalogue is behind the access password (guide §0): fetch must send
+    Basic auth and must NOT follow redirects while authenticated."""
+    import httpx
+
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+        headers = {}
+        content = b"[]"
+
+        def json(self):
+            return SAMPLE_PAYLOAD
+
+    def _get(url, **kwargs):
+        seen["url"] = url
+        seen.update(kwargs)
+        return _Resp()
+
+    monkeypatch.setattr(httpx, "get", _get)
+
+    cat = SentinelCatalogue(email="alice@example.com", password="s3cret-pw")
+    cat.fetch()
+
+    assert seen["follow_redirects"] is False
+    auth = seen["auth"]
+    assert isinstance(auth, httpx.BasicAuth)
+    import base64
+    expected = "Basic " + base64.b64encode(b"alice@example.com:s3cret-pw").decode()
+    assert auth._auth_header == expected
+    assert cat.last_fetch_ok is True
+
+
+def test_fetch_falls_back_to_env_credentials(monkeypatch):
+    """Entry points that never pass credentials still authenticate via env."""
+    import httpx
+
+    monkeypatch.setenv("SENTINEL_EMAIL", "bob@example.com")
+    monkeypatch.setenv("SENTINEL_PASSWORD", "env-pw")
+
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+        headers = {}
+        content = b"[]"
+
+        def json(self):
+            return SAMPLE_PAYLOAD
+
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: seen.update(kw) or _Resp())
+
+    SentinelCatalogue().fetch()
+    assert isinstance(seen["auth"], httpx.BasicAuth)
+    import base64
+    expected = "Basic " + base64.b64encode(b"bob@example.com:env-pw").decode()
+    assert seen["auth"]._auth_header == expected
+    assert seen["follow_redirects"] is False
+
+
+def test_fetch_without_credentials_still_follows_redirects(monkeypatch):
+    """No credentials configured -> behave exactly as before (plain GET)."""
+    import httpx
+
+    monkeypatch.delenv("SENTINEL_EMAIL", raising=False)
+    monkeypatch.delenv("SENTINEL_PASSWORD", raising=False)
+
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+        headers = {}
+        content = b"[]"
+
+        def json(self):
+            return SAMPLE_PAYLOAD
+
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: seen.update(kw) or _Resp())
+
+    SentinelCatalogue().fetch()
+    assert seen["auth"] is None
+    assert seen["follow_redirects"] is True
+
+
+def test_fetch_refuses_credentials_on_unapproved_host(monkeypatch):
+    """Credentials must never be sent to a non-Sentinel host."""
+    import httpx
+
+    called = {"n": 0}
+
+    def _get(url, **kw):
+        called["n"] += 1
+        raise AssertionError("network must not be touched")
+
+    monkeypatch.setattr(httpx, "get", _get)
+
+    cat = SentinelCatalogue(
+        url="https://evil.example.com/cameras.json",
+        email="alice@example.com",
+        password="s3cret-pw",
+    )
+    with pytest.raises(CatalogueError) as excinfo:
+        cat.fetch()
+    assert "unapproved" in cat.last_error
+    assert called["n"] == 0
+    assert "s3cret-pw" not in str(excinfo.value)
+
+
+def test_fetch_reports_redirect_target_instead_of_parsing_html(monkeypatch):
+    """302 -> /auth/login must surface as HTTP 302, not 'not valid JSON'."""
+    import httpx
+
+    class _Resp:
+        status_code = 302
+        headers = {"location": "https://cctv.corp8.cloud/auth/login"}
+        content = b""
+
+        def json(self):  # pragma: no cover - must not be reached
+            raise AssertionError("redirect bodies are never parsed")
+
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: _Resp())
+
+    cat = SentinelCatalogue(email="a@b.c", password="pw")
+    with pytest.raises(CatalogueError) as excinfo:
+        cat.fetch()
+    assert "HTTP 302" in str(excinfo.value)
+    assert "/auth/login" in str(excinfo.value)
+    assert "pw" not in str(excinfo.value)

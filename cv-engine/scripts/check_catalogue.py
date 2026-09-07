@@ -22,6 +22,8 @@ def main():
     cat = SentinelCatalogue(
         url=args.url or settings.sentinel_catalogue_url,
         timeout_sec=settings.catalogue_timeout_sec,
+        email=settings.sentinel_email,
+        password=settings.sentinel_password,
     )
     try:
         cameras = cat.fetch()

@@ -61,6 +61,8 @@ def run_live(args, settings: Settings):
     cat = SentinelCatalogue(
         url=args.catalogue_url or settings.sentinel_catalogue_url,
         timeout_sec=settings.catalogue_timeout_sec,
+        email=settings.sentinel_email,
+        password=settings.sentinel_password,
     )
     cat.fetch()  # raises CatalogueError -> hard stop; live mode needs the catalogue
 
