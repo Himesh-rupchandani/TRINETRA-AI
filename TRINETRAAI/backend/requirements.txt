@@ -15,5 +15,8 @@ httpx>=0.27.0
 # NOTE: ultralytics pulls the GUI opencv-python wheel; on headless servers
 # re-run `pip install --force-reinstall --no-deps opencv-python-headless` after.
 ultralytics>=8.3.0
+# ANPR/OCR for uploaded CCTV videos (bundled ONNX models — works fully offline).
+# The pipeline degrades gracefully to "Unknown" plates when this is absent.
+rapidocr-onnxruntime>=1.0.0
 pytest>=8.1.0
 pytest-asyncio>=0.23.0

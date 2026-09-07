@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cctv, LayoutGrid, RefreshCcw, Search, Table2, X } from 'lucide-react';
+import { Cctv, LayoutGrid, RefreshCcw, Search, Table2, Upload, X } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { CameraCard } from '@/components/camera/CameraCard';
 import { CameraPlayer } from '@/components/camera/CameraPlayer';
+import { UploadVideoModal } from '@/components/camera/UploadVideoModal';
 import { Panel, AsyncBoundary, EmptyState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
 import { Modal } from '@/components/common/Modal';
@@ -24,6 +25,7 @@ export default function Cameras() {
   const [activity, setActivity] = useState<CameraFilters['activity']>('ANY');
   const [view, setView] = useLocalStorage<'grid' | 'table'>('trinetra.cameraView', 'grid');
   const [preview, setPreview] = useState<Camera | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const debouncedQuery = useDebounced(query, 250);
   const filters = useMemo<CameraFilters>(
@@ -85,6 +87,9 @@ export default function Cameras() {
             </div>
             <button type="button" className="btn-ghost" onClick={refresh}>
               <RefreshCcw size={12} aria-hidden /> Refresh
+            </button>
+            <button type="button" className="btn-primary" onClick={() => setUploadOpen(true)}>
+              <Upload size={12} aria-hidden /> Upload CCTV Video
             </button>
           </>
         }
@@ -263,6 +268,15 @@ export default function Cameras() {
           )}
         </AsyncBoundary>
       </div>
+
+      <UploadVideoModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={(cameraId) => {
+          refresh();
+          navigate(`/cameras/${cameraId.toLowerCase()}`);
+        }}
+      />
 
       <Modal
         open={Boolean(preview)}

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { FileImage, ImageOff, MapPin, ScanLine } from 'lucide-react';
 import type { VehicleEvent } from '@/types';
-import { cn, formatDateTime, prettyPlate, prettyVehicleClass } from '@/lib/utils';
+import { cn, formatDateTime, formatVideoOffset, prettyPlate, prettyVehicleClass } from '@/lib/utils';
 import { hideBrokenImage, trackId, vehicleStill } from '@/utils/mediaAssets';
 import { ConfidenceBar } from '@/components/common/Links';
 import { EmptyState } from '@/components/common/Panel';
@@ -136,6 +136,15 @@ export function EvidencePanel({
           </dd>
           <dt className="text-ink-faint">Captured</dt>
           <dd className="text-right font-mono text-ink-muted">{formatDateTime(event.timestamp)}</dd>
+          {event.videoOffsetSec != null && (
+            <>
+              <dt className="text-ink-faint">Video position</dt>
+              <dd className="text-right font-mono text-ink-muted">
+                {formatVideoOffset(event.videoOffsetSec)}
+                {event.videoFile ? ` · ${event.videoFile}` : ''}
+              </dd>
+            </>
+          )}
           <dt className="text-ink-faint">Location</dt>
           <dd className="text-right text-ink-muted">{event.location ?? '—'}</dd>
           {!dense && (

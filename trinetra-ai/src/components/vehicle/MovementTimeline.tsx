@@ -1,6 +1,6 @@
 import { ArrowDown, Clock, Gauge, MapPin, Route } from 'lucide-react';
 import type { RoutePoint } from '@/types';
-import { cn, formatDuration, formatTime } from '@/lib/utils';
+import { cn, formatDuration, formatTime, formatVideoOffset } from '@/lib/utils';
 import { EmptyState } from '@/components/common/Panel';
 
 /**
@@ -63,6 +63,11 @@ export function MovementTimeline({
                 <span className="font-mono text-xs font-bold text-ink">{p.cameraName}</span>
                 <time className="font-mono text-2xs tabular-nums text-ink" dateTime={p.timestamp}>
                   {formatTime(p.timestamp)}
+                  {p.videoOffsetSec != null && (
+                    <span className="ml-1.5 font-normal text-ink-faint">
+                      · {formatVideoOffset(p.videoOffsetSec)}
+                    </span>
+                  )}
                 </time>
               </div>
               <p className="mt-1 flex items-center gap-1 truncate text-2xs text-ink-muted">

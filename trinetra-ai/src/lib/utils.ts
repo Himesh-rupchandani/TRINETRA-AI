@@ -65,6 +65,16 @@ export function formatNumber(n?: number): string {
   return n.toLocaleString('en-IN');
 }
 
+/** Position inside an uploaded CCTV video: 134s -> "00:02:14". */
+export function formatVideoOffset(sec?: number | null): string {
+  if (sec == null || Number.isNaN(sec)) return '—';
+  const s = Math.max(0, Math.floor(sec));
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const r = String(s % 60).padStart(2, '0');
+  return `${h}:${m}:${r}`;
+}
+
 /** Normalises user plate input: strips spaces/hyphens, uppercases. */
 export function normalisePlate(input: string): string {
   return input.toUpperCase().replace(/[^A-Z0-9]/g, '');

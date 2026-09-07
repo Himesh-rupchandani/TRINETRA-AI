@@ -1,5 +1,5 @@
 export type CameraStatus = 'ONLINE' | 'OFFLINE' | 'DEGRADED';
-export type StreamType = 'HLS' | 'RTSP' | 'WEBRTC' | 'MJPEG';
+export type StreamType = 'HLS' | 'RTSP' | 'WEBRTC' | 'MJPEG' | 'FILE';
 
 /**
  * Camera as returned by Model 1 (CCTV Registry & GIS Foundation).

@@ -77,6 +77,17 @@ def _auto_migrate(target_engine=None):
             except Exception:
                 pass
 
+        # Manually-uploaded CCTV video provenance on sightings.
+        for col, col_def in [
+            ("video_file", "VARCHAR(255)"),
+            ("video_offset_sec", "FLOAT"),
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE vehicle_events ADD COLUMN {col} {col_def}"))
+                logger.info(f"Added missing column vehicle_events.{col}")
+            except Exception:
+                pass
+
 
 def init_db():
     """Create all database tables and seed default mock / initial cameras & watchlist if empty."""

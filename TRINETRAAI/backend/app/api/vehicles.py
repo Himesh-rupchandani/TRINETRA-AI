@@ -97,6 +97,8 @@ def get_vehicle_route(plate: str, db: Session = Depends(get_db)):
             latitude=ev.latitude,
             longitude=ev.longitude,
             confidence=ev.plate_confidence,
+            video_file=ev.video_file,
+            video_offset_sec=ev.video_offset_sec,
         )
         for idx, ev in enumerate(events)
     ]

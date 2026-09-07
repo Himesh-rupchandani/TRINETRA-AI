@@ -54,7 +54,14 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
     };
   }, [nonce]);
 
-  const selectOfficer = useCallback((officerId: string) => setActiveId(officerId), []);
+  /**
+   * Selecting an officer makes them the current officer everywhere: the
+   * header, sidebar and Profile section all follow the selection.
+   */
+  const selectOfficer = useCallback((officerId: string) => {
+    setActiveId(officerId);
+    setCurrentId(officerId);
+  }, []);
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
   const value = useMemo<OfficerContextValue>(() => {
@@ -64,7 +71,7 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
       officers,
       current,
       active,
-      others: officers.filter((o) => o.officerId !== currentId),
+      others: officers.filter((o) => o.officerId !== (activeId ?? currentId)),
       loading,
       error,
       selectOfficer,
