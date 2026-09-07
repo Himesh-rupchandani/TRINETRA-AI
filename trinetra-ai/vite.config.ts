@@ -98,18 +98,16 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
-        ...(mode === 'development' && process.env.BACKEND_ORIGIN
-          ? {
-              '/api': {
-                target: process.env.BACKEND_ORIGIN,
-                changeOrigin: true,
-                secure: false,
-                // Also proxy WebSocket upgrades (/api/ws/events) when the
-                // realtime transport is configured as `ws`.
-                ws: true,
-              },
-            }
-          : {}),
+        // Backend API — always proxied in dev so backend+frontend works out of the box.
+        // Set BACKEND_ORIGIN env var to override (e.g. http://localhost:8000 is default).
+        '/api': {
+          target: process.env.BACKEND_ORIGIN ?? 'http://localhost:8000',
+          changeOrigin: true,
+          secure: false,
+          // Also proxy WebSocket upgrades (/api/ws/events) when the
+          // realtime transport is configured as `ws`.
+          ws: true,
+        },
       },
     },
     preview: {
@@ -125,15 +123,12 @@ export default defineConfig(({ mode }) => {
         },
         // Serve the verified production build against a real backend: same-origin
         // /api so the browser never needs to know where the API lives.
-        ...(process.env.BACKEND_ORIGIN
-          ? {
-              '/api': {
-                target: process.env.BACKEND_ORIGIN,
-                changeOrigin: true,
-                ws: true,
-              },
-            }
-          : {}),
+        // Default to localhost:8000 for simple backend+frontend runs.
+        '/api': {
+          target: process.env.BACKEND_ORIGIN ?? 'http://localhost:8000',
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
     build: {

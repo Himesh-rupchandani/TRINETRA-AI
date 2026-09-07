@@ -45,6 +45,19 @@ async def lifespan(app: FastAPI):
     # 1. Initialize DB tables (creates vehicle_events + alert ack fields)
     init_db()
 
+    # 1b. Ensure evidence root exists (backend+frontend only mode may not have cv-engine folder)
+    try:
+        evidence_root = Path(settings.EVIDENCE_ROOT)
+        # If relative, resolve from backend root
+        if not evidence_root.is_absolute():
+            # backend/app/main.py -> backend root is parents[1]
+            backend_root = Path(__file__).resolve().parents[1]
+            evidence_root = (backend_root / evidence_root).resolve()
+        evidence_root.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Evidence root ensured at {evidence_root}")
+    except Exception as e:
+        logger.warning(f"Could not create evidence root {settings.EVIDENCE_ROOT}: {e}")
+
     # 2. Sync the env-configured REAL live camera (.env -> registry), then
     # register existing cameras into CameraManager
     db = SessionLocal()

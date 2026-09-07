@@ -16,7 +16,53 @@ Sentinel CCTV → Frame (PTS) → Vehicle Detection (YOLO11) → Tracking
 → Frontend → Vehicle Search → GIS Route
 ```
 
-## Quick start
+## Quick start — Backend + Frontend Only (recommended for local dev)
+
+No cv-engine, no heavy ML models needed. 2 terminals.
+
+**Windows PowerShell (VS Code):**
+
+```powershell
+# Terminal 1 — Backend
+cd "TRINETRAAI\backend"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m scripts.seed_demo   # seeds 30 cameras ONLINE (auto-fixes stale 4-camera DB)
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Verify: http://localhost:8000/api/health -> {"status":"healthy", "total_cameras":30}
+
+# Terminal 2 — Frontend
+cd "trinetra-ai"
+npm install
+npm run dev
+# Open http://localhost:5173 -> ONLINE badge, 30 cameras
+```
+
+**One-click Windows scripts:**
+
+```powershell
+.\start-backend.ps1   # creates venv, installs, seeds, runs backend
+.\start-frontend.ps1  # installs npm deps, runs frontend
+```
+
+**Linux / macOS:**
+
+```bash
+cd TRINETRAAI/backend && pip install -r requirements.txt
+python -m scripts.seed_demo
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# In another terminal:
+cd trinetra-ai && npm install && npm run dev
+```
+
+> Fixed: `trinetra-ai/vite.config.ts` now proxies `/api` → `http://localhost:8000` by default,
+> so you no longer need to set `BACKEND_ORIGIN` manually. `.env` already has `VITE_USE_MOCKS=false`.
+
+See `WINDOWS_SETUP.md` for detailed OFFLINE/404 troubleshooting.
+
+## Full quick start (with cv-engine options)
 
 ```bash
 # Backend (port 8000)
