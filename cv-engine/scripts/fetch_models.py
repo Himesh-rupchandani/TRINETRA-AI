@@ -2,13 +2,13 @@
 """
 Fetch model assets for the hackathon network (where GitHub/HF are reachable).
 
-- yolo11n.pt  (Ultralytics auto-download; ~5.5 MB)
+- yolo11s.pt  (Ultralytics auto-download)
 - EasyOCR craft + english_g2 models (downloaded on first Reader init)
 
 Run once before the live demo:
 
     python scripts/fetch_models.py            # everything
-    python scripts/fetch_models.py --yolo yolo11s.pt   # bigger YOLO variant
+    python scripts/fetch_models.py --yolo yolo11s.pt   # selected YOLO variant
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def fetch_easyocr() -> bool:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--yolo", default="yolo11n.pt")
+    ap.add_argument("--yolo", default="yolo11s.pt")
     ap.add_argument("--skip-ocr", action="store_true")
     args = ap.parse_args()
 

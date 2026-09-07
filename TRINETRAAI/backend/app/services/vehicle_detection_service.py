@@ -68,7 +68,7 @@ class VehicleDetectionService:
 
     def _resolve_model_path(self) -> str:
         """Find the weights: configured path (relative to backend root) or bare name (auto-download)."""
-        configured = (getattr(settings, "YOLO_MODEL_PATH", "") or "yolo11n.pt").strip()
+        configured = (getattr(settings, "YOLO_MODEL_PATH", "") or "yolo11s.pt").strip()
         candidates = [configured]
         backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         candidates.append(os.path.join(backend_root, configured))
@@ -77,7 +77,7 @@ class VehicleDetectionService:
                 return c
         # Not on disk: fall back to the bare weight name so Ultralytics can
         # fetch the official asset once and cache it.
-        return os.path.basename(configured) or "yolo11n.pt"
+        return os.path.basename(configured) or "yolo11s.pt"
 
     def _ensure_model(self):
         if self._model is not None or self._disabled_reason is not None:

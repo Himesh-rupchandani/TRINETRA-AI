@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     RTSP_TRANSPORT: str = "tcp"
 
     # AI & Computer Vision Settings
-    YOLO_MODEL_PATH: str = "models/yolo11n.pt"
+    YOLO_MODEL_PATH: str = "models/yolo11s.pt"
     CONFIDENCE_THRESHOLD: float = 0.45
     PROCESS_EVERY_N_FRAMES: int = 3
     OCR_ENABLED: bool = True

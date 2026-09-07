@@ -500,7 +500,7 @@ def main() -> None:
     settings = Settings.from_env()
     if args.backend:
         settings.backend_base_url = args.backend
-    settings.model_path = str(CV_ROOT / "models" / "yolo11n.pt")
+    settings.model_path = str(CV_ROOT / "models" / "yolo11s.pt")
     settings.anpr_enabled = bool(args.anpr)
     # Demo-feed tuning: local clips loop every ~14s, shorter than the default
     # 20s hold-emit, so long-lived tracks would never produce sightings.

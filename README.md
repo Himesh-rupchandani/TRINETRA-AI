@@ -97,7 +97,7 @@ on local traffic videos, and stream an **annotated live view** (bounding boxes
 
 ```bash
 # 1. one-time: put traffic videos in cv-engine/feeds/ and the model in cv-engine/models/
-#    (los_angeles.mp4, cctv.avi — any traffic clip works; yolo11n.pt)
+#    (los_angeles.mp4, cctv.avi — any traffic clip works; yolo11s.pt)
 # 2. register the demo-feed cameras in the backend registry (stream_type='file')
 cd TRINETRAAI/backend && python - << 'PY'
 from app.database.database import SessionLocal
