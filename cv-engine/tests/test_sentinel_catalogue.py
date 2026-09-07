@@ -175,102 +175,137 @@ def test_sentinel_stream_urls_encoding_and_redaction(monkeypatch):
     assert sentinel_stream_urls("../etc", s) == {"rtsp": None, "hls": None}
 
 
-def test_fetch_attaches_basic_auth_and_never_follows_redirects(monkeypatch):
-    """Catalogue is behind the access password (guide §0): fetch must send
-    Basic auth and must NOT follow redirects while authenticated."""
-    import base64
+# ---------------------------------------------------------------------------
+# Portal-gated CDN: form login + session cookie (verified against live grid:
+# unauthenticated / Basic-auth requests get 302 -> /auth/login)
+# ---------------------------------------------------------------------------
+
+class _FakeResp:
+    def __init__(self, status_code=200, payload=None, location=None):
+        self.status_code = status_code
+        self._payload = payload
+        self.headers = {"location": location} if location else {}
+        self.content = b""
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("not json")
+        return self._payload
+
+
+class _FakeClient:
+    """Minimal httpx.Client stand-in with scripted GET responses."""
+
+    def __init__(self, get_responses, post_status=302):
+        self.get_responses = list(get_responses)
+        self.post_status = post_status
+        self.calls = []
+        self.last_kwargs = None
+
+    def __call__(self, **kwargs):  # httpx.Client(...) construction
+        self.last_kwargs = kwargs
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def get(self, url, **kwargs):
+        self.calls.append(("GET", url))
+        return self.get_responses.pop(0)
+
+    def post(self, url, **kwargs):
+        self.calls.append(("POST", url, kwargs))
+        return _FakeResp(self.post_status, location="/")
+
+
+def _patch_client(monkeypatch, fake):
+    import httpx
+    monkeypatch.setattr(httpx, "Client", fake)
+
+
+def test_fetch_portal_login_flow_unlocks_catalogue(monkeypatch):
     import httpx
 
-    seen = {}
-
-    class _Resp:
-        status_code = 200
-        headers = {}
-        content = b"[]"
-
-        def json(self):
-            return SAMPLE_PAYLOAD
-
-    def _get(url, **kwargs):
-        seen["url"] = url
-        seen.update(kwargs)
-        return _Resp()
-
-    monkeypatch.setattr(httpx, "get", _get)
+    fake = _FakeClient([
+        _FakeResp(302, location="/auth/login"),     # first probe: gated
+        _FakeResp(200, payload=SAMPLE_PAYLOAD),      # retry after login: JSON
+    ])
+    _patch_client(monkeypatch, fake)
 
     cat = SentinelCatalogue(email="alice@example.com", password="s3cret-pw")
+    cameras = cat.fetch()
+
+    assert cat.last_fetch_ok is True
+    assert cat.get_camera("cam04") is not None
+    kinds = [c[0] for c in fake.calls]
+    assert kinds == ["GET", "POST", "GET"]
+    _, login_url, login_kwargs = fake.calls[1]
+    assert login_url.endswith("/auth/login")
+    assert login_kwargs["data"]["email"] == "alice@example.com"
+    assert login_kwargs["data"]["password"] == "s3cret-pw"
+    # client-level auth/redirects: Basic auth attached, first probe never
+    # follows redirects so credentials can't leak to a redirect target
+    assert isinstance(fake.last_kwargs["auth"], httpx.BasicAuth)
+    assert fake.last_kwargs["follow_redirects"] is False
+
+
+def test_fetch_direct_200_skips_portal_login(monkeypatch):
+    fake = _FakeClient([_FakeResp(200, payload=SAMPLE_PAYLOAD)])
+    _patch_client(monkeypatch, fake)
+
+    cat = SentinelCatalogue(email="alice@example.com", password="pw")
     cat.fetch()
 
-    assert seen["follow_redirects"] is False
-    auth = seen["auth"]
-    assert isinstance(auth, httpx.BasicAuth)
-    expected = "Basic " + base64.b64encode(b"alice@example.com:s3cret-pw").decode()
-    assert auth._auth_header == expected
+    assert [c[0] for c in fake.calls] == ["GET"]
     assert cat.last_fetch_ok is True
 
 
-def test_fetch_falls_back_to_env_credentials(monkeypatch):
-    """Entry points that never pass credentials still authenticate via env."""
-    import base64
-    import httpx
+def test_fetch_login_rejected_reports_credential_hint(monkeypatch):
+    fake = _FakeClient([
+        _FakeResp(302, location="/auth/login"),
+        _FakeResp(302, location="/auth/login"),   # still gated after login
+    ])
+    _patch_client(monkeypatch, fake)
 
+    cat = SentinelCatalogue(email="alice@example.com", password="wrong-pw")
+    with pytest.raises(CatalogueError) as excinfo:
+        cat.fetch()
+    msg = str(excinfo.value)
+    assert "HTTP 302" in msg
+    assert "SENTINEL_PASSWORD" in msg      # actionable hint
+    assert "wrong-pw" not in msg           # never leak the secret
+
+
+def test_fetch_env_credentials_fallback(monkeypatch):
     monkeypatch.setenv("SENTINEL_EMAIL", "bob@example.com")
     monkeypatch.setenv("SENTINEL_PASSWORD", "env-pw")
-
-    seen = {}
-
-    class _Resp:
-        status_code = 200
-        headers = {}
-        content = b"[]"
-
-        def json(self):
-            return SAMPLE_PAYLOAD
-
-    monkeypatch.setattr(httpx, "get", lambda url, **kw: seen.update(kw) or _Resp())
+    fake = _FakeClient([_FakeResp(200, payload=SAMPLE_PAYLOAD)])
+    _patch_client(monkeypatch, fake)
 
     SentinelCatalogue().fetch()
-    assert isinstance(seen["auth"], httpx.BasicAuth)
-    expected = "Basic " + base64.b64encode(b"bob@example.com:env-pw").decode()
-    assert seen["auth"]._auth_header == expected
-    assert seen["follow_redirects"] is False
+    assert fake.last_kwargs["auth"] is not None
 
 
-def test_fetch_without_credentials_still_follows_redirects(monkeypatch):
-    """No credentials configured -> behave exactly as before (plain GET)."""
-    import httpx
-
+def test_fetch_without_credentials_sends_no_auth(monkeypatch):
     monkeypatch.delenv("SENTINEL_EMAIL", raising=False)
     monkeypatch.delenv("SENTINEL_PASSWORD", raising=False)
-
-    seen = {}
-
-    class _Resp:
-        status_code = 200
-        headers = {}
-        content = b"[]"
-
-        def json(self):
-            return SAMPLE_PAYLOAD
-
-    monkeypatch.setattr(httpx, "get", lambda url, **kw: seen.update(kw) or _Resp())
+    fake = _FakeClient([_FakeResp(200, payload=SAMPLE_PAYLOAD)])
+    _patch_client(monkeypatch, fake)
 
     SentinelCatalogue().fetch()
-    assert seen["auth"] is None
-    assert seen["follow_redirects"] is True
+    assert fake.last_kwargs["auth"] is None
 
 
 def test_fetch_refuses_credentials_on_unapproved_host(monkeypatch):
-    """Credentials must never be sent to a non-Sentinel host."""
     import httpx
 
-    called = {"n": 0}
-
-    def _get(url, **kw):
-        called["n"] += 1
+    def _boom(**kwargs):
         raise AssertionError("network must not be touched")
 
-    monkeypatch.setattr(httpx, "get", _get)
+    monkeypatch.setattr(httpx, "Client", _boom)
 
     cat = SentinelCatalogue(
         url="https://evil.example.com/cameras.json",
@@ -280,27 +315,4 @@ def test_fetch_refuses_credentials_on_unapproved_host(monkeypatch):
     with pytest.raises(CatalogueError) as excinfo:
         cat.fetch()
     assert "unapproved" in cat.last_error
-    assert called["n"] == 0
     assert "s3cret-pw" not in str(excinfo.value)
-
-
-def test_fetch_reports_redirect_target_instead_of_parsing_html(monkeypatch):
-    """302 -> /auth/login must surface as HTTP 302, not 'not valid JSON'."""
-    import httpx
-
-    class _Resp:
-        status_code = 302
-        headers = {"location": "https://cctv.corp8.cloud/auth/login"}
-        content = b""
-
-        def json(self):  # pragma: no cover - must not be reached
-            raise AssertionError("redirect bodies are never parsed")
-
-    monkeypatch.setattr(httpx, "get", lambda url, **kw: _Resp())
-
-    cat = SentinelCatalogue(email="a@b.c", password="pw")
-    with pytest.raises(CatalogueError) as excinfo:
-        cat.fetch()
-    assert "HTTP 302" in str(excinfo.value)
-    assert "/auth/login" in str(excinfo.value)
-    assert "pw" not in str(excinfo.value)

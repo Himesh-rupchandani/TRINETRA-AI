@@ -106,7 +106,7 @@ class CameraStream:
         """Internal connection routine applying Rule 1 (RTSP over TCP) and HLS fallback."""
         self.state = CameraState.CONNECTING
         self.last_error = None
-        from ..services.sentinel_stream_service import redact
+        from ..services.sentinel_stream_service import redact, redact_text
 
         logger.info(
             f"[{self.camera_id}] Connecting to {self.source_type.upper()} source: {redact(self.source)}"
@@ -117,7 +117,7 @@ class CameraStream:
             try:
                 self.cap.release()
             except Exception as e:
-                logger.warning(f"[{self.camera_id}] Error releasing prior capture: {e}")
+                logger.warning("[%s] Error releasing prior capture: %s", self.camera_id, redact_text(e))
             self.cap = None
 
         try:
@@ -158,7 +158,9 @@ class CameraStream:
             # If RTSP failed and a fallback source (e.g. HLS) is available, attempt fallback (Rule 1)
             if self.source_type == "rtsp" and self.fallback_source and self.source != self.fallback_source:
                 logger.warning(
-                    f"[{self.camera_id}] RTSP stream unreachable. Attempting HLS fallback: {self.fallback_source}"
+                    "[%s] RTSP stream unreachable. Attempting HLS fallback: %s",
+                    self.camera_id,
+                    redact(self.fallback_source),
                 )
                 self.source = self.fallback_source
                 self.source_type = "hls"
@@ -199,14 +201,14 @@ class CameraStream:
                 return True
 
             self.state = CameraState.OFFLINE
-            self.last_error = f"Failed to connect to {self.source_type.upper()} stream at {self.source}"
-            logger.error(f"[{self.camera_id}] Connection failed: {self.last_error}")
+            self.last_error = f"Failed to connect to {self.source_type.upper()} stream at {redact(self.source)}"
+            logger.error("[%s] Connection failed: %s", self.camera_id, self.last_error)
             return False
 
         except Exception as e:
             self.state = CameraState.OFFLINE
-            self.last_error = str(e)
-            logger.error(f"[{self.camera_id}] Exception during connect: {e}")
+            self.last_error = redact_text(e)
+            logger.error("[%s] Exception during connect: %s", self.camera_id, self.last_error)
 
             if settings.DEMO_MODE:
                 self.state = CameraState.ONLINE
@@ -221,7 +223,7 @@ class CameraStream:
 
             return False
 
-    def read_packet(self) -> Optional[FramePacket]:
+    def read_packet(self, stop_event: Optional[threading.Event] = None) -> Optional[FramePacket]:
         """
         Read a single video frame and wrap it in a FramePacket with container PTS and discontinuity flags.
         Conforms to Mandatory Rules 2, 3, 4, 6, 7, 11, 12.
@@ -299,7 +301,9 @@ class CameraStream:
                         self._handle_read_failure(now_mono)
 
                 except Exception as e:
-                    logger.warning(f"[{self.camera_id}] Exception during cap.read(): {e}")
+                    from ..services.sentinel_stream_service import redact_text
+
+                    logger.warning("[%s] Exception during cap.read(): %s", self.camera_id, redact_text(e))
                     self._handle_read_failure(now_mono)
 
             # If real capture is not active or closed, check reconnection or demo mode
@@ -308,7 +312,9 @@ class CameraStream:
                     if self.state in (CameraState.RECONNECTING, CameraState.OFFLINE):
                         if self._reconnect_handler.should_attempt():
                             logger.warning(f"[{self.camera_id}] Triggering automatic reconnection...")
-                            reconnected = self._reconnect_handler.attempt_reconnect_sync()
+                            reconnected = self._reconnect_handler.attempt_reconnect_sync(
+                                interrupt_event=stop_event
+                            )
                             if reconnected and self.cap is not None and self.cap.isOpened():
                                 ok, frame = self.cap.read()
                                 if ok and frame is not None and frame.size > 0:
@@ -338,7 +344,11 @@ class CameraStream:
                     self.sequence_number += 1
                     self.last_seen = utc_now()
                     self.state = CameraState.ONLINE
-                    pts_ms = float((time.time() - self._stream_start_mono) * 1000.0) if self._stream_start_mono > 0 else float(time.time() * 1000)
+                    pts_ms = (
+                        float((time.monotonic() - self._stream_start_mono) * 1000.0)
+                        if self._stream_start_mono > 0
+                        else float(time.monotonic() * 1000.0)
+                    )
                     is_discontinuity = self._detect_discontinuity(pts_ms)
                     self.last_pts_ms = pts_ms
                     return FramePacket(
@@ -473,6 +483,8 @@ class CameraStream:
 
     def release(self):
         """Safely release OpenCV VideoCapture resources (Rule 9 & 10)."""
+        from ..services.sentinel_stream_service import redact_text
+
         with self._lock:
             self._is_running = False
             self.state = CameraState.STOPPED
@@ -480,6 +492,6 @@ class CameraStream:
                 try:
                     self.cap.release()
                 except Exception as e:
-                    logger.warning(f"[{self.camera_id}] Error during cap.release(): {e}")
+                    logger.warning("[%s] Error during cap.release(): %s", self.camera_id, redact_text(e))
                 self.cap = None
             logger.info(f"[{self.camera_id}] Stream released and stopped.")

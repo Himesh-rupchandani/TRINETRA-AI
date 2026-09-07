@@ -172,6 +172,15 @@ class TestSentinelCatalogueSync:
         assert norm["status"] == "ONLINE"
         assert norm["codec"] == "H264"
 
+    def test_catalogue_normalization_drops_embedded_stream_credentials(self):
+        norm = normalize_sentinel_camera({
+            "camera_id": "CAM_PRIVATE",
+            "stream_url": "https://operator:top-secret@camera.example/live.m3u8?token=abc123",
+        })
+        assert norm["stream_url"] == "https://camera.example/live.m3u8"
+        assert "top-secret" not in norm["stream_url"]
+        assert "abc123" not in norm["stream_url"]
+
     def test_sync_sentinel_catalogue_with_payload(self, test_setup):
         """Syncing Sentinel cameras with payload upserts records without duplicates."""
         _, Session = test_setup

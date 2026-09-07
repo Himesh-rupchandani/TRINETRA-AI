@@ -23,6 +23,11 @@ DEFAULT_CATALOGUE_URL = "https://cctv.corp8.cloud/cameras.json"
 # (exact hostname match - never a substring, never a redirect target).
 APPROVED_CATALOGUE_HOSTS = {"cctv.corp8.cloud"}
 
+# The CDN fronts the catalogue with an HTML portal: unauthenticated requests
+# get 302 -> /auth/login. Signing in is a form POST (fields: email, password)
+# that sets a session cookie; the client's cookie jar then unlocks retries.
+PORTAL_LOGIN_PATH = "/auth/login"
+
 
 def _is_approved_catalogue_host(url: str) -> bool:
     """True only when ``url`` sits on an approved Sentinel host."""
@@ -280,6 +285,10 @@ class SentinelCatalogue:
         self.last_fetch_ok: bool = False
 
     # -- network -----------------------------------------------------------
+    def _portal_login_url(self) -> str:
+        parts = urlsplit(self.url)
+        return f"{parts.scheme}://{parts.netloc}{PORTAL_LOGIN_PATH}"
+
     def fetch(self) -> List[Camera]:
         """Fetch + parse the catalogue. Raises CatalogueError on failure."""
         try:
@@ -288,12 +297,13 @@ class SentinelCatalogue:
             raise CatalogueError("httpx is required for catalogue fetch") from exc
 
         # The catalogue sits behind the same access password as the streams
-        # (integrator guide §0): the server 302-redirects unauthenticated
-        # requests to /auth/login. Attach Basic auth server-side, only to the
-        # approved host, and never follow redirects while authenticated so
-        # credentials can never leak to a redirect target.
+        # (integrator guide §0). The CDN gates it with an HTML portal that
+        # 302-redirects unknown visitors to /auth/login; Basic auth is NOT the
+        # scheme there. With approved credentials we open a cookie-jar client,
+        # sign in via the portal form (email + access password), then retry.
+        # Credentials are only ever sent to the exact approved host, and we
+        # never follow redirects on the initial probe.
         auth = None
-        follow_redirects = True
         if self.email and self.password:
             if not _is_approved_catalogue_host(self.url):
                 self.last_error = (
@@ -304,15 +314,29 @@ class SentinelCatalogue:
                 logger.warning("[CATALOGUE] %s", self.last_error)
                 raise CatalogueError(self.last_error)
             auth = httpx.BasicAuth(self.email, self.password)
-            follow_redirects = False
 
         try:
-            resp = httpx.get(
-                self.url,
+            with httpx.Client(
                 timeout=self.timeout_sec,
-                follow_redirects=follow_redirects,
+                follow_redirects=False,
                 auth=auth,
-            )
+            ) as client:
+                resp = client.get(self.url)
+                if (
+                    resp.status_code != 200
+                    and auth is not None
+                    and resp.status_code in (301, 302, 303, 307, 308, 401, 403)
+                ):
+                    logger.info(
+                        "[CATALOGUE] portal gate detected; signing in at %s",
+                        self._portal_login_url(),
+                    )
+                    client.post(
+                        self._portal_login_url(),
+                        data={"email": self.email, "password": self.password},
+                        follow_redirects=True,
+                    )
+                    resp = client.get(self.url)
         except Exception as exc:
             self.last_error = f"catalogue request failed: {redact_text(exc)}"
             self.last_fetch_ok = False
@@ -322,7 +346,12 @@ class SentinelCatalogue:
         if resp.status_code != 200:
             location = resp.headers.get("location")
             hint = f" (redirect to {redact_url(location)})" if location else ""
-            self.last_error = f"catalogue HTTP {resp.status_code}{hint}"
+            extra = (
+                " - portal login rejected; check SENTINEL_EMAIL/SENTINEL_PASSWORD"
+                if auth is not None and location and "login" in location
+                else ""
+            )
+            self.last_error = f"catalogue HTTP {resp.status_code}{hint}{extra}"
             self.last_fetch_ok = False
             logger.warning("[CATALOGUE] %s", self.last_error)
             raise CatalogueError(self.last_error)

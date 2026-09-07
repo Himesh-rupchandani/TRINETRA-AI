@@ -14,6 +14,7 @@ if __name__ == "__main__" and not __package__:
     __package__ = "backend.app.camera"
 
 from ..core.logging_config import logger
+from ..services.sentinel_stream_service import redact_text
 
 
 class StreamReconnectHandler:
@@ -110,5 +111,10 @@ class StreamReconnectHandler:
                 logger.warning(f"[{self.camera_id}] Reconnect attempt #{self.attempts} failed.")
                 return False
         except Exception as e:
-            logger.error(f"[{self.camera_id}] Exception during reconnection attempt #{self.attempts}: {e}")
+            logger.error(
+                "[%s] Exception during reconnection attempt #%d: %s",
+                self.camera_id,
+                self.attempts,
+                redact_text(e),
+            )
             return False

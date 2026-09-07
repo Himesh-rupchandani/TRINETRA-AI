@@ -79,20 +79,32 @@ def _auto_migrate(target_engine=None):
 
 
 def init_db():
-    """Create all database tables and seed default mock / initial cameras & watchlist if empty."""
+    """Create database tables and seed example records only in demo mode.
+
+    A live deployment must begin with an empty registry until it receives the
+    authorised catalogue (or an explicitly configured live camera). Otherwise
+    four placeholder rows plus an unconfigured slot look like five failed
+    official cameras, which is both misleading and difficult for an operator to
+    diagnose.
+    """
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=engine)
     _auto_migrate(engine)
 
-    # Seed default data if database is empty
     db = SessionLocal()
     try:
-        # Check cameras
+        if not settings.DEMO_MODE:
+            logger.info(
+                "Live mode: not seeding example cameras, watchlist entries, or synthetic records. "
+                "Awaiting an authorised catalogue or LIVE_CAMERA_* configuration."
+            )
+            return
+
+        # Demo-only starter data. The dedicated seed_demo script remains
+        # available for the larger offline demonstration dataset.
         if db.query(Camera).count() == 0:
-            logger.info("Seeding initial CCTV camera locations...")
+            logger.info("Demo mode: seeding initial CCTV camera locations...")
             initial_cameras = [
-                # Same identity rows as scripts/seed_demo.py: a camera label
-                # must never differ between the two seeders.
                 Camera(
                     camera_id="CAM04",
                     name="Paldi Circle",
@@ -137,9 +149,8 @@ def init_db():
             db.add_all(initial_cameras)
             db.commit()
 
-        # Check watchlist
         if db.query(Watchlist).count() == 0:
-            logger.info("Seeding initial watchlist entries for demonstration...")
+            logger.info("Demo mode: seeding initial watchlist entries...")
             initial_watchlist = [
                 Watchlist(
                     plate_number="GJ01AB1234",
@@ -164,7 +175,7 @@ def init_db():
             db.commit()
 
     except Exception as e:
-        logger.error(f"Error while seeding database: {e}")
+        logger.error(f"Error while initializing database: {e}")
         db.rollback()
     finally:
         db.close()

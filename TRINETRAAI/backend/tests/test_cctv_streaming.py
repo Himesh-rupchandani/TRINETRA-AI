@@ -14,6 +14,18 @@ from backend.app.camera.manager import CameraManager
 # ============================================================================
 # Test Item 1: RTSP connection using TCP (Rule 1)
 # ============================================================================
+def test_manager_diagnostics_redact_private_camera_source():
+    manager = CameraManager()
+    source = "rtsp://operator:top-secret@camera.example:8554/stream/cam?token=abc123"
+    stream = manager.add_camera("CAM_PRIVATE", source, auto_start=False)
+    stream.last_error = f"decoder rejected {source}"
+
+    diagnostic = manager.list_cameras()[0]
+    assert diagnostic["source"] == "rtsp://camera.example:8554/stream/cam"
+    assert "top-secret" not in diagnostic["last_error"]
+    assert "abc123" not in diagnostic["last_error"]
+
+
 def test_rtsp_connection_forces_tcp():
     """Verify that RTSP streams set OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp."""
     stream = CameraStream(
@@ -377,6 +389,23 @@ def test_scene_discontinuity_detection():
 # ============================================================================
 # Test Item 12: Proper resource release when processing stops (Rule 9 & 10)
 # ============================================================================
+def test_reconnect_wait_receives_stop_event_for_fast_shutdown():
+    """Stopping a camera interrupts its backoff instead of waiting up to 30 seconds."""
+    stream = CameraStream("CAM_STOP_RECONNECT", "rtsp://10.0.0.1:8554/cam")
+    stream._is_running = True
+    stream.state = CameraState.RECONNECTING
+    stream.cap = MagicMock()
+    stream.cap.isOpened.return_value = False
+    stop_event = threading.Event()
+
+    with patch("backend.app.core.config.settings.DEMO_MODE", False):
+        with patch.object(stream._reconnect_handler, "should_attempt", return_value=True):
+            with patch.object(stream._reconnect_handler, "attempt_reconnect_sync", return_value=False) as reconnect:
+                assert stream.read_packet(stop_event=stop_event) is None
+
+    reconnect.assert_called_once_with(interrupt_event=stop_event)
+
+
 def test_resource_release_on_stop():
     """Verify stopping camera closes VideoCapture handle and frees resources."""
     manager = CameraManager()
@@ -479,6 +508,27 @@ def test_frame_subsampling_preserves_exact_pts():
 # ============================================================================
 # Test Item 15: Background non-blocking execution keeping event loop responsive (Rule 15)
 # ============================================================================
+def test_start_returns_without_waiting_for_a_slow_camera_open():
+    """A dead RTSP open must not hold the HTTP/API thread that starts it."""
+    manager = CameraManager()
+    stream = manager.add_camera("CAM_SLOW_OPEN", "rtsp://10.0.0.1:8554/slow", auto_start=False)
+    entered = threading.Event()
+    allow_return = threading.Event()
+
+    def slow_connect():
+        entered.set()
+        allow_return.wait(timeout=2.0)
+        return False
+
+    with patch.object(stream, "connect", side_effect=slow_connect):
+        started = time.perf_counter()
+        assert manager.start_camera("CAM_SLOW_OPEN") is True
+        assert time.perf_counter() - started < 0.15
+        assert entered.wait(timeout=0.5)
+        allow_return.set()
+        manager.stop_camera("CAM_SLOW_OPEN")
+
+
 def test_async_responsiveness_during_streaming():
     """Verify asyncio event loops and concurrent tasks remain responsive while ingestion runs."""
     import asyncio

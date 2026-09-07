@@ -7,6 +7,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ..services.sentinel_stream_service import redact_text
 from ..services.ws_manager import ws_manager
 
 logger = logging.getLogger("trinetra")
@@ -42,5 +43,5 @@ async def websocket_events(websocket: WebSocket):
         ws_manager.disconnect(websocket)
         logger.info("WebSocket client disconnected cleanly.")
     except Exception as exc:
-        logger.warning(f"WebSocket error: {exc}")
+        logger.warning("WebSocket error: %s", redact_text(exc))
         ws_manager.disconnect(websocket)

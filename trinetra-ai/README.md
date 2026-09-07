@@ -137,25 +137,33 @@ dateTo, timeFrom, timeTo, watchlistOnly, page, pageSize`.
 
 ## 6. Configuration
 
-`.env` (see `.env.example`) — **browser-safe values only**:
+`.env.example` is the checked-in **browser-safe** reference. Local values go
+in `.env.local`, which is ignored by Git. `VITE_*` values are compiled into the
+browser bundle, so they must never contain a password, token, private camera URL,
+or any other secret.
+
+For a local live backend, copy the safe template once and edit it locally:
+
+```powershell
+Copy-Item .env.local.example .env.local
+notepad .env.local
+```
+
+Use these non-secret/browser-safe settings in the local file:
 
 ```dotenv
-VITE_USE_MOCKS=true          # false → use the real backend
+VITE_USE_MOCKS=false         # real backend, not synthetic demo data
 VITE_API_BASE_URL=/api       # same-origin proxy recommended
 VITE_REALTIME_TRANSPORT=sse  # sse | ws | off
-VITE_MAP_CENTER_LAT=23.0225
-VITE_MAP_CENTER_LNG=72.5714
-VITE_MAP_DEFAULT_ZOOM=13
+BACKEND_ORIGIN=http://127.0.0.1:8000  # dev-server only; no VITE_ prefix
 ```
 
-Going live:
-
-```bash
-VITE_USE_MOCKS=false VITE_BACKEND_ORIGIN=http://localhost:8000 npm run dev
-```
-
-`VITE_BACKEND_ORIGIN` is dev-only and configures the Vite proxy for `/api`, so the browser
-always talks to the same origin (no CORS, no hard-coded hosts in client code).
+`BACKEND_ORIGIN` is dev-server-only and configures Vite's `/api` proxy, so the
+browser always talks to the same origin (no CORS, no hard-coded backend host in
+client code). The same file holds the non-`VITE_` server-only Sentinel fields
+used by the WHEP proxy; see the next section. On Windows, the repository-root
+helper `scripts/configure-official-camera.ps1` creates and opens this file and
+the backend file in Notepad without collecting credentials in the terminal.
 
 ---
 
@@ -214,12 +222,12 @@ Proxying is not cosmetic — it solves four real problems at once:
   have **no `VITE_` prefix**, so none of them is ever compiled into the public
   bundle. The browser never learns the gateway origin or the credentials.
 
-All three `SENTINEL_*` variables are read from `trinetra-ai/.env` (server-side
-only — see `.env.example`) or the shell environment; real shell env wins. The
-proxy rewrites the path from `/sentinel/stream/<id>/whep` to the gateway's
-`/stream/<id>/whep`, and the WHEP `201 Location` header (relative or absolute)
-back onto our origin so the client can `DELETE` its session on teardown and
-free gateway capacity.
+All three `SENTINEL_*` variables are read from the ignored
+`trinetra-ai/.env.local` file (server-side only — see `.env.local.example`) or
+the shell environment; real shell values win. The proxy rewrites the path from
+`/sentinel/stream/<id>/whep` to the gateway's `/stream/<id>/whep`, and the WHEP
+`201 Location` header (relative or absolute) back onto our origin so the client
+can `DELETE` its session on teardown and free gateway capacity.
 
 ### Compliance with the integrator's checklist
 

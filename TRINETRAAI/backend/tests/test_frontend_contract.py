@@ -210,6 +210,37 @@ def test_camera_stream_ticket(client):
     assert client.get("/api/cameras/nosuch/stream").status_code == 404
 
 
+def test_camera_configuration_rejects_embedded_stream_secrets(client):
+    """Credentials belong in server-side environment config, never the registry/API."""
+    response = client.post(
+        "/api/cameras",
+        json={
+            "camera_id": "CAMSECRET",
+            "name": "Private source",
+            "stream_url": "rtsp://operator:top-secret@camera.example:8554/stream/camsecret?token=abc",
+            "stream_type": "rtsp",
+        },
+    )
+    assert response.status_code == 422
+    assert "top-secret" not in response.text
+    assert "token=abc" not in response.text
+
+    # Endpoint code is not reached when Pydantic validation itself fails; that
+    # public 422 must still not echo the submitted authenticated URL.
+    malformed = client.post(
+        "/api/cameras",
+        json={
+            "camera_id": "CAMSECRET2",
+            "name": "Private source",
+            "stream_url": ["rtsp://operator:top-secret@camera.example:8554/stream/camsecret?token=abc"],
+            "stream_type": "rtsp",
+        },
+    )
+    assert malformed.status_code == 422
+    assert "top-secret" not in malformed.text
+    assert "token=abc" not in malformed.text
+
+
 def test_sse_stream_endpoint_and_ingest_broadcast(client):
     """End-to-end SSE check against a real uvicorn server.
 

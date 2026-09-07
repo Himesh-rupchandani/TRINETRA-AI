@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 import threading
 import time
-from typing import Dict, List, Optional, Callable
+import uuid
+from typing import Dict, List, Optional, Callable, Tuple
 import cv2
 import numpy as np
 
@@ -59,17 +60,26 @@ class CameraManager:
         Register a new CCTV camera stream.
         Applies Rule 1 (TCP RTSP + HLS Fallback) and Rule 9 (Paced Resources).
         """
+        # Never hold the manager lock while stopping/joining a decoder worker:
+        # that worker briefly takes the same lock to publish its latest packet.
+        # Holding it here can turn a source change into a two-second UI stall.
         with self._lock:
-            if camera_id in self._streams:
-                logger.info(f"[{camera_id}] Camera already exists in manager. Updating stream.")
-                self.stop_camera(camera_id)
+            exists = camera_id in self._streams
+        if exists:
+            logger.info(f"[{camera_id}] Camera already exists in manager. Updating stream.")
+            self.stop_camera(camera_id)
 
-            stream = CameraStream(
-                camera_id=camera_id,
-                source=source,
-                source_type=source_type,
-                fallback_source=fallback_source,
-            )
+        stream = CameraStream(
+            camera_id=camera_id,
+            source=source,
+            source_type=source_type,
+            fallback_source=fallback_source,
+        )
+        with self._lock:
+            # A changed source begins with a clean frame/tracker timeline; do
+            # not briefly show a stale box/frame from the previous connection.
+            self._latest_packets.pop(camera_id, None)
+            self._latest_annotated_frames.pop(camera_id, None)
             self._streams[camera_id] = stream
 
         if auto_start:
@@ -92,59 +102,62 @@ class CameraManager:
         return False
 
     def start_camera(self, camera_id: str) -> bool:
-        """Start frame acquisition worker thread for a camera."""
+        """Start a non-blocking frame-acquisition worker for a camera.
+
+        ``VideoCapture`` can take several seconds while an RTSP/HLS endpoint is
+        unavailable.  Connection therefore happens inside the worker, not in
+        the API/request thread that starts the camera.
+        """
         with self._lock:
             if camera_id not in self._streams:
                 logger.error(f"[{camera_id}] Cannot start camera: not found in manager.")
                 return False
-
             stream = self._streams[camera_id]
 
-            # Check if already running
-            if camera_id in self._threads and self._threads[camera_id].is_alive():
+            worker = self._threads.get(camera_id)
+            if worker is not None and worker.is_alive():
                 logger.warning(f"[{camera_id}] Worker thread already running.")
                 return True
 
             stop_event = threading.Event()
-            self._stop_events[camera_id] = stop_event
-
-            # Connect stream
-            stream.connect()
-
-            # Start worker thread
             worker = threading.Thread(
                 target=self._camera_worker,
                 args=(camera_id, stream, stop_event),
                 daemon=True,
                 name=f"CameraWorker-{camera_id}",
             )
+            self._stop_events[camera_id] = stop_event
             self._threads[camera_id] = worker
-            worker.start()
-            logger.info(f"[{camera_id}] Worker thread started.")
-            return True
+
+        worker.start()
+        logger.info(f"[{camera_id}] Worker thread started.")
+        return True
 
     def stop_camera(self, camera_id: str) -> bool:
         """Stop frame acquisition and release resources (Rule 9 & 10)."""
         with self._lock:
-            if camera_id not in self._streams:
+            stream = self._streams.get(camera_id)
+            if stream is None:
                 return False
+            stop_event = self._stop_events.get(camera_id)
+            worker = self._threads.get(camera_id)
+            if stop_event is not None:
+                # Also interrupts an exponential-backoff wait in read_packet().
+                stop_event.set()
 
-            if camera_id in self._stop_events:
-                self._stop_events[camera_id].set()
+        # Release/join outside the manager lock. A worker may currently be
+        # publishing a frame and must be allowed to complete that small section.
+        stream.release()
+        if worker is not None and worker.is_alive() and worker is not threading.current_thread():
+            worker.join(timeout=2.0)
 
-            stream = self._streams[camera_id]
-            stream.release()
-
-        # Wait for thread termination outside lock
-        if camera_id in self._threads:
-            thread = self._threads[camera_id]
-            if thread.is_alive():
-                thread.join(timeout=2.0)
-            with self._lock:
-                if camera_id in self._threads:
-                    del self._threads[camera_id]
-                if camera_id in self._stop_events:
-                    del self._stop_events[camera_id]
+        with self._lock:
+            # Do not accidentally discard a replacement worker that was
+            # registered by a concurrent source update.
+            if self._threads.get(camera_id) is worker:
+                self._threads.pop(camera_id, None)
+            if self._stop_events.get(camera_id) is stop_event:
+                self._stop_events.pop(camera_id, None)
 
         logger.info(f"[{camera_id}] Stopped and resources released.")
         return True
@@ -162,13 +175,15 @@ class CameraManager:
             return self._streams.get(camera_id)
 
     def list_cameras(self) -> List[Dict]:
-        """List all cameras with full lifecycle state reporting (Rule 10)."""
+        """List camera lifecycle state without exposing private source URLs."""
+        from ..services.sentinel_stream_service import redact, redact_text
+
         with self._lock:
             results = []
             for cam_id, stream in self._streams.items():
                 results.append({
                     "camera_id": cam_id,
-                    "source": stream.source,
+                    "source": redact(stream.source),
                     "source_type": stream.source_type,
                     "status": stream.state.value,
                     "is_alive": stream.is_alive(),
@@ -177,12 +192,14 @@ class CameraManager:
                     "sequence_number": stream.sequence_number,
                     "last_pts_ms": stream.last_pts_ms,
                     "last_seen": stream.last_seen,
-                    "last_error": stream.last_error,
+                    "last_error": redact_text(stream.last_error),
                 })
             return results
 
     def get_camera_status(self, camera_id: str) -> Optional[Dict]:
-        """Get status dictionary for a specific camera."""
+        """Get status diagnostics without returning a private source/secret."""
+        from ..services.sentinel_stream_service import redact_text
+
         stream = self.get_camera(camera_id)
         if not stream:
             return None
@@ -196,7 +213,7 @@ class CameraManager:
             "sequence_number": stream.sequence_number,
             "last_pts_ms": stream.last_pts_ms,
             "last_seen": stream.last_seen,
-            "last_error": stream.last_error,
+            "last_error": redact_text(stream.last_error),
         }
 
     def update_annotated_frame(self, camera_id: str, frame: np.ndarray):
@@ -283,7 +300,9 @@ class CameraManager:
                     candidates.append((svc.get_authenticated_hls_url(cid), False))
                 candidates.append((svc.get_hls_url(cid), False))
         except Exception as exc:
-            logger.warning(f"[{camera_id.upper()}] Could not build Sentinel sources: {exc}")
+            from ..services.sentinel_stream_service import redact_text
+
+            logger.warning("[%s] Could not build Sentinel sources: %s", camera_id.upper(), redact_text(exc))
         if not any(c[0] == source for c in candidates):
             candidates.append((source, False))
         return candidates
@@ -300,8 +319,14 @@ class CameraManager:
         return cv2.VideoCapture(source)
 
     @classmethod
-    def _read_ondemand_frame(cls, cap: "cv2.VideoCapture", source: str):
-        """Read one frame for an on-demand live view, looping the file safely."""
+    def _read_ondemand_frame(cls, cap: "cv2.VideoCapture", source: str) -> Tuple[Optional[np.ndarray], bool]:
+        """Read one frame and report whether its source was reopened.
+
+        The reopen flag is important to the vehicle tracker: a reconnect/file
+        loop is a temporal discontinuity, not a continuation of the previous
+        traffic scene.
+        """
+        reopened = False
         ok, frame = cap.read() if cap.isOpened() else (False, None)
         if not (ok and frame is not None and frame.size > 0):
             # Some containers cannot seek backwards reliably — reopen instead.
@@ -316,39 +341,68 @@ class CameraManager:
                 cap.open(source, cv2.CAP_FFMPEG)
             else:
                 cap.open(source)
+            reopened = True
             ok, frame = cap.read()
         if not (ok and frame is not None and frame.size > 0):
-            return None
+            return None, reopened
         h, w = frame.shape[:2]
         if w > 1280:  # keep on-demand views cheap to decode and stream
             scale = 1280.0 / w
             frame = cv2.resize(frame, (1280, int(round(h * scale))), interpolation=cv2.INTER_AREA)
-        return frame
+        return frame, reopened
 
     def generate_mjpeg_stream(self, camera_id: str, detect_vehicles: bool = False):
-        """Yield multipart MJPEG stream frames for HTTP live view.
+        """Yield a bounded, on-demand multipart MJPEG camera view.
 
-        When no resident worker is running for the camera (e.g. file-backed
-        demo cameras with AUTO_START_CAMERAS off), the source file is decoded
-        on demand for the lifetime of this HTTP connection only.
-
-        With ``detect_vehicles=True`` every real frame passes through the
-        OpenCV + YOLO vehicle detector and gets green bounding boxes.
+        Detection sessions use raw frame packets plus their real PTS/sequence
+        number.  A model run can be throttled for hardware capacity, but the
+        tracker is advanced for every new live frame rather than repainting a
+        frozen set of boxes.  No camera resource is retained after the HTTP
+        client disconnects.
         """
         ondemand_cap = None
         ondemand_source = None
         ondemand_is_file = True
         ondemand_candidates = None
         ondemand_failures = 0
+        ondemand_sequence = 0
+        ondemand_clock_started = time.monotonic()
         detector = None
+        detection_session_key = None
+        last_annotation_frame_key = None
         if detect_vehicles:
             from ..services.vehicle_detection_service import vehicle_detection_service
+
             detector = vehicle_detection_service
+            # Different browser clients need independent tracker state. The
+            # model remains shared, so this costs no extra model memory.
+            detection_session_key = f"{camera_id.lower()}:{uuid.uuid4().hex}"
+
         try:
             while True:
-                frame = self.get_latest_frame(camera_id, annotated=True)
-                if frame is None:
-                    frame = self.get_latest_frame(camera_id.upper(), annotated=True)
+                frame = None
+                pts_ms = None
+                frame_key = None
+                is_discontinuity = False
+
+                # For the detection route always take the raw packet. An
+                # external pipeline may already have drawn overlays into the
+                # annotated cache; running detection over that would duplicate
+                # boxes and pollute model input.
+                if detect_vehicles:
+                    packet = self.get_latest_packet(camera_id) or self.get_latest_packet(camera_id.upper())
+                    if packet is not None:
+                        frame = packet.frame.copy()
+                        pts_ms = packet.pts_ms
+                        # Object identity scopes the sequence to this capture
+                        # generation; a replacement stream may restart at 1.
+                        frame_key = ("resident", id(packet), packet.sequence_number)
+                        is_discontinuity = bool(packet.is_discontinuity)
+                else:
+                    frame = self.get_latest_frame(camera_id, annotated=True)
+                    if frame is None:
+                        frame = self.get_latest_frame(camera_id.upper(), annotated=True)
+
                 if frame is None and ondemand_source is None and ondemand_cap is None:
                     if ondemand_candidates is None:
                         ondemand_candidates = self._ondemand_candidates(camera_id)
@@ -356,15 +410,32 @@ class CameraManager:
                         ondemand_source, ondemand_is_file = ondemand_candidates.pop(0)
                         ondemand_cap = self._open_ondemand_capture(ondemand_source)
                         ondemand_failures = 0
+                        ondemand_clock_started = time.monotonic()
                         from ..services.sentinel_stream_service import redact as _redact
+
                         kind = "local recording" if ondemand_is_file else "real network stream"
                         logger.info(
-                            f"[{camera_id.upper()}] On-demand live view decoding {kind}: {_redact(ondemand_source)}"
+                            "[%s] On-demand live view decoding %s: %s",
+                            camera_id.upper(),
+                            kind,
+                            _redact(ondemand_source),
                         )
+
                 if frame is None and ondemand_cap is not None:
-                    frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)
+                    frame, reopened = self._read_ondemand_frame(ondemand_cap, ondemand_source)
                     if frame is not None:
                         ondemand_failures = 0
+                        ondemand_sequence += 1
+                        frame_key = ("ondemand", ondemand_sequence)
+                        is_discontinuity = reopened
+                        try:
+                            source_pts = float(ondemand_cap.get(cv2.CAP_PROP_POS_MSEC))
+                        except Exception:
+                            source_pts = 0.0
+                        # CAP_PROP_POS_MSEC is authoritative when exposed.
+                        # Otherwise use a connection-relative monotonic stream
+                        # clock; never synthesize timing from nominal FPS.
+                        pts_ms = source_pts if source_pts > 0.0 else (time.monotonic() - ondemand_clock_started) * 1000.0
                         frame = self._stamp_source_osd(frame, ondemand_is_file)
                     elif not ondemand_is_file:
                         # Network source not delivering: after a few misses, move
@@ -372,8 +443,11 @@ class CameraManager:
                         ondemand_failures += 1
                         if ondemand_failures >= 25 and ondemand_candidates:
                             from ..services.sentinel_stream_service import redact as _redact
+
                             logger.warning(
-                                f"[{camera_id.upper()}] No frames from {_redact(ondemand_source)} — trying next source"
+                                "[%s] No frames from %s — trying next source",
+                                camera_id.upper(),
+                                _redact(ondemand_source),
                             )
                             try:
                                 ondemand_cap.release()
@@ -381,9 +455,29 @@ class CameraManager:
                                 pass
                             ondemand_cap = None
                             ondemand_source = None
-                if frame is not None and detector is not None:
-                    # Real detections only: boxes come straight from the model.
-                    frame = detector.annotate(camera_id.lower(), frame)
+
+                if frame is not None and detector is not None and detection_session_key is not None:
+                    shared_frame_key = (
+                        (camera_id.lower(), frame_key)
+                        if isinstance(frame_key, tuple) and frame_key and frame_key[0] == "resident"
+                        else None
+                    )
+                    # The same latest resident packet can be emitted more than
+                    # once while the browser is waiting. Do not reset a tracker
+                    # repeatedly because its packet carries a first-frame flag.
+                    if frame_key == last_annotation_frame_key:
+                        is_discontinuity = False
+                    else:
+                        last_annotation_frame_key = frame_key
+                    frame = detector.annotate(
+                        detection_session_key,
+                        frame,
+                        pts_ms=pts_ms,
+                        frame_key=frame_key,
+                        shared_frame_key=shared_frame_key,
+                        is_discontinuity=is_discontinuity,
+                    )
+
                 if frame is None:
                     placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
                     placeholder[:] = (20, 24, 30)
@@ -408,15 +502,15 @@ class CameraManager:
                     b"--frame\r\n"
                     b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
                 )
-                time.sleep(0.08)  # ~12 FPS on-demand live preview pacing
+                time.sleep(0.08)  # ~12 FPS preview pacing; capture remains background work.
         finally:
             if ondemand_cap is not None:
                 try:
                     ondemand_cap.release()
                 except Exception:
                     pass
-            if detector is not None:
-                detector.forget(camera_id.lower())
+            if detector is not None and detection_session_key is not None:
+                detector.forget(detection_session_key)
 
     def _camera_worker(self, camera_id: str, stream: CameraStream, stop_event: threading.Event):
         """
@@ -424,15 +518,47 @@ class CameraManager:
         Conforms to Rule 13 (camera isolation) and Rule 14 (subsampled frame dispatching).
         """
         logger.info(f"[{camera_id}] Ingestion worker active.")
-        process_every_n = getattr(settings, "PROCESS_EVERY_N_FRAMES", 1)
+        process_every_n = max(1, int(getattr(settings, "PROCESS_EVERY_N_FRAMES", 1)))
+        connect_delay = 2.0
+        next_connect_at = 0.0
 
         while not stop_event.is_set():
+            with self._lock:
+                if self._streams.get(camera_id) is not stream:
+                    # Source was replaced while this worker was connecting.
+                    return
+
+            # Opening RTSP/HLS can block while a gateway is unavailable. Do it
+            # in this worker (never an API request), with a bounded exponential
+            # retry rather than a tight open/fail loop.
+            if stream.state == CameraState.OFFLINE:
+                now = time.monotonic()
+                if now < next_connect_at:
+                    stop_event.wait(timeout=min(0.25, next_connect_at - now))
+                    continue
+                if stream.connect():
+                    connect_delay = 2.0
+                    next_connect_at = 0.0
+                else:
+                    next_connect_at = time.monotonic() + connect_delay
+                    logger.warning(
+                        "[%s] Initial connection unavailable; retrying in %.1fs",
+                        camera_id,
+                        connect_delay,
+                    )
+                    connect_delay = min(connect_delay * 2.0, 30.0)
+                continue
+
             try:
                 start_time = time.monotonic()
-                packet = stream.read_packet()
+                packet = stream.read_packet(stop_event=stop_event)
 
                 if packet is not None:
                     with self._lock:
+                        if self._streams.get(camera_id) is not stream:
+                            # A replacement worker owns this camera now; never
+                            # publish a stale packet into its fresh timeline.
+                            return
                         self._latest_packets[camera_id] = packet
 
                         # If no annotated frame is present yet, mirror raw frame
@@ -441,12 +567,21 @@ class CameraManager:
 
                     # Rule 14: Subsample frames while strictly preserving packet PTS
                     if packet.sequence_number % process_every_n == 0:
-                        callback = self._pipeline_callback
+                        with self._lock:
+                            if self._streams.get(camera_id) is not stream:
+                                return
+                            callback = self._pipeline_callback
                         if callback is not None:
                             try:
                                 callback(packet)
                             except Exception as cb_err:
-                                logger.error(f"[{camera_id}] Error in AI pipeline callback: {cb_err}")
+                                from ..services.sentinel_stream_service import redact_text
+
+                                logger.error(
+                                    "[%s] Error in AI pipeline callback: %s",
+                                    camera_id,
+                                    redact_text(cb_err),
+                                )
 
                 else:
                     # No frame returned (transient slip or reconnecting)
@@ -459,8 +594,11 @@ class CameraManager:
                 time.sleep(sleep_time)
 
             except Exception as e:
-                # Rule 13: Top-level exception isolation
-                logger.error(f"[{camera_id}] Unexpected error in camera worker: {e}")
+                # Rule 13: Top-level exception isolation. Decoder errors can
+                # echo their input URL, so scrub them before logging/API state.
+                from ..services.sentinel_stream_service import redact_text
+
+                logger.error("[%s] Unexpected error in camera worker: %s", camera_id, redact_text(e))
                 time.sleep(0.5)
 
         logger.info(f"[{camera_id}] Ingestion worker terminated.")

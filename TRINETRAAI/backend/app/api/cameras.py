@@ -31,9 +31,52 @@ from ..database.schemas import (
     CameraListResponse,
 )
 from ..camera.manager import camera_manager
+from ..services.sentinel_stream_service import (
+    can_decode_for_detection,
+    has_embedded_credentials,
+    redact,
+    resolve_ingest_source,
+    resolve_ingest_stream_type,
+)
 
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
+
+def _safe_camera_response(cam: Camera) -> CameraResponse:
+    """Serialize mutable camera records without returning source credentials.
+
+    Playback always goes through ``/{id}/stream``. The registry field is kept
+    for backwards-compatible metadata clients, but userinfo and signed query
+    values are stripped before this response leaves the server.
+    """
+    return CameraResponse(
+        id=cam.id,
+        camera_id=cam.camera_id,
+        name=cam.name,
+        stream_url=redact(cam.stream_url),
+        stream_type=cam.stream_type,
+        latitude=cam.latitude,
+        longitude=cam.longitude,
+        location=cam.location,
+        codec=cam.codec,
+        width=cam.width,
+        height=cam.height,
+        status=cam.status,
+        last_seen=cam.last_seen,
+        created_at=cam.created_at,
+    )
+
+
+def _reject_embedded_stream_credentials(stream_url: str) -> None:
+    """Keep credentials in environment/secret storage rather than the DB/API."""
+    if has_embedded_credentials(stream_url):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Camera URLs with embedded credentials or signed tokens are not accepted here. "
+                "Configure authorized access server-side with LIVE_CAMERA_* environment variables."
+            ),
+        )
 
 
 # The API contract exposes exactly three camera states (ONLINE / OFFLINE /
@@ -95,7 +138,7 @@ def list_cameras(db: Session = Depends(get_db)):
                 height=cam.height or 1080,
                 fps=cam.fps,
                 stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
-                stream_url=cam.stream_url,
+                stream_url=redact(cam.stream_url),
                 last_seen=last_seen,
             )
         )
@@ -121,7 +164,8 @@ def list_active_streams():
 
 @router.post("", response_model=CameraResponse, status_code=status.HTTP_201_CREATED)
 def create_camera(payload: CameraCreate, db: Session = Depends(get_db)):
-    """Register a new CCTV camera."""
+    """Register a new CCTV camera without storing browser-visible secrets."""
+    _reject_embedded_stream_credentials(payload.stream_url)
     existing = db.query(Camera).filter(Camera.camera_id == payload.camera_id).first()
     if existing:
         raise HTTPException(
@@ -142,14 +186,18 @@ def create_camera(payload: CameraCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_cam)
 
-    # Register in CameraManager
+    # Register the display reference, but only start a decoder when it has an
+    # OpenCV-compatible source. WHEP/WebRTC remains browser playback unless a
+    # paired server-side ingest has been configured for the live camera slot.
+    source = resolve_ingest_source(new_cam.camera_id, new_cam.stream_url, new_cam.stream_type)
+    source_type = resolve_ingest_stream_type(new_cam.camera_id, new_cam.stream_url, new_cam.stream_type)
     camera_manager.add_camera(
         camera_id=new_cam.camera_id,
-        source=new_cam.stream_url,
-        source_type=new_cam.stream_type,
-        auto_start=True,
+        source=source,
+        source_type=source_type,
+        auto_start=can_decode_for_detection(new_cam.camera_id, new_cam.stream_type),
     )
-    return new_cam
+    return _safe_camera_response(new_cam)
 
 
 @router.get("/{camera_id}", response_model=CameraItem, summary="Get camera by ID")
@@ -180,7 +228,7 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
         height=cam.height or 1080,
         fps=cam.fps,
         stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
-        stream_url=cam.stream_url,
+        stream_url=redact(cam.stream_url),
         last_seen=last_seen,
     )
 
@@ -243,7 +291,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         f"/api/cameras/{slug}/live/detect"
         if playable
         and settings.VEHICLE_DETECTION_ENABLED
-        and (cam.stream_type or "").lower() in ("file", "rtsp", "hls")
+        and can_decode_for_detection(cam.camera_id, cam.stream_type)
         else None
     )
 
@@ -289,6 +337,7 @@ def update_camera(camera_id: str, payload: CameraUpdate, db: Session = Depends(g
     if payload.name is not None:
         cam.name = payload.name
     if payload.stream_url is not None and payload.stream_url != cam.stream_url:
+        _reject_embedded_stream_credentials(payload.stream_url)
         cam.stream_url = payload.stream_url
         stream_changed = True
     if payload.stream_type is not None and payload.stream_type != cam.stream_type:
@@ -305,14 +354,16 @@ def update_camera(camera_id: str, payload: CameraUpdate, db: Session = Depends(g
     db.refresh(cam)
 
     if stream_changed:
+        source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
+        source_type = resolve_ingest_stream_type(cam.camera_id, cam.stream_url, cam.stream_type)
         camera_manager.add_camera(
             camera_id=cam.camera_id,
-            source=cam.stream_url,
-            source_type=cam.stream_type,
-            auto_start=True,
+            source=source,
+            source_type=source_type,
+            auto_start=can_decode_for_detection(cam.camera_id, cam.stream_type),
         )
 
-    return cam
+    return _safe_camera_response(cam)
 
 
 @router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -333,31 +384,41 @@ def delete_camera(camera_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{camera_id}/start")
 def start_camera(camera_id: str, db: Session = Depends(get_db)):
-    """Start ingestion worker for a camera."""
-    cam = db.query(Camera).filter(Camera.camera_id == camera_id).first()
+    """Start one camera's secure background ingestion worker."""
+    cam = db.query(Camera).filter(func.upper(Camera.camera_id) == camera_id.strip().upper()).first()
     if not cam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Camera '{camera_id}' not found.",
         )
 
-    # Sentinel cameras ingest over authenticated RTSP built at connect time
-    # from env credentials — the authenticated URL is never stored or returned.
-    from ..services.sentinel_stream_service import resolve_ingest_source
-
+    # Sentinel and env-configured live cameras resolve their private ingest URL
+    # only at connection time. Never re-use the public registry reference when
+    # an authenticated source has just been resolved.
+    if not can_decode_for_detection(cam.camera_id, cam.stream_type):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This camera needs an RTSP/HLS/file ingest source for OpenCV. "
+                "For WHEP/WebRTC viewing, set LIVE_CAMERA_INGEST_URL and LIVE_CAMERA_INGEST_TYPE server-side."
+            ),
+        )
     source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
-    stream = camera_manager.get_camera(camera_id)
-    if not stream:
+    source_type = resolve_ingest_stream_type(cam.camera_id, cam.stream_url, cam.stream_type)
+    stream = camera_manager.get_camera(cam.camera_id)
+    if stream is None or stream.source != source or stream.source_type != source_type:
+        # add_camera() stops a stale worker before replacing it, preventing two
+        # decoder threads from reading the same authorized camera.
         camera_manager.add_camera(
             camera_id=cam.camera_id,
             source=source,
-            source_type="rtsp" if source != cam.stream_url else cam.stream_type,
+            source_type=source_type,
             auto_start=True,
         )
     else:
-        camera_manager.start_camera(camera_id)
+        camera_manager.start_camera(cam.camera_id)
 
-    return {"status": "started", "camera_id": camera_id}
+    return {"status": "started", "camera_id": cam.camera_id}
 
 
 @router.post("/{camera_id}/stop")
@@ -416,25 +477,26 @@ def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
         )
 
     # Resolve the source the backend should decode. For Sentinel cameras this
-    # is the AUTHENTICATED RTSP URL built from env credentials (exactly like
-    # POST /{camera_id}/start) — the registry only holds the public HLS URL,
-    # which the gateway rejects without credentials. Nothing is returned to
-    # the client. No worker is started: frames are decoded on demand.
-    from ..services.sentinel_stream_service import resolve_ingest_source
-
+    # is an authenticated RTSP URL built from environment credentials; for a
+    # configured WHEP viewer it can be a paired server-side RTSP/HLS ingest
+    # source. Nothing private is returned to the client.
+    if not can_decode_for_detection(cam.camera_id, cam.stream_type):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This WHEP/WebRTC camera has no OpenCV ingest source configured. "
+                "Set LIVE_CAMERA_INGEST_URL and LIVE_CAMERA_INGEST_TYPE server-side."
+            ),
+        )
     source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
-    source_type = "rtsp" if source != cam.stream_url else (cam.stream_type or "rtsp")
+    source_type = resolve_ingest_stream_type(cam.camera_id, cam.stream_url, cam.stream_type)
     existing = camera_manager.get_camera(cam.camera_id)
-    if existing is None:
+    if existing is None or (not existing.is_alive() and (existing.source != source or existing.source_type != source_type)):
+        # Replace only an idle stale registration. An active worker already
+        # owns the authenticated source and remains the single capture reader.
         camera_manager.add_camera(
             camera_id=cam.camera_id, source=source, source_type=source_type, auto_start=False,
         )
-    elif not existing.is_alive() and existing.source != source:
-        # Registered at boot with the public URL and not ingesting: point the
-        # idle entry at the authenticated source so on-demand decode can open it.
-        existing.source = source
-        existing.primary_source = source
-        existing.source_type = source_type
 
     return StreamingResponse(
         camera_manager.generate_mjpeg_stream(cam.camera_id, detect_vehicles=True),

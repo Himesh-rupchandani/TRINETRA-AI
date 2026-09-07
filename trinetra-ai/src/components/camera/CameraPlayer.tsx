@@ -70,23 +70,27 @@ export function CameraPlayer({
       return;
     }
     setMjpegSrc(ticket?.streamType === 'MJPEG' ? `/cvfeed/${camera.id}` : null);
-  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id]);
+  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.streamType, ticket?.detectionUrl, detectionActive, camera.id]);
 
   const requestStream = async () => {
-    if (!rtcOk) {
-      setTicketError('This browser cannot play live video. Please use Chrome, Edge or Safari.');
-      return;
-    }
-    if (!decodable) {
-      setTicketError(
-        'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.',
-      );
-      return;
-    }
+    // Ask the backend before rejecting browser WebRTC support: an authorized
+    // camera may offer its same-origin annotated MJPEG detection view, which
+    // does not depend on the browser decoding the raw WHEP codec.
     setRequesting(true);
     setTicketError(null);
     try {
       const t = await cameraService.stream(camera.id);
+      const imageFallback = Boolean(t.detectionUrl) || t.streamType === 'MJPEG';
+      if (!rtcOk && !imageFallback) {
+        setTicketError('This browser cannot play live video. Please use Chrome, Edge or Safari.');
+        return;
+      }
+      if (!decodable && !imageFallback) {
+        setTicketError(
+          'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.',
+        );
+        return;
+      }
       setTicket(t);
       setWanted(true);
     } catch (e) {
