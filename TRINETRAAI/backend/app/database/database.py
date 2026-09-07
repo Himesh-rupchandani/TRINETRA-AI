@@ -81,6 +81,12 @@ def _auto_migrate(target_engine=None):
         for col, col_def in [
             ("video_file", "VARCHAR(255)"),
             ("video_offset_sec", "FLOAT"),
+            # Multi-video analysis provenance (frame/box/detector confidence).
+            ("video_id", "VARCHAR(64)"),
+            ("frame_number", "INTEGER"),
+            ("vehicle_confidence", "FLOAT"),
+            ("bbox_json", "VARCHAR(200)"),
+            ("plate_status", "VARCHAR(20)"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE vehicle_events ADD COLUMN {col} {col_def}"))

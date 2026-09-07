@@ -131,7 +131,28 @@ class VehicleEvent(Base):
     # Manually-uploaded CCTV video provenance (NULL for live-camera sightings).
     video_file = Column(String(255), nullable=True)      # uploaded filename, e.g. cam1.mp4
     video_offset_sec = Column(Float, nullable=True)      # position inside the video, in seconds
+    # --- Multi-video analysis provenance (NULL for live-camera sightings) ---
+    # Set by the multi-video analysis pipeline so every sighting can be traced
+    # back to the exact source video, frame and box it came from.
+    video_id = Column(String(64), index=True, nullable=True)   # video_sources.video_id
+    frame_number = Column(Integer, nullable=True)              # frame index inside the video
+    vehicle_confidence = Column(Float, nullable=True)          # detector confidence 0.0-1.0
+    bbox_json = Column(String(200), nullable=True)             # "[x1, y1, x2, y2]" in pixels
+    # HIGH | LOW_CONFIDENCE | UNKNOWN — an uncertain read is never promoted to
+    # a confident plate; it is labelled instead.
+    plate_status = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+
+    @property
+    def bbox(self):
+        try:
+            return json.loads(self.bbox_json) if self.bbox_json else None
+        except Exception:
+            return None
+
+    @bbox.setter
+    def bbox(self, value):
+        self.bbox_json = json.dumps([round(float(v), 1) for v in value]) if value else None
 
     __table_args__ = (
         Index("idx_ve_plate_cam_time", "plate_number", "camera_id", "event_time"),
@@ -164,4 +185,54 @@ class Alert(Base):
         Index("idx_alerts_severity_time", "severity", "timestamp"),
         Index("idx_alerts_camera_time", "camera_id", "timestamp"),
         Index("idx_alerts_plate", "plate_number"),
+    )
+
+
+class VideoSource(Base):
+    """
+    One video submitted to the multi-video analysis feature.
+
+    A video source is always paired with a row in ``cameras`` (stream_type
+    'file') so every existing camera/vehicle/GIS endpoint keeps working
+    unchanged; this table only adds what the registry cannot express:
+    where the video came from, and how far its analysis has got.
+    """
+
+    __tablename__ = "video_sources"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    video_id = Column(String(64), unique=True, index=True, nullable=False)
+    batch_id = Column(String(64), index=True, nullable=True)
+    camera_id = Column(String(50), index=True, nullable=False)  # CAM1, CAM2, ...
+    source_type = Column(String(20), nullable=False, default="UPLOAD")  # UPLOAD | GDRIVE
+    source_name = Column(String(255), nullable=False)   # original filename / Drive file name
+    source_ref = Column(String(1000), nullable=True)    # original Drive URL (NULL for uploads)
+    file_path = Column(String(1000), nullable=True)     # absolute path on disk
+
+    # PENDING | DOWNLOADING | READY | QUEUED | PROCESSING | DONE | FAILED
+    status = Column(String(20), nullable=False, default="PENDING", index=True)
+    error = Column(Text, nullable=True)
+    progress_pct = Column(Float, nullable=False, default=0.0)
+
+    # Probed with OpenCV at registration time (never guessed).
+    fps = Column(Float, nullable=True)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    duration_sec = Column(Float, nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+
+    frames_total = Column(Integer, nullable=False, default=0)
+    frames_read = Column(Integer, nullable=False, default=0)
+    frames_analyzed = Column(Integer, nullable=False, default=0)
+    vehicles_detected = Column(Integer, nullable=False, default=0)
+    plates_read = Column(Integer, nullable=False, default=0)
+    unknown_plates = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_video_sources_status", "status"),
+        Index("idx_video_sources_batch", "batch_id"),
     )

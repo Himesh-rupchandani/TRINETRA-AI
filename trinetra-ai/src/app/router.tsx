@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Cameras = lazy(() => import('@/pages/Cameras'));
 const CameraDetail = lazy(() => import('@/pages/CameraDetail'));
 const Vehicles = lazy(() => import('@/pages/Vehicles'));
+const VideoAnalysis = lazy(() => import('@/pages/VideoAnalysis'));
 const VehicleInvestigation = lazy(() => import('@/pages/VehicleInvestigation'));
 const Alerts = lazy(() => import('@/pages/Alerts'));
 const Events = lazy(() => import('@/pages/Events'));
@@ -44,6 +45,7 @@ const routes: RouteObject[] = [
       { path: 'cameras/:cameraId', element: page(<CameraDetail />) },
       { path: 'vehicles', element: page(<Vehicles />) },
       { path: 'vehicles/:plate', element: page(<VehicleInvestigation />) },
+      { path: 'video-analysis', element: page(<VideoAnalysis />) },
       { path: 'alerts', element: page(<Alerts />) },
       { path: 'events', element: page(<Events />) },
       { path: 'gis', element: page(<GIS />) },

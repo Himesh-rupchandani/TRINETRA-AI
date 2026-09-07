@@ -115,6 +115,7 @@ class VehicleDetectionService:
             return []
         conf = float(getattr(settings, "CONFIDENCE_THRESHOLD", 0.45))
         imgsz = int(getattr(settings, "DETECTION_IMGSZ", 640))
+        iou = float(getattr(settings, "DETECTION_IOU", 0.55))
         t0 = time.perf_counter()
         try:
             # One inference at a time keeps CPU usage bounded across cameras.
@@ -123,6 +124,7 @@ class VehicleDetectionService:
                     frame,
                     verbose=False,
                     conf=conf,
+                    iou=iou,
                     imgsz=imgsz,
                     device="cpu",
                     classes=list(VEHICLE_CLASS_IDS.keys()),

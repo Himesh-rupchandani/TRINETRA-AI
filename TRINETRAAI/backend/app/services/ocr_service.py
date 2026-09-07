@@ -78,6 +78,65 @@ def preprocess_for_ocr(crop: np.ndarray, target_width: int = 320) -> np.ndarray:
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
+def upscale_plate(crop: np.ndarray, target_height: int = 64, max_scale: float = 6.0) -> np.ndarray:
+    """
+    Super-resolution for small/far plates.
+
+    CCTV plates are often 12-25 px tall — far below what any OCR recogniser can
+    read. We upscale to ``target_height`` with Lanczos (best for text edges)
+    and follow with a mild unsharp mask, which recovers stroke separation
+    without amplifying sensor noise the way a plain bicubic zoom does.
+    """
+    if crop is None or crop.size == 0:
+        return crop
+    h, w = crop.shape[:2]
+    if h <= 0 or w <= 0:
+        return crop
+    if h >= target_height:
+        return crop
+    scale = min(max_scale, target_height / float(h))
+    out = cv2.resize(crop, (max(8, int(w * scale)), max(8, int(h * scale))),
+                     interpolation=cv2.INTER_LANCZOS4)
+    blurred = cv2.GaussianBlur(out, (0, 0), 1.2)
+    return cv2.addWeighted(out, 1.6, blurred, -0.6, 0)
+
+
+def preprocess_variants(crop: np.ndarray) -> List[np.ndarray]:
+    """
+    Several preprocessing variants of one plate crop, best-effort first.
+
+    Different plate conditions (dirty, glare, motion blur, yellow commercial
+    plates, night IR) respond to different enhancements, so the pipeline OCRs a
+    few cheap variants and keeps the highest-confidence *plate-shaped* read.
+    All variants are returned as 3-channel BGR because both OCR engines expect
+    that.
+    """
+    if crop is None or crop.size == 0:
+        return []
+    base = upscale_plate(crop)
+    variants: List[np.ndarray] = []
+    try:
+        gray = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
+    except Exception:
+        return [base]
+
+    # 1. CLAHE-equalised grayscale — the existing behaviour, kept first.
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
+    variants.append(cv2.cvtColor(clahe, cv2.COLOR_GRAY2BGR))
+
+    # 2. Denoised + Otsu binarisation — strongest for clean, well-lit plates.
+    den = cv2.bilateralFilter(clahe, 5, 40, 40)
+    _, otsu = cv2.threshold(den, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    # White characters on dark plates: invert when the frame is mostly dark.
+    if float(otsu.mean()) < 110:
+        otsu = cv2.bitwise_not(otsu)
+    variants.append(cv2.cvtColor(otsu, cv2.COLOR_GRAY2BGR))
+
+    # 3. Raw colour crop — RapidOCR's detector sometimes prefers it.
+    variants.append(base)
+    return variants
+
+
 def candidate_from_text(text: str) -> Optional[str]:
     """Normalize one OCR line; return None when it is obviously not a plate."""
     if not text:
@@ -114,37 +173,45 @@ class OcrService:
         return self._engine is not None
 
     def _ensure_engine(self):
+        # NOTE: ``_attempted`` is flipped only *after* the engine has finished
+        # loading, and always inside the lock. Setting it first would let a
+        # second thread (the analysis workers run several videos in parallel)
+        # take the fast path while the engine is still None and wrongly
+        # conclude that no OCR engine is installed — every plate in that video
+        # would then be filed as Unknown.
         if self._attempted:
             return self._engine
         with self._lock:
             if self._attempted:
                 return self._engine
-            self._attempted = True
-            # RapidOCR first: models ship inside the wheel (fully offline).
             try:
-                from rapidocr_onnxruntime import RapidOCR
+                # RapidOCR first: models ship inside the wheel (fully offline).
+                try:
+                    from rapidocr_onnxruntime import RapidOCR
 
-                logger.info("[ANPR] Initializing RapidOCR (bundled ONNX models, offline)")
-                self._engine = RapidOCR()
-                self._engine_name = "rapidocr"
-                return self._engine
-            except Exception as exc:
-                logger.warning(f"[ANPR] RapidOCR unavailable: {exc}")
-            # EasyOCR second: needs a one-time model download.
-            try:
-                import easyocr  # noqa: F401
-                from easyocr import Reader
+                    logger.info("[ANPR] Initializing RapidOCR (bundled ONNX models, offline)")
+                    self._engine = RapidOCR()
+                    self._engine_name = "rapidocr"
+                    return self._engine
+                except Exception as exc:
+                    logger.warning(f"[ANPR] RapidOCR unavailable: {exc}")
+                # EasyOCR second: needs a one-time model download.
+                try:
+                    import easyocr  # noqa: F401
+                    from easyocr import Reader
 
-                logger.info("[ANPR] Initializing EasyOCR (en, CPU)")
-                self._engine = Reader(["en"], gpu=False, verbose=False)
-                self._engine_name = "easyocr"
-                return self._engine
-            except Exception as exc:
-                logger.warning(f"[ANPR] EasyOCR unavailable: {exc}")
-            logger.warning(
-                "[ANPR] No OCR engine installed — plates will be reported as "
-                "Unknown. Install rapidocr-onnxruntime for ANPR reads."
-            )
+                    logger.info("[ANPR] Initializing EasyOCR (en, CPU)")
+                    self._engine = Reader(["en"], gpu=False, verbose=False)
+                    self._engine_name = "easyocr"
+                    return self._engine
+                except Exception as exc:
+                    logger.warning(f"[ANPR] EasyOCR unavailable: {exc}")
+                logger.warning(
+                    "[ANPR] No OCR engine installed — plates will be reported as "
+                    "Unknown. Install rapidocr-onnxruntime for ANPR reads."
+                )
+            finally:
+                self._attempted = True
         return self._engine
 
     def _read_lines(self, image: np.ndarray) -> List[tuple]:
@@ -178,6 +245,10 @@ class OcrService:
         except Exception as exc:
             logger.error(f"[ANPR] OCR read failed: {exc}")
         return []
+
+    def read_lines(self, image: np.ndarray) -> List[tuple]:
+        """Public accessor for raw (text, confidence) OCR lines on one image."""
+        return self._read_lines(image)
 
     def read_plate(self, frame: np.ndarray, bbox, vehicle_class: str = "car") -> Optional[PlateReading]:
         """
