@@ -238,6 +238,9 @@ class VehicleEventResponse(BaseModel):
     longitude: Optional[float] = None
     evidence_ref: Optional[str] = None
     watchlist_match: bool
+    # Manually-uploaded CCTV video provenance (None for live-camera sightings).
+    video_file: Optional[str] = None
+    video_offset_sec: Optional[float] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -267,6 +270,9 @@ class RoutePoint(BaseModel):
     latitude: Optional[float]
     longitude: Optional[float]
     confidence: Optional[float] = None
+    # Manually-uploaded CCTV video provenance (None for live-camera sightings).
+    video_file: Optional[str] = None
+    video_offset_sec: Optional[float] = None
 
 
 class VehicleRouteResponse(BaseModel):
@@ -285,6 +291,47 @@ class VehicleProfileResponse(BaseModel):
     cameras_touched: int = 0
     watchlist_match: bool = False
     watchlist: Optional[WatchlistResponse] = None
+
+
+# --- Officer Schemas ---
+class OfficerResponse(BaseModel):
+    """One officer's own profile. Figures are scoped to that officer only."""
+
+    officer_id: str
+    name: str
+    photo_url: str
+    police_id: str
+    department: str
+    designation: str
+    vehicles_caught: int
+    total_challans: int
+    total_challan_amount: int
+    total_amount_collected: int
+    net_revenue: int
+    plates: List[str]
+
+
+# --- Uploaded CCTV Video Schemas ---
+class UploadedVideoResponse(BaseModel):
+    camera_id: str
+    name: str
+    location: Optional[str] = None
+    video_file: str
+    status: str
+    # Processing job state (IDLE when never processed).
+    job_status: str = "IDLE"
+    progress_pct: float = 0.0
+    frames_total: int = 0
+    frames_processed: int = 0
+    vehicles_seen: int = 0
+    plates_read: int = 0
+    job_error: Optional[str] = None
+    note: Optional[str] = None
+    last_processed_at: Optional[datetime] = None
+
+
+class UploadedVideoDetailResponse(UploadedVideoResponse):
+    recent_plates: List[VehicleEventResponse] = []
 
 
 # --- System Health Schema ---

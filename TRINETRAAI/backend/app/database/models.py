@@ -128,6 +128,9 @@ class VehicleEvent(Base):
     longitude = Column(Float, nullable=True)
     evidence_ref = Column(String(500), nullable=True)  # S3/URL reference to snapshot/clip
     watchlist_match = Column(Boolean, default=False, index=True, nullable=False)
+    # Manually-uploaded CCTV video provenance (NULL for live-camera sightings).
+    video_file = Column(String(255), nullable=True)      # uploaded filename, e.g. cam1.mp4
+    video_offset_sec = Column(Float, nullable=True)      # position inside the video, in seconds
     created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
 
     __table_args__ = (

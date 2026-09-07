@@ -10,11 +10,12 @@ import { cn, formatNumber, prettyPlate } from '@/lib/utils';
 export default function Profile() {
   const { active: p, others, loading, error, refresh, selectOfficer } = useOfficer();
   const location = useLocation();
-  /* Opening Profile always starts on the officer selection list. */
-  const [showOthers, setShowOthers] = useState(true);
+  /* Opening Profile shows the current officer's full profile; clicking the
+     profile/photo opens the Other Officers selection list. */
+  const [showOthers, setShowOthers] = useState(false);
 
   useEffect(() => {
-    setShowOthers(true);
+    setShowOthers(false);
   }, [location.key]);
 
   const handleSelect = (officerId: string) => {
@@ -29,7 +30,11 @@ export default function Profile() {
         icon={UserRound}
         tone="blue"
         subtitle={
-          p && !showOthers ? `${p.designation} · ${p.department}` : p ? 'Select an officer to view their profile' : 'Loading your profile…'
+          p && !showOthers
+            ? `${p.designation} · ${p.department}`
+            : p
+              ? 'Other Officers — select an officer to view their profile'
+              : 'Loading your profile…'
         }
       />
 

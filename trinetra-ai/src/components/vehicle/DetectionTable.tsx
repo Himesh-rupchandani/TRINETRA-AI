@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { VehicleEvent } from '@/types';
 import { ConfidenceBar } from '@/components/common/Links';
 import { EmptyState } from '@/components/common/Panel';
-import { cn, formatDate, formatTime, prettyVehicleClass } from '@/lib/utils';
+import { cn, formatDate, formatTime, formatVideoOffset, prettyVehicleClass } from '@/lib/utils';
 
 /** Detection history table for a traced vehicle. */
 export function DetectionTable({
@@ -47,7 +47,14 @@ export function DetectionTable({
           {events.map((e) => (
             <tr key={e.id} className={cn(activeEventId === e.id && 'bg-high/10')}>
               <td className="font-mono text-2xs text-ink-faint">{formatDate(e.timestamp)}</td>
-              <td className="font-mono tabular-nums text-ink">{formatTime(e.timestamp)}</td>
+              <td className="font-mono tabular-nums text-ink">
+                {formatTime(e.timestamp)}
+                {e.videoOffsetSec != null && (
+                  <span className="ml-1.5 text-2xs font-normal text-ink-faint">
+                    · {formatVideoOffset(e.videoOffsetSec)}
+                  </span>
+                )}
+              </td>
               <td className="font-mono text-ink-muted">{e.cameraName ?? e.cameraId.toUpperCase()}</td>
               <td className="max-w-[200px] truncate text-ink-muted">{e.location}</td>
               <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>

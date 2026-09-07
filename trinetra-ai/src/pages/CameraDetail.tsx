@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Activity, MapPin, ScanLine } from 'lucide-react';
 import { InvestigationLayout } from '@/layouts/InvestigationLayout';
 import { CameraPlayer } from '@/components/camera/CameraPlayer';
+import { UploadedVideoPanel } from '@/components/camera/UploadedVideoPanel';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { Panel, AsyncBoundary, KeyValue, ErrorState } from '@/components/common/Panel';
@@ -12,7 +13,7 @@ import { useCamera } from '@/hooks/useCameras';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import type { VehicleEvent } from '@/types';
-import { formatDateTime, formatTime, relativeTime, prettyEventType, prettyVehicleClass } from '@/lib/utils';
+import { formatDateTime, formatTime, formatVideoOffset, relativeTime, prettyEventType, prettyVehicleClass } from '@/lib/utils';
 
 export default function CameraDetail() {
   const { cameraId = '' } = useParams();
@@ -85,6 +86,8 @@ export default function CameraDetail() {
             <div className="flex flex-col gap-3 sm:gap-4 xl:col-span-8">
               <CameraPlayer camera={camera} autoRequest />
 
+              {camera.streamType === 'FILE' && <UploadedVideoPanel cameraId={camera.id} />}
+
               <Panel
                 title="Vehicles seen by this camera"
                 icon={ScanLine}
@@ -134,7 +137,14 @@ export default function CameraDetail() {
                       <tbody>
                         {list.map((e) => (
                           <tr key={e.id} className={activeEvidence?.id === e.id ? 'bg-brand/10' : undefined}>
-                            <td className="font-mono tabular-nums text-ink">{formatTime(e.timestamp)}</td>
+                            <td className="font-mono tabular-nums text-ink">
+                              {formatTime(e.timestamp)}
+                              {e.videoOffsetSec != null && (
+                                <span className="ml-1.5 text-2xs text-ink-faint">
+                                  · {formatVideoOffset(e.videoOffsetSec)}
+                                </span>
+                              )}
+                            </td>
                             <td>
                               <PlateLink plate={e.plate} size="xs" />
                             </td>

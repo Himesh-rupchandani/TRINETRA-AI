@@ -62,6 +62,10 @@ export interface RoutePoint {
   /** Straight-line km from the previous point. */
   distanceKm?: number;
   speedKmph?: number;
+  /** Manually-uploaded CCTV video provenance (absent for live sightings). */
+  videoFile?: string;
+  /** Position inside the uploaded video, in seconds. */
+  videoOffsetSec?: number;
 }
 
 export interface VehicleRoute {

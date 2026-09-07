@@ -10,7 +10,7 @@ import { PlateLink } from '@/components/common/Links';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAsync } from '@/hooks/useAsync';
 import { vehicleService } from '@/services/vehicleService';
-import { formatDateTime, formatTime, prettyPlate } from '@/lib/utils';
+import { formatDateTime, formatTime, formatVideoOffset, prettyPlate } from '@/lib/utils';
 
 /**
  * VEHICLE SEARCH — the hero screen.
@@ -185,6 +185,11 @@ export default function Vehicles() {
                       </span>
                       <time className="w-[74px] shrink-0 font-mono text-xs tabular-nums text-ink" dateTime={e.timestamp}>
                         {formatTime(e.timestamp)}
+                        {e.videoOffsetSec != null && (
+                          <span className="block text-2xs font-normal text-ink-faint">
+                            {formatVideoOffset(e.videoOffsetSec)}
+                          </span>
+                        )}
                       </time>
                       <span className="w-[62px] shrink-0 font-mono text-xs text-ink-muted">
                         {e.cameraName ?? e.cameraId.toUpperCase()}

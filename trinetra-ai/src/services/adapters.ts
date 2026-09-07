@@ -63,6 +63,8 @@ export interface VehicleEventDto {
   longitude?: number | null;
   evidence_ref?: string | null;
   watchlist_match?: boolean;
+  video_file?: string | null;
+  video_offset_sec?: number | null;
   created_at?: string;
 }
 
@@ -102,6 +104,8 @@ export interface RouteDto {
     latitude?: number | null;
     longitude?: number | null;
     confidence?: number | null;
+    video_file?: string | null;
+    video_offset_sec?: number | null;
   }>;
 }
 
@@ -296,13 +300,16 @@ export function toVehicleEvent(
           ref: evidenceRef,
           // Real crops captured by the CV engine's evidence writer.
           frameUrl: `/api/evidence/${evidenceRef}`,
-          plateCropUrl: plate
-            ? `/api/evidence/${evidenceRef.replace(/\.jpg$/, '_plate.jpg')}`
-            : undefined,
+          plateCropUrl:
+            plate && !evidenceRef.startsWith('uploads/')
+              ? `/api/evidence/${evidenceRef.replace(/\.jpg$/, '_plate.jpg')}`
+              : undefined,
           capturedAt: dto.event_time,
         }
       : undefined,
     watchlistMatch: matched,
+    videoFile: dto.video_file ?? undefined,
+    videoOffsetSec: dto.video_offset_sec ?? undefined,
   };
 }
 
@@ -401,6 +408,8 @@ export function toVehicleRoute(dto: RouteDto, dir?: Map<string, CameraMeta> | nu
       longitude,
       timestamp: p.event_time,
       plateConfidence: pct(p.confidence),
+      videoFile: p.video_file ?? undefined,
+      videoOffsetSec: p.video_offset_sec ?? undefined,
       gapMinutes,
       distanceKm,
       speedKmph:
