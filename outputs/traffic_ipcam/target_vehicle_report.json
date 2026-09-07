@@ -1,0 +1,69 @@
+{
+  "found": false,
+  "requested_sighting_count": 5,
+  "plate": "AE670S",
+  "total_sightings": 1,
+  "sightings": [
+    {
+      "sighting_number": 1,
+      "sighting_id": "sighting_004",
+      "timestamp": "00:09.7",
+      "start_sec": 9.68,
+      "end_sec": 14.64,
+      "duration_sec": 4.96,
+      "track_id": 6,
+      "track_ids": [
+        6,
+        7
+      ],
+      "vehicle_class": "car",
+      "plate_confidence": 0.8307,
+      "supporting_frame_count": 8,
+      "evidence_ref": "evidence/sighting_04.jpg",
+      "plate_crop_ref": "evidence/sighting_04_plate.jpg"
+    }
+  ],
+  "note": "No vehicle with exactly 5 validated sightings was found. Closest: AE670S with 1 sighting(s).",
+  "all_plate_counts": [
+    {
+      "plate": "AE670S",
+      "sightings": 1,
+      "timestamps": [
+        "00:09.7"
+      ],
+      "max_confidence": 0.8307
+    },
+    {
+      "plate": "A96886",
+      "sightings": 1,
+      "timestamps": [
+        "00:21.5"
+      ],
+      "max_confidence": 0.8238
+    },
+    {
+      "plate": "AR606L",
+      "sightings": 1,
+      "timestamps": [
+        "00:01.5"
+      ],
+      "max_confidence": 0.8208
+    },
+    {
+      "plate": "AV6190",
+      "sightings": 1,
+      "timestamps": [
+        "00:24.6"
+      ],
+      "max_confidence": 0.8159
+    },
+    {
+      "plate": "A3K961",
+      "sightings": 1,
+      "timestamps": [
+        "00:20.5"
+      ],
+      "max_confidence": 0.7765
+    }
+  ]
+}

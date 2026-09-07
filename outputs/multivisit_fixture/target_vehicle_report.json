@@ -1,0 +1,119 @@
+{
+  "found": true,
+  "requested_sighting_count": 5,
+  "plate": "CA455822",
+  "total_sightings": 5,
+  "sightings": [
+    {
+      "sighting_number": 1,
+      "sighting_id": "sighting_002",
+      "timestamp": "00:00.1",
+      "start_sec": 0.08,
+      "end_sec": 5.36,
+      "duration_sec": 5.28,
+      "track_id": 1,
+      "track_ids": [
+        1
+      ],
+      "vehicle_class": "car",
+      "plate_confidence": 0.8455,
+      "supporting_frame_count": 2,
+      "evidence_ref": "evidence/sighting_02.jpg",
+      "plate_crop_ref": "evidence/sighting_02_plate.jpg"
+    },
+    {
+      "sighting_number": 2,
+      "sighting_id": "sighting_011",
+      "timestamp": "00:10.6",
+      "start_sec": 10.64,
+      "end_sec": 15.92,
+      "duration_sec": 5.28,
+      "track_id": 13,
+      "track_ids": [
+        13
+      ],
+      "vehicle_class": "car",
+      "plate_confidence": 0.8448,
+      "supporting_frame_count": 3,
+      "evidence_ref": "evidence/sighting_11.jpg",
+      "plate_crop_ref": "evidence/sighting_11_plate.jpg"
+    },
+    {
+      "sighting_number": 3,
+      "sighting_id": "sighting_019",
+      "timestamp": "00:21.2",
+      "start_sec": 21.2,
+      "end_sec": 26.48,
+      "duration_sec": 5.28,
+      "track_id": 24,
+      "track_ids": [
+        24
+      ],
+      "vehicle_class": "car",
+      "plate_confidence": 0.8454,
+      "supporting_frame_count": 3,
+      "evidence_ref": "evidence/sighting_19.jpg",
+      "plate_crop_ref": "evidence/sighting_19_plate.jpg"
+    },
+    {
+      "sighting_number": 4,
+      "sighting_id": "sighting_027",
+      "timestamp": "00:31.8",
+      "start_sec": 31.76,
+      "end_sec": 37.04,
+      "duration_sec": 5.28,
+      "track_id": 35,
+      "track_ids": [
+        35
+      ],
+      "vehicle_class": "car",
+      "plate_confidence": 0.8448,
+      "supporting_frame_count": 3,
+      "evidence_ref": "evidence/sighting_27.jpg",
+      "plate_crop_ref": "evidence/sighting_27_plate.jpg"
+    },
+    {
+      "sighting_number": 5,
+      "sighting_id": "sighting_034",
+      "timestamp": "00:42.3",
+      "start_sec": 42.32,
+      "end_sec": 47.6,
+      "duration_sec": 5.28,
+      "track_id": 46,
+      "track_ids": [
+        46
+      ],
+      "vehicle_class": "car",
+      "plate_confidence": 0.8454,
+      "supporting_frame_count": 3,
+      "evidence_ref": "evidence/sighting_34.jpg",
+      "plate_crop_ref": "evidence/sighting_34_plate.jpg"
+    }
+  ],
+  "note": null,
+  "all_plate_counts": [
+    {
+      "plate": "CA455822",
+      "sightings": 5,
+      "timestamps": [
+        "00:00.1",
+        "00:10.6",
+        "00:21.2",
+        "00:31.8",
+        "00:42.3"
+      ],
+      "max_confidence": 0.8455
+    },
+    {
+      "plate": "AR606L",
+      "sightings": 4,
+      "timestamps": [
+        "00:05.6",
+        "00:16.2",
+        "00:26.7",
+        "00:37.3"
+      ],
+      "max_confidence": 0.8186
+    }
+  ]
+}

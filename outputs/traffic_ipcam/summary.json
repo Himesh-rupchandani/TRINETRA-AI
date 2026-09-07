@@ -1,0 +1,146 @@
+{
+  "generated_at_utc": "2026-09-07T13:04:07.287166Z",
+  "video_file": "/home/user/hack/cv-engine/samples/traffic_ipcam.mp4",
+  "video_id": "traffic_ipcam",
+  "camera_id": "ipcam_01",
+  "location_name": "Traffic IP Camera",
+  "video_duration_sec": 29.8,
+  "video_resolution": "1280x720",
+  "fps_reported": 25.0,
+  "actual_fps_measured": 25.0,
+  "codec_fourcc": "h264",
+  "analysis_window": {
+    "start_sec": 0.0,
+    "duration_sec": null
+  },
+  "frames_read": 373,
+  "total_frames_processed": 373,
+  "total_vehicle_detections": 1177,
+  "unique_tracks": 13,
+  "sightings_total": 10,
+  "sightings_with_validated_plate": 5,
+  "unique_plate_candidates": 16,
+  "validated_unique_plates": 5,
+  "plate_counts": [
+    {
+      "plate": "AE670S",
+      "sightings": 1,
+      "timestamps": [
+        "00:09.7"
+      ],
+      "max_confidence": 0.8307
+    },
+    {
+      "plate": "A96886",
+      "sightings": 1,
+      "timestamps": [
+        "00:21.5"
+      ],
+      "max_confidence": 0.8238
+    },
+    {
+      "plate": "AR606L",
+      "sightings": 1,
+      "timestamps": [
+        "00:01.5"
+      ],
+      "max_confidence": 0.8208
+    },
+    {
+      "plate": "AV6190",
+      "sightings": 1,
+      "timestamps": [
+        "00:24.6"
+      ],
+      "max_confidence": 0.8159
+    },
+    {
+      "plate": "A3K961",
+      "sightings": 1,
+      "timestamps": [
+        "00:20.5"
+      ],
+      "max_confidence": 0.7765
+    }
+  ],
+  "target_vehicle": "AE670S",
+  "target_sighting_count": 1,
+  "target_exact_match": false,
+  "processing_time_sec": 94.71,
+  "processing_realtime_factor": 0.315,
+  "pipeline_stats": {
+    "frames_read": 373,
+    "frames_processed": 373,
+    "detections": 1177,
+    "tracks_created": 13,
+    "plate_detections": 96,
+    "ocr_reads": 96,
+    "ocr_accepted": 40,
+    "ocr_rejected_small": 0,
+    "ocr_rejected_conf": 0,
+    "ocr_rejected_format": 9,
+    "frame_failures": 0,
+    "detect_ms_total": 29135.79,
+    "plate_ms_total": 3237.89,
+    "ocr_ms_total": 58038.61,
+    "wall_sec": 94.54,
+    "avg_detect_ms": 78.11,
+    "avg_plate_ms": 33.73,
+    "avg_ocr_ms": 604.57
+  },
+  "capture_stats": {
+    "frames_read": 746,
+    "frames_yielded": 373,
+    "decode_failures": 30,
+    "non_monotonic_pts": 0,
+    "synthetic_pts_frames": 0,
+    "first_pts_ms": 0.0,
+    "last_pts_ms": 29800.0
+  },
+  "config": {
+    "video_id": "traffic_ipcam",
+    "camera_id": "ipcam_01",
+    "location_name": "Traffic IP Camera",
+    "latitude": null,
+    "longitude": null,
+    "vehicle_model": "/home/user/models/yolo11n.pt",
+    "plate_model": "/home/user/models/license_plate_detector.pt",
+    "device": "cpu",
+    "frame_skip": 2,
+    "inference_imgsz": 640,
+    "detection_confidence": 0.35,
+    "track_max_age_sec": 1.2,
+    "track_min_hits": 2,
+    "track_iou_threshold": 0.25,
+    "plate_confidence": 0.25,
+    "plate_imgsz": 320,
+    "min_plate_width_px": 26,
+    "min_vehicle_area_px": 3000,
+    "ocr_interval_ms": 400.0,
+    "max_ocr_per_frame": 2,
+    "max_reads_per_track": 14,
+    "stable_reads_to_stop": 4,
+    "min_ocr_confidence": 0.3,
+    "track_end_gap_sec": 2.0,
+    "sighting_cooldown_sec": 3.0,
+    "min_sighting_frames": 3,
+    "min_sighting_duration_sec": 0.3,
+    "plate_reject_threshold": 0.6,
+    "plate_min_agree_reads": 2,
+    "start_sec": 0.0,
+    "duration_sec": null,
+    "annotate": true,
+    "annotated_fps": null,
+    "progress_every": 50
+  },
+  "models": {
+    "vehicle_detector": "/home/user/models/yolo11n.pt",
+    "plate_detector": "/home/user/models/license_plate_detector.pt",
+    "ocr_engine": "rapidocr"
+  },
+  "environment": {
+    "python": "3.11.2",
+    "device": "cpu",
+    "cpu_count": 2
+  }
+}

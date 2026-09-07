@@ -1,0 +1,129 @@
+{
+  "generated_at_utc": "2026-09-07T12:57:31.882905Z",
+  "video_file": "/home/user/hack/cv-engine/samples/multivisit_fixture.mp4",
+  "video_id": "multivisit_fixture",
+  "camera_id": "fixture_cam",
+  "location_name": "Multi-visit Fixture",
+  "video_duration_sec": 47.72,
+  "video_resolution": "1280x720",
+  "fps_reported": 25.0,
+  "actual_fps_measured": 25.0,
+  "codec_fourcc": "FMP4",
+  "analysis_window": {
+    "start_sec": 0.0,
+    "duration_sec": null
+  },
+  "frames_read": 597,
+  "total_frames_processed": 597,
+  "total_vehicle_detections": 2070,
+  "unique_tracks": 47,
+  "sightings_total": 38,
+  "sightings_with_validated_plate": 9,
+  "unique_plate_candidates": 7,
+  "validated_unique_plates": 2,
+  "plate_counts": [
+    {
+      "plate": "CA455822",
+      "sightings": 5,
+      "timestamps": [
+        "00:00.1",
+        "00:10.6",
+        "00:21.2",
+        "00:31.8",
+        "00:42.3"
+      ],
+      "max_confidence": 0.8455
+    },
+    {
+      "plate": "AR606L",
+      "sightings": 4,
+      "timestamps": [
+        "00:05.6",
+        "00:16.2",
+        "00:26.7",
+        "00:37.3"
+      ],
+      "max_confidence": 0.8186
+    }
+  ],
+  "target_vehicle": "CA455822",
+  "target_sighting_count": 5,
+  "target_exact_match": true,
+  "processing_time_sec": 232.09,
+  "processing_realtime_factor": 0.206,
+  "pipeline_stats": {
+    "frames_read": 597,
+    "frames_processed": 597,
+    "detections": 2070,
+    "tracks_created": 47,
+    "plate_detections": 316,
+    "ocr_reads": 316,
+    "ocr_accepted": 62,
+    "ocr_rejected_small": 0,
+    "ocr_rejected_conf": 0,
+    "ocr_rejected_format": 30,
+    "frame_failures": 0,
+    "detect_ms_total": 46391.27,
+    "plate_ms_total": 10507.4,
+    "ocr_ms_total": 168451.24,
+    "wall_sec": 232.0,
+    "avg_detect_ms": 77.71,
+    "avg_plate_ms": 33.25,
+    "avg_ocr_ms": 533.07
+  },
+  "capture_stats": {
+    "frames_read": 1194,
+    "frames_yielded": 597,
+    "decode_failures": 30,
+    "non_monotonic_pts": 0,
+    "synthetic_pts_frames": 0,
+    "first_pts_ms": 0.0,
+    "last_pts_ms": 47720.0
+  },
+  "config": {
+    "video_id": "multivisit_fixture",
+    "camera_id": "fixture_cam",
+    "location_name": "Multi-visit Fixture",
+    "latitude": null,
+    "longitude": null,
+    "vehicle_model": "/home/user/models/yolo11n.pt",
+    "plate_model": "/home/user/models/license_plate_detector.pt",
+    "device": "cpu",
+    "frame_skip": 2,
+    "inference_imgsz": 640,
+    "detection_confidence": 0.35,
+    "track_max_age_sec": 1.2,
+    "track_min_hits": 2,
+    "track_iou_threshold": 0.25,
+    "plate_confidence": 0.25,
+    "plate_imgsz": 320,
+    "min_plate_width_px": 26,
+    "min_vehicle_area_px": 3000,
+    "ocr_interval_ms": 400.0,
+    "max_ocr_per_frame": 2,
+    "max_reads_per_track": 14,
+    "stable_reads_to_stop": 4,
+    "min_ocr_confidence": 0.3,
+    "track_end_gap_sec": 2.0,
+    "sighting_cooldown_sec": 3.0,
+    "min_sighting_frames": 3,
+    "min_sighting_duration_sec": 0.3,
+    "plate_reject_threshold": 0.6,
+    "plate_min_agree_reads": 2,
+    "start_sec": 0.0,
+    "duration_sec": null,
+    "annotate": true,
+    "annotated_fps": null,
+    "progress_every": 50
+  },
+  "models": {
+    "vehicle_detector": "/home/user/models/yolo11n.pt",
+    "plate_detector": "/home/user/models/license_plate_detector.pt",
+    "ocr_engine": "rapidocr"
+  },
+  "environment": {
+    "python": "3.11.2",
+    "device": "cpu",
+    "cpu_count": 2
+  }
+}

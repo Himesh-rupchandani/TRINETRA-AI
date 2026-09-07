@@ -1,0 +1,15 @@
+13:02:30 INFO cv_engine.video_pipeline :: [VIDEO] {'path': '/home/user/hack/cv-engine/samples/traffic_ipcam.mp4', 'opened': True, 'resolution': '1280x720', 'width': 1280, 'height': 720, 'fps_reported': 25.0, 'fps_measured': 25.0, 'frame_count_reported': 746, 'duration_sec_reported': 29.84, 'duration_sec_measured': 29.8, 'fourcc': 'h264', 'pts_monotonic': True, 'frames_decoded_in_probe': 30, 'error': None}
+13:02:32 INFO cv_engine.detection :: [DETECTOR] loading YOLO model /home/user/models/yolo11n.pt (device=cpu)
+13:02:34 INFO cv_engine.anpr.plate :: [PLATE] loading plate detector: /home/user/models/license_plate_detector.pt
+13:02:34 INFO cv_engine.anpr :: [OCR] initializing RapidOCR (bundled ONNX models, offline)
+13:02:50 INFO cv_engine.video_pipeline :: [VIDEO] t=3.9s frames=50 dets=113 tracks=3 ocr=23 sightings_closed=0
+13:03:06 INFO cv_engine.video_pipeline :: [VIDEO] t=7.9s frames=100 dets=291 tracks=4 ocr=43 sightings_closed=0
+13:03:14 INFO cv_engine.video_pipeline :: [VIDEO] t=11.9s frames=150 dets=458 tracks=3 ocr=49 sightings_closed=2
+13:03:22 INFO cv_engine.video_pipeline :: [VIDEO] t=15.9s frames=200 dets=603 tracks=2 ocr=56 sightings_closed=4
+13:03:34 INFO cv_engine.video_pipeline :: [VIDEO] t=19.9s frames=250 dets=733 tracks=3 ocr=63 sightings_closed=5
+13:03:48 INFO cv_engine.video_pipeline :: [VIDEO] t=23.9s frames=300 dets=918 tracks=4 ocr=77 sightings_closed=6
+13:04:01 INFO cv_engine.video_pipeline :: [VIDEO] t=27.9s frames=350 dets=1112 tracks=4 ocr=92 sightings_closed=7
+13:04:05 WARNING cv_engine.capture.file :: [FILE] /home/user/hack/cv-engine/samples/traffic_ipcam.mp4: 30 decode failure(s) tolerated, 746 frames read
+13:04:05 INFO cv_engine.sightings :: [SIGHTING] merged track [4] into earlier sighting of AR606L (gap -6.64s)
+13:04:05 INFO cv_engine.sightings :: [SIGHTING] merged track [7] into earlier sighting of AE670S (gap -2.64s)
+13:04:05 INFO cv_engine.video_pipeline :: [VIDEO] done: 373 frame(s) processed, 10 sighting(s), 94.5s wall

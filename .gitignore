@@ -4,3 +4,7 @@ __pycache__/
 
 # Workspace snapshot archives (stale code copies — never commit)
 workspace-*.zip
+
+# Rendered analysis videos (large, fully regenerable from the pipeline)
+outputs/**/annotated_video.mp4
+outputs/**/annotated_raw.mp4

@@ -1,0 +1,11 @@
+sighting_id,video_id,camera_id,location_name,start_timestamp,start_sec,end_sec,duration_sec,track_id,track_ids,vehicle_class,plate,plate_raw,plate_confidence,plate_status,supporting_frame_count,ocr_reads,frames_observed,mean_detection_confidence,sighting_index_for_plate,evidence_ref,plate_crop_ref
+sighting_001,traffic_ipcam,ipcam_01,Traffic IP Camera,00:01.0,0.96,29.76,28.8,1,1,car,,,,NOT_DETECTED,0,0,361,0.8747,1,evidence/sighting_01.jpg,
+sighting_002,traffic_ipcam,ipcam_01,Traffic IP Camera,00:01.0,0.96,27.92,26.96,2,2,car,,,,NOT_DETECTED,0,0,322,0.6997,2,evidence/sighting_02.jpg,
+sighting_003,traffic_ipcam,ipcam_01,Traffic IP Camera,00:01.5,1.52,9.68,8.16,3,3|4,car,AR606L,浙A·R606L,0.8208,DETECTED,8,9,145,0.6212,1,evidence/sighting_03.jpg,evidence/sighting_03_plate.jpg
+sighting_004,traffic_ipcam,ipcam_01,Traffic IP Camera,00:09.7,9.68,14.64,4.96,6,6|7,car,AE670S,浙A·E670S,0.8307,DETECTED,8,10,65,0.7821,1,evidence/sighting_04.jpg,evidence/sighting_04_plate.jpg
+sighting_005,traffic_ipcam,ipcam_01,Traffic IP Camera,00:12.0,12.0,12.64,0.64,8,8,truck,,,,NOT_DETECTED,0,0,9,0.4079,3,evidence/sighting_05.jpg,
+sighting_006,traffic_ipcam,ipcam_01,Traffic IP Camera,00:17.8,17.84,20.64,2.8,9,9,car,APH0188,APH0188,0.6245,UNCERTAIN,1,1,36,0.777,4,evidence/sighting_06.jpg,evidence/sighting_06_plate.jpg
+sighting_007,traffic_ipcam,ipcam_01,Traffic IP Camera,00:20.5,20.48,25.6,5.12,11,11,car,A3K961,皖A·3K961,0.7765,DETECTED,4,6,64,0.8406,1,evidence/sighting_07.jpg,evidence/sighting_07_plate.jpg
+sighting_008,traffic_ipcam,ipcam_01,Traffic IP Camera,00:21.5,21.52,26.0,4.48,12,12,car,A96886,浙A·96886,0.8238,DETECTED,4,7,57,0.752,1,evidence/sighting_08.jpg,evidence/sighting_08_plate.jpg
+sighting_009,traffic_ipcam,ipcam_01,Traffic IP Camera,00:24.6,24.56,29.36,4.8,13,13,car,AV6190,浙A·V6190,0.8159,DETECTED,4,7,61,0.8122,1,evidence/sighting_09.jpg,evidence/sighting_09_plate.jpg
+sighting_010,traffic_ipcam,ipcam_01,Traffic IP Camera,00:25.7,25.68,29.76,4.08,14,14,car,,,,NOT_DETECTED,0,0,41,0.6835,5,evidence/sighting_10.jpg,

@@ -1,0 +1,21 @@
+12:53:36 INFO cv_engine.video_pipeline :: [VIDEO] {'path': '/home/user/hack/cv-engine/samples/multivisit_fixture.mp4', 'opened': True, 'resolution': '1280x720', 'width': 1280, 'height': 720, 'fps_reported': 25.0, 'fps_measured': 25.0, 'frame_count_reported': 1194, 'duration_sec_reported': 47.76, 'duration_sec_measured': 47.72, 'fourcc': 'FMP4', 'pts_monotonic': True, 'frames_decoded_in_probe': 30, 'error': None}
+12:53:37 INFO cv_engine.detection :: [DETECTOR] loading YOLO model /home/user/models/yolo11n.pt (device=cpu)
+12:53:39 INFO cv_engine.anpr.plate :: [PLATE] loading plate detector: /home/user/models/license_plate_detector.pt
+12:53:39 INFO cv_engine.anpr :: [OCR] initializing RapidOCR (bundled ONNX models, offline)
+12:54:04 INFO cv_engine.video_pipeline :: [VIDEO] t=3.9s frames=50 dets=175 tracks=4 ocr=36 sightings_closed=1
+12:54:22 INFO cv_engine.video_pipeline :: [VIDEO] t=7.9s frames=100 dets=340 tracks=3 ocr=63 sightings_closed=5
+12:54:41 INFO cv_engine.video_pipeline :: [VIDEO] t=11.9s frames=150 dets=513 tracks=4 ocr=88 sightings_closed=5
+12:54:59 INFO cv_engine.video_pipeline :: [VIDEO] t=15.9s frames=200 dets=695 tracks=5 ocr=115 sightings_closed=10
+12:55:17 INFO cv_engine.video_pipeline :: [VIDEO] t=19.9s frames=250 dets=861 tracks=3 ocr=139 sightings_closed=14
+12:55:35 INFO cv_engine.video_pipeline :: [VIDEO] t=23.9s frames=300 dets=1031 tracks=4 ocr=162 sightings_closed=18
+12:55:57 INFO cv_engine.video_pipeline :: [VIDEO] t=27.9s frames=350 dets=1212 tracks=3 ocr=191 sightings_closed=20
+12:56:15 INFO cv_engine.video_pipeline :: [VIDEO] t=31.9s frames=400 dets=1383 tracks=3 ocr=214 sightings_closed=23
+12:56:33 INFO cv_engine.video_pipeline :: [VIDEO] t=35.9s frames=450 dets=1562 tracks=4 ocr=240 sightings_closed=28
+12:56:52 INFO cv_engine.video_pipeline :: [VIDEO] t=39.9s frames=500 dets=1726 tracks=3 ocr=265 sightings_closed=32
+12:57:10 INFO cv_engine.video_pipeline :: [VIDEO] t=43.9s frames=550 dets=1900 tracks=4 ocr=290 sightings_closed=32
+12:57:28 WARNING cv_engine.capture.file :: [FILE] /home/user/hack/cv-engine/samples/multivisit_fixture.mp4: 30 decode failure(s) tolerated, 1194 frames read
+12:57:28 INFO cv_engine.sightings :: [SIGHTING] merged track [10] into earlier sighting of AR606L (gap -4.24s)
+12:57:28 INFO cv_engine.sightings :: [SIGHTING] merged track [21] into earlier sighting of AR606L (gap -4.24s)
+12:57:28 INFO cv_engine.sightings :: [SIGHTING] merged track [32] into earlier sighting of AR606L (gap -4.24s)
+12:57:28 INFO cv_engine.sightings :: [SIGHTING] merged track [43] into earlier sighting of AR606L (gap -4.24s)
+12:57:28 INFO cv_engine.video_pipeline :: [VIDEO] done: 597 frame(s) processed, 38 sighting(s), 232.0s wall

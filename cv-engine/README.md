@@ -99,7 +99,22 @@ python scripts/run_pipeline.py --mode demo --backend-url http://localhost:8000
 | `evidence/evidence_writer.py` | deterministic full-frame + plate-crop JPEG evidence |
 | `integration/backend_client.py` | queued non-blocking POST with retries/backoff + dead-letter |
 | `pipeline/camera_pipeline.py` | one camera's full loop |
-| `scripts/` | runner, catalogue probe, benchmark, ANPR validation |
+| `capture/file_capture.py` | recorded-video source: measured probe + `FramePacket` iteration |
+| `anpr/plate_yolo.py` | optional YOLO licence-plate region detector (falls back to heuristic crops) |
+| `sightings/` | FRAME→TRACK→**SIGHTING** segmentation, evidence quality, CSV/JSON/target reporting |
+| `pipeline/video_pipeline.py` | offline recorded-video loop + annotated-video rendering |
+| `scripts/` | runner, catalogue probe, benchmark, ANPR validation, recorded-video analysis |
+
+### Recorded video (uploaded CCTV / phone footage)
+
+```bash
+bash scripts/setup_video_env.sh                    # env + weights (SHA-256 verified)
+python scripts/analyze_video_file.py clip.mp4 --location "Faculty Parking"
+```
+
+Produces `outputs/<video_id>/` with an annotated video, per-**sighting** CSV/JSON,
+evidence frames + plate crops, a target-vehicle report and backend-ready events.
+Full details: [`docs/FACULTY_PARKING_PIPELINE.md`](../docs/FACULTY_PARKING_PIPELINE.md).
 
 ---
 

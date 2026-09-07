@@ -15,3 +15,6 @@ feeds/
 # Keep the source package (evidence/*.py) tracked, ignore generated output.
 evidence/*/
 evidence/dead_letter_events.jsonl
+
+# downloaded/derived validation clips (large binaries)
+samples/
