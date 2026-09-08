@@ -1,15 +1,18 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  // Dark command-center theme only — enforced pre-render in main.tsx.
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      spacing: {
+        '7.5': '1.875rem',
+        '8.5': '2.125rem',
+        '4.5': '1.125rem',
+      },
       fontFamily: {
-        sans: ['Inter', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        sans: ['"Public Sans"', 'Inter', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       colors: {
-        // Surface scale — neutral graphite (no blue cast)
         surface: {
           0: 'rgb(var(--surface-0) / <alpha-value>)',
           1: 'rgb(var(--surface-1) / <alpha-value>)',
@@ -23,53 +26,42 @@ export default {
           muted: 'rgb(var(--ink-muted) / <alpha-value>)',
           faint: 'rgb(var(--ink-faint) / <alpha-value>)',
         },
-        brand: {
-          DEFAULT: 'rgb(var(--brand) / <alpha-value>)',
-          // Filled-control variant — deep teal, white labels pass AA.
-          strong: 'rgb(var(--brand-strong) / <alpha-value>)',
-          soft: 'rgb(var(--brand-soft) / <alpha-value>)',
+        accent: {
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          strong: 'rgb(var(--accent-strong) / <alpha-value>)',
+          weak: 'rgb(var(--accent-weak) / <alpha-value>)',
         },
-        // Severity / status semantic tokens — light-surface tuned (AA text).
-        // Color carries meaning only; nothing glows.
-        critical: '#e11d48',
-        high: '#ea580c',
+        // Status — text-grade on white
+        online: 'rgb(var(--status-online) / <alpha-value>)',
+        offline: 'rgb(var(--status-offline) / <alpha-value>)',
+        warn: 'rgb(var(--status-warn) / <alpha-value>)',
+        'info': 'rgb(var(--status-info) / <alpha-value>)',
+        // Severity ramp (chips/text on tints)
+        critical: '#be123c',
+        high: '#c2410c',
         medium: '#a16207',
         low: '#0369a1',
-        info: '#64748b',
-        online: '#16a34a',
-        offline: '#dc2626',
-        degraded: '#b45309',
-        processing: '#64748b',
       },
       fontSize: {
-        // Legibility pass: everything is a step larger than a classic dense
-        // console so the screen stays readable at arm's length in a control
-        // room, or on a duty officer's laptop.
-        '2xs': ['0.8125rem', { lineHeight: '1.2rem', letterSpacing: '0.01em' }],
-        xs: ['0.875rem', { lineHeight: '1.25rem' }],
-        sm: ['0.9375rem', { lineHeight: '1.4rem' }],
-        base: ['1rem', { lineHeight: '1.55rem' }],
-        lg: ['1.125rem', { lineHeight: '1.7rem' }],
-        xl: ['1.3125rem', { lineHeight: '1.85rem' }],
+        '2xs': ['0.8125rem', { lineHeight: '1.15rem' }],
+        xs: ['0.8125rem', { lineHeight: '1.25rem' }],
+        sm: ['0.875rem', { lineHeight: '1.35rem' }],
+        base: ['0.9375rem', { lineHeight: '1.5rem' }],
       },
       boxShadow: {
-        // Light system: white cards with soft ambient depth.
-        panel: '0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.03)',
-        cardHover: '0 14px 28px -8px rgb(16 24 40 / 0.16), 0 4px 10px rgb(16 24 40 / 0.06)',
+        xs: '0 1px 2px 0 rgb(16 24 40 / 0.05)',
+        sm: '0 1px 3px rgb(16 24 40 / 0.08), 0 1px 2px rgb(16 24 40 / 0.04)',
+        md: '0 6px 16px -4px rgb(16 24 40 / 0.10), 0 2px 6px -2px rgb(16 24 40 / 0.05)',
+        lg: '0 16px 40px -12px rgb(16 24 40 / 0.18)',
       },
       keyframes: {
         'pulse-dot': {
           '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.45' },
-        },
-        'slide-in': {
-          from: { opacity: '0', transform: 'translateY(-6px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
+          '50%': { opacity: '0.35' },
         },
       },
       animation: {
-        'pulse-dot': 'pulse-dot 2.4s ease-in-out infinite',
-        'slide-in': 'slide-in 180ms ease-out',
+        'pulse-dot': 'pulse-dot 2.2s ease-in-out infinite',
       },
     },
   },

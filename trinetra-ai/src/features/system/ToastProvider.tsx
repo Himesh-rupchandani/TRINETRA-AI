@@ -31,8 +31,8 @@ const ICONS: Record<ToastKind, typeof Info> = {
 const TONE: Record<ToastKind, string> = {
   success: 'border-online/50 text-online',
   error: 'border-critical/50 text-critical',
-  info: 'border-brand/50 text-brand',
-  warning: 'border-degraded/50 text-degraded',
+  info: 'border-accent/50 text-accent-strong',
+  warning: 'border-warn/50 text-warn',
 };
 
 let counter = 0;
@@ -76,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               className={cn(
-                'panel animate-slide-in flex items-start gap-3 border-l-2 p-4 shadow-cardHover',
+                'row-in flex items-start gap-3 rounded-xl border border-line border-l-2 bg-surface-1 p-4 shadow-md',
                 TONE[t.kind],
               )}
             >

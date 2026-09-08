@@ -1,150 +1,162 @@
-import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { BadgeCheck, Car, ChevronRight, FileText, Receipt, TrendingUp, UserRound, Users, Wallet } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Panel, AsyncBoundary, KeyValue } from '@/components/common/Panel';
-import { KpiCard } from '@/components/dashboard/KpiCard';
+import { useState } from 'react';
+import { BadgeCheck, Users } from 'lucide-react';
 import { useOfficer } from '@/features/officer/OfficerProvider';
-import { cn, formatNumber, prettyPlate } from '@/lib/utils';
+import { Badge } from '@/ui/Badge';
+import { Card, CardBody, CardHeader, SectionLabel } from '@/ui/Card';
+import { Boundary, EmptyState, KeyVal } from '@/ui/Feedback';
+import { PlateLink, Stat } from '@/ui/Links';
+import { cn } from '@/lib/utils';
 
+function money(n: number) {
+  return `₹${n.toLocaleString('en-IN')}`;
+}
+
+/**
+ * Officer Profile — the signed-in operator's service record, plus the
+ * roster. Selecting another officer switches the operating context
+ * everywhere (header, ticker acknowledgements, dashboards).
+ */
 export default function Profile() {
-  const { active: p, others, loading, error, refresh, selectOfficer } = useOfficer();
-  const location = useLocation();
-  /* Opening Profile shows the current officer's full profile; clicking the
-     profile/photo opens the Other Officers selection list. */
-  const [showOthers, setShowOthers] = useState(false);
+  const { officers, current, loading, error, refresh, selectOfficer } = useOfficer();
+  const [switching, setSwitching] = useState<string | null>(null);
 
-  useEffect(() => {
-    setShowOthers(false);
-  }, [location.key]);
-
-  const handleSelect = (officerId: string) => {
-    selectOfficer(officerId);
-    setShowOthers(false);
-  };
+  const roster = current
+    ? [current, ...officers.filter((o) => o.officerId !== current.officerId)]
+    : officers;
 
   return (
-    <div className="animate-page-in flex h-full flex-col">
-      <PageHeader
-        title="Officer Profile"
-        icon={UserRound}
-        tone="blue"
-        subtitle={
-          p && !showOthers
-            ? `${p.designation} · ${p.department}`
-            : p
-              ? 'Other Officers — select an officer to view their profile'
-              : 'Loading your profile…'
-        }
-      />
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        {/* Service record */}
+        <div className="min-w-0">
+          <Boundary loading={loading && !current} error={error} onRetry={refresh} loadingLabel="Loading service record">
+            {current ? (
+              <>
+                <Card>
+                  <CardBody className="flex flex-wrap items-center gap-5 p-6">
+                    <img
+                      src={current.photoUrl}
+                      alt={`Portrait of ${current.name}`}
+                      className="h-20 w-20 rounded-xl border border-line object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <h2 className="text-lg font-bold text-ink">{current.name}</h2>
+                        <Badge tone="accent">
+                          <BadgeCheck size={11} aria-hidden /> On duty
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-[13px] text-ink-muted">
+                        {current.designation} · {current.department}
+                      </p>
+                      <p className="mono mt-0.5 text-xs text-ink-faint">
+                        Badge {current.policeId} · ID {current.officerId.toUpperCase()}
+                      </p>
+                    </div>
+                  </CardBody>
+                </Card>
 
-      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
-        <AsyncBoundary
-          loading={loading}
-          error={error}
-          onRetry={refresh}
-          loadingLabel="Loading officer profile"
-        >
-          {p && showOthers && (
-            <Panel title="Other Officers" icon={Users}>
-              {others.length ? (
-                <ul className="divide-y divide-line">
-                  {others.map((o) => (
+                <div className="mt-6 grid grid-cols-2 divide-line rounded-xl border border-line bg-surface-1 shadow-xs sm:grid-cols-3 sm:divide-x">
+                  <Stat label="Vehicles caught" value={current.vehiclesCaught} />
+                  <Stat label="Challans issued" value={current.totalChallans.toLocaleString('en-IN')} />
+                  <Stat label="Challan value" value={money(current.totalChallanAmount)} />
+                  <Stat label="Amount collected" value={money(current.totalAmountCollected)} />
+                  <Stat
+                    label="Outstanding"
+                    value={money(Math.max(0, current.totalChallanAmount - current.totalAmountCollected))}
+                    sub="yet to be collected"
+                  />
+                  <Stat label="Net revenue" value={money(current.netRevenue)} sub="fully-paid challans" />
+                </div>
+
+                <Card className="mt-6">
+                  <CardHeader
+                    title="Plates on this officer's books"
+                    subtitle="Vehicles tied to challans issued by this officer"
+                  />
+                  <CardBody className="p-5">
+                    {current.plates.length === 0 ? (
+                      <p className="text-xs text-ink-faint">No plates associated yet.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {current.plates.map((p) => (
+                          <PlateLink key={p} plate={p} size="sm" className="rounded-md border border-line bg-surface-2 px-2.5 py-1" />
+                        ))}
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              </>
+            ) : (
+              <EmptyState title="No officer signed in" detail="The service did not return an operator record." />
+            )}
+          </Boundary>
+        </div>
+
+        {/* Roster */}
+        <aside className="min-w-0">
+          <Card>
+            <CardHeader
+              title="Officer roster"
+              subtitle="Selecting an officer switches the operating context"
+              actions={<Users size={13} className="text-ink-faint" aria-hidden />}
+            />
+            <CardBody>
+              <ul className="divide-y divide-line/70">
+                {roster.map((o) => {
+                  const isCurrent = current?.officerId === o.officerId;
+                  return (
                     <li key={o.officerId}>
                       <button
                         type="button"
-                        onClick={() => handleSelect(o.officerId)}
+                        onClick={() => {
+                          setSwitching(o.officerId);
+                          selectOfficer(o.officerId);
+                          setTimeout(() => setSwitching(null), 350);
+                        }}
+                        aria-pressed={isCurrent}
                         className={cn(
-                          'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors',
-                          'hover:bg-brand/5 focus-visible:bg-brand/5 focus-visible:outline-none',
+                          'flex w-full items-center gap-3.5 px-5 py-3 text-left transition-colors duration-150 hover:bg-surface-2/70 active:bg-surface-3/60',
+                          isCurrent && 'bg-accent-weak/50',
                         )}
                       >
-                        <img
-                          src={o.photoUrl}
-                          alt=""
-                          className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-line"
-                          aria-hidden
-                        />
+                        <img src={o.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" aria-hidden />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-ink">{o.name}</span>
-                          <span className="block truncate text-2xs text-ink-faint">{o.designation}</span>
+                          <span className="block truncate text-[13px] font-semibold text-ink">{o.name}</span>
+                          <span className="block truncate text-[11px] text-ink-faint">
+                            {o.designation} · {o.policeId}
+                          </span>
                         </span>
-                        <ChevronRight size={15} className="shrink-0 text-ink-faint" aria-hidden />
+                        {isCurrent ? (
+                          <Badge tone="accent">Viewing</Badge>
+                        ) : (
+                          <span className="text-xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
+                            {switching === o.officerId ? 'Switching…' : 'View'}
+                          </span>
+                        )}
                       </button>
                     </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="px-4 py-6 text-2xs text-ink-faint">No other officers available.</p>
-              )}
-            </Panel>
-          )}
+                  );
+                })}
+              </ul>
+            </CardBody>
+            <CardBody className="border-t border-line px-5 py-3">
+              <SectionLabel>Roster size</SectionLabel>
+              <p className="mt-1 text-xs text-ink-faint">{officers.length} officers enrolled in this deployment.</p>
+            </CardBody>
+          </Card>
 
-          {p && !showOthers && (
-            <div className="flex flex-col gap-5">
-              {/* Officer identity — click to return to the officer selection list */}
-              <section className="panel overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setShowOthers(true)}
-                  title="Switch officer"
-                  className="flex w-full flex-col gap-4 p-5 text-left transition-colors hover:bg-surface-2/60 sm:flex-row sm:items-center sm:gap-5"
-                >
-                  <img
-                    src={p.photoUrl}
-                    alt={`${p.name} profile photo`}
-                    className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-line"
-                  />
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-wider text-ink-faint">
-                      <BadgeCheck size={13} aria-hidden />
-                      {p.designation}
-                    </p>
-                    <h2 className="mt-1 text-xl font-bold leading-tight text-ink sm:text-2xl">{p.name}</h2>
-                    <p className="mt-0.5 text-sm text-ink-muted">{p.department}</p>
-                  </div>
-                  <div className="flex items-center gap-4 sm:ml-auto">
-                    <KeyValue label="Police ID">
-                      <span className="font-mono text-sm font-semibold text-ink">{p.policeId}</span>
-                    </KeyValue>
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line text-ink-muted" aria-hidden>
-                      <ChevronRight size={15} />
-                    </span>
-                  </div>
-                </button>
-
-              </section>
-
-              {/* Officer statistics */}
-              <div className="grid grid-cols-2 gap-5 lg:grid-cols-3 xl:grid-cols-5">
-                <KpiCard label="Total Vehicles Caught" value={formatNumber(p.vehiclesCaught)} tile="blue" icon={Car} />
-                <KpiCard label="Total Challans Given" value={formatNumber(p.totalChallans)} tile="orange" icon={FileText} />
-                <KpiCard label="Total Challan Amount" value={<>₹{formatNumber(p.totalChallanAmount)}</>} tile="amber" icon={Receipt} />
-                <KpiCard label="Total Amount Collected" value={<>₹{formatNumber(p.totalAmountCollected)}</>} tile="green" icon={Wallet} />
-                <KpiCard label="Net Revenue" value={<>₹{formatNumber(p.netRevenue)}</>} tile="purple" icon={TrendingUp} />
-              </div>
-
-              {/* Vehicle number plate list */}
-              <Panel title="Vehicle Number Plate List" icon={Car}>
-                {p.plates.length ? (
-                  <ul className="flex flex-wrap gap-2 p-4">
-                    {p.plates.map((plate) => (
-                      <li key={plate}>
-                        <span className="chip border-brand/25 bg-brand/10 font-mono font-bold tracking-wider text-brand">
-                          {prettyPlate(plate)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="px-4 py-6 text-2xs text-ink-faint">
-                    No vehicle number plates recorded for this officer.
-                  </p>
-                )}
-              </Panel>
-            </div>
-          )}
-        </AsyncBoundary>
+          <Card className="mt-6">
+            <CardHeader title="About this deployment" subtitle="SENTINEL by TRINETRA AI" />
+            <CardBody className="p-5">
+              <dl className="grid gap-x-4 gap-y-4">
+                <KeyVal label="Platform">SENTINEL — surveillance intelligence</KeyVal>
+                <KeyVal label="Built by">TRINETRA AI</KeyVal>
+                <KeyVal label="Operator role">{current?.designation ?? 'Control Center'}</KeyVal>
+              </dl>
+            </CardBody>
+          </Card>
+        </aside>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom';
-import { MainLayout } from '@/layouts/MainLayout';
-import { LoadingState } from '@/components/common/Panel';
+import { AppShell } from '@/layout/AppShell';
+import { LoadingRows } from '@/ui/Feedback';
 import { RouteError } from '@/app/RouteError';
 
 /* Route-level code splitting keeps the initial control-room load small. */
@@ -23,9 +23,9 @@ const NotFound = lazy(() => import('@/pages/NotFound'));
 const page = (el: React.ReactNode) => (
   <Suspense
     fallback={
-      <div className="p-3">
-        <div className="panel">
-          <LoadingState label="Loading module" rows={5} />
+      <div className="p-6 lg:p-8">
+        <div className="rounded-xl border border-line bg-surface-1 shadow-xs">
+          <LoadingRows label="Loading module" rows={5} />
         </div>
       </div>
     }
@@ -37,7 +37,7 @@ const page = (el: React.ReactNode) => (
 const routes: RouteObject[] = [
   {
     path: '/',
-    element: <MainLayout />,
+    element: <AppShell />,
     errorElement: <RouteError />,
     children: [
       { index: true, element: page(<Dashboard />) },

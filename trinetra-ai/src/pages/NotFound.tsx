@@ -1,17 +1,23 @@
 import { Link } from 'react-router-dom';
 import { Compass } from 'lucide-react';
+import { buttonClass } from '@/ui/Button';
 
+/** Dead-end page — quiet, helpful, on brand. */
 export default function NotFound() {
   return (
-    <div className="grid h-full place-items-center p-8">
-      <div className="panel max-w-md p-6 sm:p-8 text-center">
-        <Compass size={26} className="mx-auto mb-3 text-ink-faint" aria-hidden />
-        <h1 className="text-sm font-bold text-ink">Route not found</h1>
-        <p className="mt-2 text-2xs leading-relaxed text-ink-muted">
-          This screen does not exist in the Trinetra control room. Return to the Command Center to continue
-          your investigation.
+    <div className="grid min-h-screen place-items-center bg-surface-0 p-6">
+      <div className="max-w-sm text-center">
+        <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl border border-line bg-surface-1 text-ink-faint shadow-xs">
+          <Compass size={20} aria-hidden />
+        </span>
+        <p className="mono text-xs font-semibold uppercase tracking-[0.14em] text-ink-faint">
+          404 · Not found
         </p>
-        <Link to="/" className="btn-primary mt-4">
+        <h1 className="mt-2 text-lg font-bold text-ink">This page is not on the map</h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">
+          The address you followed does not exist in SENTINEL. The command center is one click away.
+        </p>
+        <Link to="/" className={buttonClass('primary', 'sm', 'mt-5')}>
           Back to Command Center
         </Link>
       </div>

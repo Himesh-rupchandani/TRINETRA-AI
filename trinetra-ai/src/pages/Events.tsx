@@ -1,287 +1,281 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { FileImage, ListTree, RefreshCcw, X } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Panel, AsyncBoundary } from '@/components/common/Panel';
-import { Pagination, PlateLink, ConfidenceBar, CameraLink } from '@/components/common/Links';
-import { SeverityChip } from '@/components/common/Chips';
-import { Modal } from '@/components/common/Modal';
-import { Switch } from '@/components/common/Switch';
-import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ShieldAlert } from 'lucide-react';
 import { useEventSearch } from '@/hooks/useEvents';
-import { useCameras } from '@/hooks/useCameras';
-import { useDebounced } from '@/hooks/useUi';
-import type { EventFilters, EventType, Severity, VehicleEvent } from '@/types';
-import { formatDate, formatTime, prettyEventType, prettyVehicleClass } from '@/lib/utils';
 
-const EVENT_TYPES: (EventType | 'ALL')[] = [
-  'ALL',
-  'VEHICLE_DETECTION',
-  'ANPR_READ',
-  'WATCHLIST_MATCH',
-  'SPEED_VIOLATION',
-  'WRONG_WAY',
-  'CAMERA_OFFLINE',
-];
-const SEVERITIES: (Severity | 'ALL')[] = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const PAGE_SIZE = 25;
+import type { EventFilters, EventType, Severity, VehicleEvent } from '@/types';
+import { DetectionTable } from '@/components/DetectionTable';
+import { Evidence } from '@/components/Evidence';
+import { Button } from '@/ui/Button';
+import { Card, CardBody } from '@/ui/Card';
+import { Boundary, Pagination } from '@/ui/Feedback';
+import { Modal } from '@/ui/Modal';
+import { cn } from '@/lib/utils';
 
+const EVENT_TYPES: { value: EventType | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All events' },
+  { value: 'VEHICLE_DETECTION', label: 'Vehicle detections' },
+  { value: 'ANPR_READ', label: 'Plate reads' },
+  { value: 'WATCHLIST_MATCH', label: 'Wanted matches' },
+  { value: 'SPEED_VIOLATION', label: 'Speed violations' },
+  { value: 'WRONG_WAY', label: 'Wrong-way driving' },
+  { value: 'CAMERA_OFFLINE', label: 'Camera outages' },
+];
+
+const SEVERITIES: { value: Severity | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All priorities' },
+  { value: 'CRITICAL', label: 'Critical' },
+  { value: 'HIGH', label: 'High' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'LOW', label: 'Low' },
+  { value: 'INFO', label: 'Info' },
+];
+
+/**
+ * Vehicle Log — every event the platform has recorded, one searchable,
+ * filterable, paginated table. Deep-links accept ?plate= ?cameraId=
+ * ?watchlist= so other pages can land pre-filtered.
+ */
 export default function Events() {
   const [params, setParams] = useSearchParams();
-  const { cameras } = useCameras();
-
-  const [plate, setPlate] = useState(params.get('plate') ?? '');
-  const [cameraId, setCameraId] = useState(params.get('cameraId') ?? 'ALL');
-  const [eventType, setEventType] = useState<EventType | 'ALL'>('ALL');
-  const [severity, setSeverity] = useState<Severity | 'ALL'>('ALL');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [timeFrom, setTimeFrom] = useState('');
-  const [timeTo, setTimeTo] = useState('');
-  const [watchlistOnly, setWatchlistOnly] = useState(params.get('watchlist') === 'true');
   const [page, setPage] = useState(1);
   const [evidence, setEvidence] = useState<VehicleEvent | null>(null);
 
-  const debouncedPlate = useDebounced(plate, 300);
+  const [query, setQuery] = useState(params.get('plate') ?? '');
+  const [eventType, setEventType] = useState<EventType | 'ALL'>(
+    (params.get('eventType') as EventType) ?? 'ALL',
+  );
+  const [severity, setSeverity] = useState<Severity | 'ALL'>('ALL');
+  const [cameraId, setCameraId] = useState(params.get('cameraId') ?? '');
+  const [watchlistOnly, setWatchlistOnly] = useState(params.get('watchlist') === '1');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
-  const filters = useMemo<EventFilters>(
+  const filters: EventFilters = useMemo(
     () => ({
-      plate: debouncedPlate || undefined,
-      cameraId,
-      eventType,
-      severity,
+      plate: query.trim() || undefined,
+      eventType: eventType === 'ALL' ? undefined : eventType,
+      severity: severity === 'ALL' ? undefined : severity,
+      cameraId: cameraId.trim() || undefined,
+      watchlistOnly: watchlistOnly || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
-      timeFrom: timeFrom || undefined,
-      timeTo: timeTo || undefined,
-      watchlistOnly,
     }),
-    [debouncedPlate, cameraId, eventType, severity, dateFrom, dateTo, timeFrom, timeTo, watchlistOnly],
+    [query, eventType, severity, cameraId, watchlistOnly, dateFrom, dateTo],
   );
 
-  // Reset paging when the query changes (adjust-state-during-render pattern —
-  // avoids the extra effect round-trip and a flash of the old page).
-  const filterKey = JSON.stringify(filters);
-  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
-  if (filterKey !== prevFilterKey) {
-    setPrevFilterKey(filterKey);
-    setPage(1);
-  }
-
   const { data, loading, error, refresh } = useEventSearch(filters, page, PAGE_SIZE);
-  const items = data?.items ?? [];
 
-  const clear = () => {
-    setPlate('');
-    setCameraId('ALL');
-    setEventType('ALL');
-    setSeverity('ALL');
-    setDateFrom('');
-    setDateTo('');
-    setTimeFrom('');
-    setTimeTo('');
-    setWatchlistOnly(false);
-    setParams({});
+  const applyParam = (key: string, value: string | null) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
   };
 
-  const active =
-    plate || cameraId !== 'ALL' || eventType !== 'ALL' || severity !== 'ALL' || dateFrom || dateTo || timeFrom || timeTo || watchlistOnly;
+  const resetAll = () => {
+    setQuery('');
+    setEventType('ALL');
+    setSeverity('ALL');
+    setCameraId('');
+    setWatchlistOnly(false);
+    setDateFrom('');
+    setDateTo('');
+    setParams(new URLSearchParams(), { replace: true });
+    setPage(1);
+  };
+
+  const hasFilters =
+    query || eventType !== 'ALL' || severity !== 'ALL' || cameraId || watchlistOnly || dateFrom || dateTo;
 
   return (
-    <div className="animate-page-in flex h-full flex-col">
-      <PageHeader
-        title="Vehicle Log"
-        icon={ListTree}
-        tone="green"
-        subtitle={`Every vehicle the cameras have seen. ${(data?.total ?? 0).toLocaleString('en-IN')} match your filters.`}
-        actions={
-          <button type="button" className="btn-ghost" onClick={refresh}>
-            <RefreshCcw size={12} aria-hidden /> Refresh
-          </button>
-        }
-      />
-
-      <div className="border-b border-line px-5 py-5 sm:px-6 xl:px-8">
-        <div className="grid grid-cols-2 gap-x-5 gap-y-4 lg:grid-cols-4">
-        <div className="col-span-2 sm:col-span-1">
-          <label className="label" htmlFor="f-plate">
-            Number plate
-          </label>
-          <input
-            id="f-plate"
-            className="input plate uppercase"
-            value={plate}
-            onChange={(e) => setPlate(e.target.value.toUpperCase())}
-            placeholder="GJ01AB1234"
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="f-camera">
-            Camera
-          </label>
-          <select id="f-camera" className="select" value={cameraId} onChange={(e) => setCameraId(e.target.value)}>
-            <option value="ALL">ALL</option>
-            {cameras.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="f-type">
-            What happened
-          </label>
-          <select
-            id="f-type"
-            className="select"
-            value={eventType}
-            onChange={(e) => setEventType(e.target.value as EventType | 'ALL')}
-          >
-            {EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {prettyEventType(t)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="f-sev">
-            Priority
-          </label>
-          <select
-            id="f-sev"
-            className="select"
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value as Severity | 'ALL')}
-          >
-            {SEVERITIES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="f-from">
-            From date
-          </label>
-          <input id="f-from" type="date" className="input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </div>
-        <div>
-          <label className="label" htmlFor="f-to">
-            To date
-          </label>
-          <input id="f-to" type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </div>
-        <div>
-          <label className="label" htmlFor="f-tfrom">
-            From time
-          </label>
-          <input id="f-tfrom" type="time" className="input" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} />
-        </div>
-        <div>
-          <label className="label" htmlFor="f-tto">
-            To time
-          </label>
-          <input id="f-tto" type="time" className="input" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} />
-        </div>
-
-        <div className="col-span-2 flex items-center gap-6 sm:col-span-4">
-          <Switch
-            checked={watchlistOnly}
-            onChange={setWatchlistOnly}
-            label="Only wanted vehicles"
-            className="min-w-[240px]"
-          />
-          {active && (
-            <button type="button" className="btn-ghost" onClick={clear}>
-              <X size={13} aria-hidden /> Clear filters
+    <div className="p-4 sm:p-6 lg:p-8">
+      {/* Filter strip */}
+      <Card>
+        <CardBody className="p-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            <div className="col-span-2">
+              <label htmlFor="ev-plate" className="field-label">Registration number</label>
+              <input
+                id="ev-plate"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value.toUpperCase());
+                  setPage(1);
+                  applyParam('plate', e.target.value.toUpperCase() || null);
+                }}
+                placeholder="GJ01AB1234"
+                className="field font-mono uppercase"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <div>
+              <label htmlFor="ev-type" className="field-label">Event</label>
+              <select
+                id="ev-type"
+                className="select"
+                value={eventType}
+                onChange={(e) => {
+                  setEventType(e.target.value as EventType | 'ALL');
+                  setPage(1);
+                  applyParam('eventType', e.target.value === 'ALL' ? null : e.target.value);
+                }}
+              >
+                {EVENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ev-sev" className="field-label">Priority</label>
+              <select
+                id="ev-sev"
+                className="select"
+                value={severity}
+                onChange={(e) => {
+                  setSeverity(e.target.value as Severity | 'ALL');
+                  setPage(1);
+                }}
+              >
+                {SEVERITIES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ev-camera" className="field-label">Camera</label>
+              <input
+                id="ev-camera"
+                value={cameraId}
+                onChange={(e) => {
+                  setCameraId(e.target.value);
+                  setPage(1);
+                  applyParam('cameraId', e.target.value || null);
+                }}
+                placeholder="cam04"
+                className="field font-mono lowercase"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="ev-from" className="field-label">From</label>
+                <input
+                  id="ev-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => {
+                    setDateFrom(e.target.value);
+                    setPage(1);
+                  }}
+                  className="field px-2.5"
+                />
+              </div>
+              <div>
+                <label htmlFor="ev-to" className="field-label">To</label>
+                <input
+                  id="ev-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => {
+                    setDateTo(e.target.value);
+                    setPage(1);
+                  }}
+                  className="field px-2.5"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="mt-3.5 flex flex-wrap items-center gap-3 border-t border-line pt-3.5">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={watchlistOnly}
+              onClick={() => {
+                setWatchlistOnly(!watchlistOnly);
+                setPage(1);
+                applyParam('watchlist', !watchlistOnly ? '1' : null);
+              }}
+              className={cn(
+                'inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-xs font-medium transition-all duration-150 active:scale-[0.97]',
+                watchlistOnly
+                  ? 'border-critical/30 bg-critical/[0.06] text-critical'
+                  : 'border-line-strong/70 bg-surface-1 text-ink-muted hover:bg-surface-2 hover:text-ink',
+              )}
+            >
+              <span
+                className={cn(
+                  'relative h-3.5 w-6 rounded-full border transition-colors duration-200',
+                  watchlistOnly ? 'border-critical bg-critical' : 'border-line-strong bg-surface-3',
+                )}
+                aria-hidden
+              >
+                <span
+                  className={cn(
+                    'absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-white shadow-sm transition-all duration-200',
+                    watchlistOnly ? 'left-[12px]' : 'left-[1px]',
+                  )}
+                />
+              </span>
+              <ShieldAlert size={12} aria-hidden />
+              Wanted matches only
             </button>
-          )}
-        </div>
-      </div>
-      </div>
+            {hasFilters && (
+              <Button variant="ghost" size="xs" onClick={resetAll}>
+                Reset filters
+              </Button>
+            )}
+            <span className="ml-auto text-xs text-ink-faint" aria-live="polite">
+              {loading ? 'Searching…' : data ? `${data.total.toLocaleString('en-IN')} events in range` : '—'}
+            </span>
+          </div>
+        </CardBody>
+      </Card>
 
-      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
-        <Panel bodyClassName="flex flex-col">
-          <AsyncBoundary
-            loading={loading}
+      {/* Results table */}
+      <Card className="mt-5">
+        <CardBody>
+          <Boundary
+            loading={loading && !data}
             error={error}
             onRetry={refresh}
-            isEmpty={!items.length}
-            emptyTitle="No events found"
-            emptyDetail="Try widening the date range or clearing filters."
-            loadingLabel="Querying event index"
+            isEmpty={!loading && (data?.items.length ?? 0) === 0}
+            emptyTitle="No events match"
+            emptyDetail="Widen the time range or clear a filter."
+            loadingLabel="Searching the log"
           >
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Time</th>
-                    <th scope="col">Camera</th>
-                    <th scope="col">Place</th>
-                    <th scope="col">Plate</th>
-                    <th scope="col">Vehicle type</th>
-                    <th scope="col">Plate match</th>
-                    <th scope="col">What happened</th>
-                    <th scope="col">Priority</th>
-                    <th scope="col" className="text-right">
-                      Photo
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((e) => (
-                    <tr key={e.id}>
-                      <td className="font-mono text-2xs text-ink-faint">{formatDate(e.timestamp)}</td>
-                      <td className="font-mono tabular-nums text-ink">{formatTime(e.timestamp)}</td>
-                      <td>
-                        <CameraLink cameraId={e.cameraId} label={e.cameraName} />
-                      </td>
-                      <td className="max-w-[190px] truncate text-ink-muted">{e.location}</td>
-                      <td>
-                        <PlateLink plate={e.plate} size="xs" />
-                      </td>
-                      <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>
-                      <td>{e.plateConfidence ? <ConfidenceBar value={e.plateConfidence} /> : '—'}</td>
-                      <td className="text-2xs text-ink-muted">{prettyEventType(e.eventType)}</td>
-                      <td>
-                        <SeverityChip severity={e.severity ?? 'INFO'} />
-                      </td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="btn-ghost btn-xs"
-                          onClick={() => setEvidence(e)}
-                          disabled={!e.evidence}
-                        >
-                          <FileImage size={10} aria-hidden /> View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Pagination
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={data?.total ?? 0}
-              onPageChange={(p) => setPage(Math.max(1, p))}
+            <DetectionTable
+              events={data?.items ?? []}
+              activeEventId={null}
+              onViewEvidence={(ev) => setEvidence(ev)}
             />
-          </AsyncBoundary>
-        </Panel>
-      </div>
+          </Boundary>
+          {data && data.items.length > 0 && (
+            <Pagination page={page} pageSize={PAGE_SIZE} total={data.total} onPageChange={setPage} />
+          )}
+        </CardBody>
+      </Card>
 
+      {/* Evidence dialog */}
       <Modal
         open={Boolean(evidence)}
         onClose={() => setEvidence(null)}
-        title={evidence ? `Evidence — ${evidence.plate}` : ''}
-        subtitle={evidence ? `${evidence.cameraName} · ${evidence.location}` : undefined}
+        title="Event evidence"
+        subtitle={evidence ? `${evidence.cameraName ?? evidence.cameraId.toUpperCase()} · ${evidence.location}` : undefined}
+        size="lg"
+        footer={
+          evidence && (
+            <Link
+              to={`/vehicles/${evidence.plate}?evidence=${evidence.id}`}
+              className="text-sm font-semibold text-accent hover:underline"
+            >
+              Open full investigation →
+            </Link>
+          )
+        }
       >
-        <EvidencePanel event={evidence} />
+        {evidence ? <Evidence ev={evidence} /> : null}
       </Modal>
     </div>
   );

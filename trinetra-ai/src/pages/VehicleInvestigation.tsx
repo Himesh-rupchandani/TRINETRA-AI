@@ -1,254 +1,270 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Car, FileImage, Map as MapIcon, Route, ScanLine, ShieldAlert, Table2 } from 'lucide-react';
-import { InvestigationLayout } from '@/layouts/InvestigationLayout';
-import { LazyMap } from '@/components/gis/LazyMap';
-import { MapLegend } from '@/components/gis/MapLegend';
-import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
-import { VehicleInfoPanel } from '@/components/vehicle/VehicleInfoPanel';
-import { DetectionTable } from '@/components/vehicle/DetectionTable';
-import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
-import { AlertCard } from '@/components/alerts/AlertCard';
-import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
-import { SeverityChip } from '@/components/common/Chips';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Clock3, Map as MapIcon, Route } from 'lucide-react';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
-import { useAlerts } from '@/hooks/useAlerts';
-import type { RoutePoint, VehicleEvent } from '@/types';
-import { formatDuration, minutesBetween, prettyPlate } from '@/lib/utils';
+import type { RoutePoint } from '@/types';
+import { InvestigationLayout } from '@/components/InvestigationLayout';
+import { VehicleInfoPanel, WantedBanner } from '@/components/VehicleInfo';
+import { DetectionTable } from '@/components/DetectionTable';
+import { Evidence } from '@/components/Evidence';
+import { MovementTimeline } from '@/components/Timeline';
+import { MapCanvas } from '@/components/MapCanvas';
+import { Button, buttonClass } from '@/ui/Button';
+import { Badge } from '@/ui/Badge';
+import { Card, CardBody, CardHeader, SectionLabel } from '@/ui/Card';
+import { EmptyState, LoadingRows } from '@/ui/Feedback';
+import { Modal } from '@/ui/Modal';
+import { Tabs } from '@/ui/Tabs';
+import { formatDateTime } from '@/lib/uiHelpers';
+
+type Tab = 'journey' | 'sightings';
+
+/** Straight-line totals for the reconstructed journey. */
+function RouteSummary({ route }: { route: RoutePoint[] }) {
+  const distanceKm = route.reduce((s, p) => s + (p.distanceKm ?? 0), 0);
+  const minutes =
+    route.length > 1
+      ? Math.max(0, Math.round((Date.parse(route[route.length - 1].timestamp) - Date.parse(route[0].timestamp)) / 60000))
+      : null;
+  const fastest = Math.max(...route.map((p) => p.speedKmph ?? 0));
+
+  const cells: [string, string][] = [
+    ['Cameras passed', String(route.length)],
+    ['Total distance', distanceKm > 0 ? `${distanceKm.toFixed(1)} km` : '—'],
+    ['Time on road', minutes != null ? `${minutes} min` : '—'],
+    ['Fastest leg', fastest > 0 ? `${fastest.toFixed(0)} km/h` : '—'],
+  ];
+
+  return (
+    <Card>
+      <CardHeader title="Route in numbers" subtitle="Straight-line join between camera stops" />
+      <CardBody className="grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
+        {cells.map(([label, value]) => (
+          <div key={label} className="px-5 py-4">
+            <p className="text-xs text-ink-muted">{label}</p>
+            <p className="mono mt-1 text-lg font-semibold text-ink">{value}</p>
+          </div>
+        ))}
+      </CardBody>
+    </Card>
+  );
+}
 
 /**
- * VEHICLE INVESTIGATION WORKSPACE
- * GIS route (left) · movement timeline (centre) · vehicle & watchlist (right)
- * · detection history + evidence (bottom).
+ * Vehicle case file — dossier, journey map, full sighting history and
+ * per-sighting evidence. Tabbed so the page stays scannable; the map
+ * and timeline stay in sync with the selected stop.
  */
 export default function VehicleInvestigation() {
-  const { plate = '' } = useParams();
-  const navigate = useNavigate();
-  const { result, loading, error, trace } = useVehicleSearch();
-  const { alerts, acknowledge, resolve } = useAlerts();
-  const [activeSequence, setActiveSequence] = useState<number | null>(null);
-  const [panTo, setPanTo] = useState<[number, number] | null>(null);
-  const [evidenceEvent, setEvidenceEvent] = useState<VehicleEvent | null>(null);
+  const { plateSlug = '' } = useParams();
+  const plate = decodeURIComponent(plateSlug).toUpperCase();
+  const [params, setParams] = useSearchParams();
+
+  const { result, loading, error, searched, trace } = useVehicleSearch();
 
   useEffect(() => {
     if (plate) void trace(plate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plate]);
 
-  const events = useMemo(() => result?.events ?? [], [result]);
-  const points = useMemo(() => result?.route?.points ?? [], [result]);
-  const profile = result?.profile ?? null;
-  const wl = profile?.watchlist;
+  const [tab, setTab] = useState<Tab>('journey');
+  const [activeJourneyEvent, setActiveJourneyEvent] = useState<string | null>(null);
+  const [evidenceId, setEvidenceId] = useState<string | null>(params.get('evidence'));
+  const [mapFocus, setMapFocus] = useState<[number, number] | null>(null);
 
-  const vehicleAlerts = useMemo(
-    () => alerts.filter((a) => a.plate === plate.toUpperCase()),
-    [alerts, plate],
+  const events = result?.events ?? [];
+  const route = result?.route?.points ?? [];
+
+  // Preselect the wanted sighting (from ?evidence=) once data lands.
+  useEffect(() => {
+    if (!result || !evidenceId) return;
+    const ev = events.find((e) => e.id === evidenceId);
+    if (ev) {
+      setActiveJourneyEvent(ev.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+
+  const activeEvent = useMemo(
+    () => events.find((e) => e.id === evidenceId) ?? null,
+    [events, evidenceId],
   );
 
-  const activeEvent = useMemo(() => {
-    if (!activeSequence) return evidenceEvent ?? events[events.length - 1] ?? null;
-    const p = points.find((x) => x.sequence === activeSequence);
-    return events.find((e) => e.id === p?.eventId) ?? null;
-  }, [activeSequence, points, events, evidenceEvent]);
+  const activeRoutePoint = useMemo(
+    () => route.find((p) => p.eventId === activeJourneyEvent) ?? null,
+    [route, activeJourneyEvent],
+  );
 
-  const selectPoint = (p: RoutePoint) => {
-    setActiveSequence(p.sequence);
-    setPanTo([p.latitude, p.longitude]);
-    const ev = events.find((e) => e.id === p.eventId);
-    if (ev) setEvidenceEvent(ev);
-  };
-
-  const journeyDuration =
-    points.length > 1
-      ? formatDuration(minutesBetween(points[0].timestamp, points[points.length - 1].timestamp))
-      : '—';
-
-  if (loading) {
+  if (loading || (!searched && plate)) {
     return (
-      <div className="p-6">
-        <div className="panel">
-          <LoadingState label={`Reconstructing movement history for ${plate}`} rows={6} />
-        </div>
+      <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+        <LoadingRows label={`Pulling the record for ${plate}`} rows={6} />
       </div>
     );
   }
 
-  if (error) {
+  if (error || !result) {
     return (
-      <div className="p-6">
-        <div className="panel">
-          <ErrorState message={error} onRetry={() => trace(plate)} />
-        </div>
+      <div className="p-4 sm:p-6 lg:p-8">
+        <EmptyState
+          title={error ? 'Could not load this vehicle' : 'No record for this plate'}
+          detail={error ?? `${plate} has never been recognised by a camera in this network.`}
+          action={
+            <div className="flex gap-2.5">
+              <Link to="/vehicles" className={buttonClass('primary', 'sm')}>
+                Search another plate
+              </Link>
+              <Link to="/events" className={buttonClass('secondary', 'sm')}>
+                Browse the vehicle log
+              </Link>
+            </div>
+          }
+        />
       </div>
     );
   }
 
-  if (!events.length) {
-    return (
-      <InvestigationLayout
-        backTo="/vehicles"
-        backLabel="Back to search"
-        title={<span className="plate text-sm text-ink">{prettyPlate(plate)}</span>}
-      >
-        <div className="p-4">
-          <div className="panel">
-            <EmptyState
-              icon={Car}
-              title={`No sightings recorded for ${plate}`}
-              detail="No camera in the network has detected this registration number in the retained window."
-              action={
-                <button type="button" className="btn-primary mt-2" onClick={() => navigate('/vehicles')}>
-                  Trace another vehicle
-                </button>
-              }
-            />
-          </div>
-        </div>
-      </InvestigationLayout>
-    );
-  }
+  const firstSeen = events.length > 0 ? events[events.length - 1] : null;
+  const lastSeen = events[0] ?? null;
 
   return (
     <InvestigationLayout
       backTo="/vehicles"
-      backLabel="Back to search"
-      title={
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
-            Vehicle
-          </p>
-          <p className="plate text-base leading-tight text-ink">{prettyPlate(plate)}</p>
-        </div>
-      }
+      backLabel="Find a Vehicle"
+      title={<span className="plate text-xl">{result.plate}</span>}
       status={
-        wl?.active ? (
-          <span className="flex items-center gap-1.5">
-            <span className="chip border-critical/50 bg-critical/12 text-critical">
-              <ShieldAlert size={11} aria-hidden /> On the wanted list
-            </span>
-            <SeverityChip severity={wl.severity} />
-          </span>
+        result.profile?.watchlist ? (
+          <Badge tone="danger">Wanted{result.profile.watchlist.caseRef ? ` · ${result.profile.watchlist.caseRef}` : ''}</Badge>
         ) : (
-          <span className="chip border-online/45 bg-online/10 text-online">No watchlist entry</span>
+          <Badge tone="success">No flags</Badge>
         )
       }
       meta={
-        <>
-          <span className="text-2xs text-ink-faint">
-            Seen <span className="font-mono text-ink-muted">{events.length}</span> times
+        events.length > 0 && (
+          <span>
+            {events.length} sightings · {firstSeen ? `${formatDateTime(firstSeen.timestamp)} → ${formatDateTime(lastSeen!.timestamp)}` : ''}
           </span>
-          <span className="text-2xs text-ink-faint">
-            By <span className="font-mono text-ink-muted">{result?.route?.camerasTouched ?? 0}</span> cameras
-          </span>
-          <span className="text-2xs text-ink-faint">
-            Travelled <span className="font-mono text-ink-muted">{result?.route?.totalDistanceKm ?? 0} km</span>
-          </span>
-          <span className="text-2xs text-ink-faint">
-            Over <span className="font-mono text-ink-muted">{journeyDuration}</span>
-          </span>
-        </>
+        )
       }
       actions={
-        <>
-          <button type="button" className="btn-ghost btn-xs" onClick={() => navigate(`/gis?plate=${plate}`)}>
-            <MapIcon size={12} aria-hidden /> Open big map
-          </button>
-          <button type="button" className="btn-ghost btn-xs" onClick={() => navigate(`/events?plate=${plate}`)}>
-            <Table2 size={12} aria-hidden /> All sightings
-          </button>
-        </>
+        <Button variant="ghost" onClick={() => window.print()}>
+          Print case file
+        </Button>
       }
     >
-      <div className="grid gap-5 p-5 sm:p-6 xl:p-8">
-        {/* LEFT — GIS */}
-        <Panel
-          title="Route on the map"
-          icon={MapIcon}
-          className="min-h-[420px] xl:col-span-5"
-          bodyClassName="relative"
-          actions={
-            <span className="chip border-high/45 bg-high/10 text-high">
-              {points.map((p) => p.cameraName).join(' → ') || 'No route'}
-            </span>
-          }
-        >
-          <LazyMap
-            route={points}
-            routePlate={result?.plate}
-            cameras={[]}
-            activeRouteSequence={activeSequence}
-            onSelectRoutePoint={selectPoint}
-            panTo={panTo}
-            className="absolute inset-0"
-          />
-          <MapLegend showRoute />
-        </Panel>
+      <div className="space-y-6">
+        {result.profile?.watchlist && <WantedBanner profile={result.profile} />}
 
-        {/* CENTRE — timeline */}
-        <Panel
-          title="Where it went"
-          icon={Route}
-          className="min-h-[420px] xl:col-span-3"
-          bodyClassName="overflow-y-auto"
-        >
-          <MovementTimeline points={points} activeSequence={activeSequence} onSelect={selectPoint} />
-        </Panel>
+        {/* Dossier */}
+        <Card>
+          <CardHeader title="Vehicle record" subtitle="Registered details as held by the RTO record" />
+          <CardBody className="p-5">{result.profile && <VehicleInfoPanel profile={result.profile} />}</CardBody>
+        </Card>
 
-        {/* RIGHT — vehicle + watchlist + alerts */}
-        <div className="flex flex-col gap-5 xl:col-span-4">
-          <Panel title="Vehicle details" icon={Car}>
-            {profile ? (
-              <VehicleInfoPanel profile={profile} />
-            ) : (
-              <EmptyState title="No vehicle profile" />
+        {/* Journey + sightings */}
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 pb-0 pt-1">
+            <Tabs
+              value={tab}
+              onChange={setTab}
+              items={[
+                { value: 'journey', label: 'Journey', count: route.length },
+                { value: 'sightings', label: 'Sighting log', count: events.length },
+              ]}
+              className="border-b-0"
+            />
+            {tab === 'journey' && route.length > 1 && (
+              <p className="pb-2 text-xs text-ink-faint">
+                <Route size={11} className="mr-1 inline" aria-hidden />
+                Stops in order · click a stop to focus it on the map
+              </p>
             )}
-          </Panel>
+          </div>
 
-          <Panel
-            title={`Alerts for this vehicle (${vehicleAlerts.length})`}
-            icon={ShieldAlert}
-            bodyClassName="max-h-[320px] overflow-y-auto"
-          >
-            {vehicleAlerts.length === 0 ? (
-              <EmptyState title="No alerts raised" detail="This vehicle has not triggered a watchlist alert." />
-            ) : (
-              <div className="space-y-4 p-4">
-                {vehicleAlerts.map((a) => (
-                  <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />
-                ))}
+          {tab === 'journey' ? (
+            <div className="grid min-h-0 lg:grid-cols-[1fr_360px]">
+              <div className="min-h-[320px] lg:min-h-[440px]">
+                <MapCanvas
+                  route={route}
+                  routePlate={result.plate}
+                  activeRouteSequence={activeRoutePoint?.sequence ?? null}
+                  onSelectRoutePoint={(p) => {
+                    setActiveJourneyEvent(p.eventId);
+                    setMapFocus([p.latitude, p.longitude]);
+                  }}
+                  panTo={mapFocus}
+                  className="h-full min-h-[320px] w-full lg:min-h-[440px]"
+                />
               </div>
-            )}
-          </Panel>
-        </div>
+              <div className="flex min-h-0 flex-col border-t border-line lg:border-l lg:border-t-0">
+                <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                  <Clock3 size={13} className="text-ink-faint" aria-hidden />
+                  <SectionLabel>Timeline</SectionLabel>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  <MovementTimeline
+                    points={route}
+                    activeEventId={activeJourneyEvent}
+                    onSelect={(eventId) => {
+                      setActiveJourneyEvent(eventId);
+                      const pt = route.find((p) => p.eventId === eventId);
+                      if (pt) setMapFocus([pt.latitude, pt.longitude]);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <CardBody>
+              <DetectionTable
+                events={events}
+                activeEventId={evidenceId}
+                onViewEvidence={(ev) => {
+                  setEvidenceId(ev.id);
+                  setParams({ evidence: ev.id }, { replace: true });
+                }}
+                onViewOnMap={() => setTab('journey')}
+              />
+            </CardBody>
+          )}
+        </Card>
 
-        {/* BOTTOM — detection history + evidence */}
-        <Panel
-          title="Every time it was seen"
-          icon={ScanLine}
-          className="xl:col-span-8"
-          actions={
-            <span className="chip border-line bg-surface-3 text-ink-muted">Seen {events.length} times</span>
-          }
-        >
-          <DetectionTable
-            events={events}
-            activeEventId={activeEvent?.id}
-            onViewEvidence={(e) => {
-              setEvidenceEvent(e);
-              const p = points.find((x) => x.eventId === e.id);
-              if (p) setActiveSequence(p.sequence);
-            }}
-            onViewOnMap={(e) => {
-              const p = points.find((x) => x.eventId === e.id);
-              if (p) selectPoint(p);
-            }}
-          />
-        </Panel>
-
-        <Panel title="Photo evidence" icon={FileImage} className="xl:col-span-4">
-          <EvidencePanel event={activeEvent} />
-        </Panel>
+        {/* Route summary strip */}
+        {route.length > 1 && <RouteSummary route={route} />}
       </div>
+
+      {/* Evidence dialog */}
+      <Modal
+        open={Boolean(activeEvent)}
+        onClose={() => {
+          setEvidenceId(null);
+          setParams({}, { replace: true });
+        }}
+        title="Sighting evidence"
+        subtitle={activeEvent ? `${activeEvent.cameraName ?? activeEvent.cameraId} · ${formatDateTime(activeEvent.timestamp)}` : undefined}
+        size="xl"
+        footer={
+          activeEvent && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const pt = route.find((p) => p.eventId === activeEvent.id);
+                setEvidenceId(null);
+                setParams({}, { replace: true });
+                if (pt) {
+                  setTab('journey');
+                  setActiveJourneyEvent(pt.eventId);
+                  setMapFocus([pt.latitude, pt.longitude]);
+                }
+              }}
+            >
+              <MapIcon size={13} aria-hidden /> Show in journey
+            </Button>
+          )
+        }
+      >
+        {activeEvent ? <Evidence ev={activeEvent} /> : <LoadingRows label="Loading evidence" />}
+      </Modal>
     </InvestigationLayout>
   );
 }

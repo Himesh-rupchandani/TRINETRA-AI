@@ -1,192 +1,230 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Layers, Map as MapIcon, Route, Search } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { LazyMap } from '@/components/gis/LazyMap';
-import { MapLegend } from '@/components/gis/MapLegend';
-import { Panel, EmptyState } from '@/components/common/Panel';
-import { SwitchCompact } from '@/components/common/Switch';
-import { StatusChip } from '@/components/common/Chips';
-import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
+import { useSearchParams } from 'react-router-dom';
+import { Layers, Route as RouteIcon } from 'lucide-react';
 import { useCameras } from '@/hooks/useCameras';
+import { useEventSearch } from '@/hooks/useEvents';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
-import { useAsync } from '@/hooks/useAsync';
-import { eventService } from '@/services/eventService';
-import { normalisePlate } from '@/lib/utils';
-import type { RoutePoint } from '@/types';
+import { MapCanvas } from '@/components/MapCanvas';
+import { MovementTimeline } from '@/components/Timeline';
+import { Evidence } from '@/components/Evidence';
+import { Badge } from '@/ui/Badge';
+import type { CameraStatus } from '@/types';
+import { Card, CardBody, CardHeader } from '@/ui/Card';
+import { Boundary, EmptyState } from '@/ui/Feedback';
+import { Modal } from '@/ui/Modal';
+import { PlateLink } from '@/ui/Links';
+import { SwitchChip } from '@/ui/Switch';
+import { cn } from '@/lib/utils';
+import { formatTime, severityTone } from '@/lib/uiHelpers';
 
-/** GIS — camera network, live detections and chronological vehicle routes. */
+/**
+ * City Map — camera network with coverage halos, live sightings and
+ * reconstructed routes for a traced plate. Layers are explicit toggles.
+ */
 export default function GIS() {
-  const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
-  const { cameras } = useCameras();
-  const { result, trace, loading, reset } = useVehicleSearch();
-  const recent = useAsync(() => eventService.recent(150), []);
+  const [params] = useSearchParams();
+  const { cameras, loading: camsLoading } = useCameras();
 
-  const [plateInput, setPlateInput] = useState(params.get('plate') ?? '');
   const [showCameras, setShowCameras] = useState(true);
-  const [showDetections, setShowDetections] = useState(true);
-  const [showCoverage, setShowCoverage] = useState(false);
-  const [activeSequence, setActiveSequence] = useState<number | null>(null);
-  const [panTo, setPanTo] = useState<[number, number] | null>(null);
+  const [showCoverage, setShowCoverage] = useState(true);
+  const [showEvents, setShowEvents] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | CameraStatus>('ALL');
 
+  // Watchlist trace from URL (?plate=...&focus=camId)
+  const tracePlate = params.get('plate')?.toUpperCase() ?? null;
   const focusCamera = params.get('focus');
-  const plateParam = params.get('plate');
+  const { result, trace, searched } = useVehicleSearch();
 
   useEffect(() => {
-    if (plateParam) void trace(plateParam);
-    else reset();
+    if (tracePlate) void trace(tracePlate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plateParam]);
+  }, [tracePlate]);
 
+  // Recent sightings for the live layer (latest page of the log).
+  const { data: recentEvents } = useEventSearch({ watchlistOnly: false }, 1, 100);
+
+  const filteredCameras = useMemo(
+    () => (statusFilter === 'ALL' ? cameras : cameras.filter((c) => c.status === statusFilter)),
+    [cameras, statusFilter],
+  );
+
+  const route = result?.route?.points ?? [];
+  const [activeJourneyEvent, setActiveJourneyEvent] = useState<string | null>(null);
+  const [panTo, setPanTo] = useState<[number, number] | null>(null);
+  const [evidence, setEvidence] = useState<string | null>(null);
+
+  // Focus a camera passed in the URL once cameras arrive.
   useEffect(() => {
-    if (!focusCamera) return;
+    if (!focusCamera || cameras.length === 0) return;
     const cam = cameras.find((c) => c.id === focusCamera);
     if (cam) setPanTo([cam.latitude, cam.longitude]);
-  }, [focusCamera, cameras]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusCamera, cameras.length]);
 
-  const points = useMemo(() => result?.route?.points ?? [], [result]);
-  const detections = useMemo(() => {
-    const list = recent.data ?? [];
-    return showDetections ? list.filter((e) => e.plate !== '—').slice(0, 60) : [];
-  }, [recent.data, showDetections]);
-
-  const selectPoint = (p: RoutePoint) => {
-    setActiveSequence(p.sequence);
-    setPanTo([p.latitude, p.longitude]);
-  };
+  const activeEvent = useMemo(
+    () => recentEvents?.items.find((e) => e.id === evidence) ?? null,
+    [recentEvents, evidence],
+  );
 
   return (
-    <div className="animate-page-in flex h-full flex-col">
-      <PageHeader
-        title="Map"
-        icon={MapIcon}
-        tone="purple"
-        subtitle={
-          points.length
-            ? `Where ${result?.plate} went: ${points.map((p) => p.cameraName).join(', then ')}`
-            : `${cameras.length} cameras on the map · ${detections.length} recent vehicle sightings`
-        }
-        actions={
-          <form
-            className="flex items-center gap-1.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const p = normalisePlate(plateInput);
-              setParams(p ? { plate: p } : {});
-            }}
-            role="search"
-          >
-            <label htmlFor="gis-plate" className="sr-only">
-              Plot vehicle route
-            </label>
-            <div className="relative">
-              <Search size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
-              <input
-                id="gis-plate"
-                className="input plate w-[170px] pl-7 uppercase"
-                value={plateInput}
-                onChange={(e) => setPlateInput(e.target.value.toUpperCase())}
-                placeholder="Show a route — type a plate"
-              />
-            </div>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              Show route
-            </button>
-            {plateParam && (
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => {
-                  setPlateInput('');
-                  setParams({});
-                  setActiveSequence(null);
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </form>
-        }
-      />
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 p-5 sm:p-6 xl:p-8">
-        <Panel
-          className="min-h-[420px] xl:col-span-9"
-          bodyClassName="relative"
-          title="Map of the city"
-          icon={Layers}
-          actions={
-            <div className="flex flex-wrap items-center gap-2.5">
-              <SwitchCompact checked={showCameras} onChange={setShowCameras} label="Cameras" />
-              <SwitchCompact checked={showDetections} onChange={setShowDetections} label="Vehicle sightings" />
-              <SwitchCompact checked={showCoverage} onChange={setShowCoverage} label="Camera range" />
-            </div>
-          }
-        >
-          <LazyMap
-            cameras={showCameras ? cameras : []}
-            events={detections}
-            route={points}
-            routePlate={result?.plate}
-            activeRouteSequence={activeSequence}
-            selectedCameraId={focusCamera}
-            onSelectRoutePoint={selectPoint}
-            onSelectCamera={(c) => setPanTo([c.latitude, c.longitude])}
-            panTo={panTo}
-            showCoverage={showCoverage}
-            className="absolute inset-0"
-            zoom={12}
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="grid min-h-0 gap-5 xl:grid-cols-[1fr_330px]">
+        {/* Map panel */}
+        <Card className="overflow-hidden">
+          <CardHeader
+            title="City-wide operations map"
+            subtitle="Camera network and live vehicle sightings on the civic basemap"
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <SwitchChip checked={showCameras} onChange={setShowCameras} label="Cameras" />
+                <SwitchChip checked={showCoverage} onChange={setShowCoverage} label="Coverage" title="100 m halo around each post" />
+                <SwitchChip checked={showEvents} onChange={setShowEvents} label="Sightings" />
+              </div>
+            }
           />
-          <MapLegend showRoute={points.length > 0} />
-        </Panel>
+          <CardBody>
+            <div className="relative h-[calc(100vh-320px)] min-h-[420px] w-full">
+              <MapCanvas
+                cameras={showCameras ? filteredCameras : []}
+                events={showEvents ? (recentEvents?.items ?? []).slice(0, 80) : []}
+                route={route}
+                routePlate={result?.plate}
+                activeRouteSequence={
+                  activeJourneyEvent ? route.find((p) => p.eventId === activeJourneyEvent)?.sequence ?? null : null
+                }
+                onSelectRoutePoint={(p) => {
+                  setActiveJourneyEvent(p.eventId);
+                  setEvidence(p.eventId);
+                }}
+                onSelectEvent={(e) => setEvidence(e.id)}
+                panTo={panTo}
+                showCoverage={showCoverage}
+                className="h-full w-full"
+              />
+              {/* Status legend — part of the map chrome */}
+              <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex items-center gap-3 rounded-lg border border-line bg-surface-1/95 px-3 py-2 shadow-xs">
+                {(['ONLINE', 'DEGRADED', 'OFFLINE'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStatusFilter(statusFilter === s ? 'ALL' : s)}
+                    className={cn(
+                      'flex items-center gap-1.5 text-[11px] font-medium transition-opacity',
+                      statusFilter !== 'ALL' && statusFilter !== s && 'opacity-40',
+                    )}
+                    aria-pressed={statusFilter === s}
+                  >
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full',
+                        s === 'ONLINE' ? 'bg-online' : s === 'DEGRADED' ? 'bg-warn' : 'bg-offline',
+                      )}
+                      aria-hidden
+                    />
+                    {s[0] + s.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardBody>
+        </Card>
 
-        <div className="flex min-h-0 flex-col gap-5 xl:col-span-3">
-          {points.length > 0 ? (
-            <Panel
-              title={`Route — ${result?.plate}`}
-              icon={Route}
-              className="min-h-0 flex-1"
-              bodyClassName="overflow-y-auto"
-              actions={
-                <button
-                  type="button"
-                  className="btn-ghost btn-xs"
-                  onClick={() => navigate(`/vehicles/${result?.plate}`)}
-                >
-                  Investigate
-                </button>
-              }
-            >
-              <MovementTimeline points={points} activeSequence={activeSequence} onSelect={selectPoint} />
-            </Panel>
-          ) : (
-            <Panel title="All cameras" icon={MapIcon} className="min-h-0 flex-1" bodyClassName="overflow-y-auto">
-              {cameras.length === 0 ? (
-                <EmptyState title="Loading network" />
-              ) : (
-                <ul className="divide-y divide-line/60">
-                  {cameras.map((c) => (
-                    <li key={c.id}>
+        {/* Rail */}
+        <aside className="flex min-w-0 flex-col gap-5">
+          {tracePlate && (
+            <Card>
+              <CardHeader
+                title="Traced route"
+                subtitle={searched && route.length === 0 ? 'No route on record for this plate' : `Sightings of ${tracePlate}`}
+                actions={<Badge tone="accent"><RouteIcon size={10} className="mr-1" aria-hidden />{route.length} stops</Badge>}
+              />
+              <CardBody className="max-h-[420px] overflow-y-auto p-3">
+                <Boundary loading={!!tracePlate && !searched} isEmpty={searched && route.length === 0} emptyTitle="No camera sightings for this plate">
+                  <MovementTimeline
+                    points={route}
+                    activeEventId={activeJourneyEvent}
+                    onSelect={(eventId) => {
+                      setActiveJourneyEvent(eventId);
+                      const pt = route.find((p) => p.eventId === eventId);
+                      if (pt) {
+                        setPanTo([pt.latitude, pt.longitude]);
+                        setEvidence(pt.eventId);
+                      }
+                    }}
+                  />
+                </Boundary>
+              </CardBody>
+            </Card>
+          )}
+
+          <Card className="min-h-0 flex-1">
+            <CardHeader
+              title="Latest sightings"
+              subtitle="Newest first — click to inspect"
+              actions={<Layers size={13} className="text-ink-faint" aria-hidden />}
+            />
+            <CardBody className="max-h-[440px] overflow-y-auto">
+              <Boundary loading={!recentEvents} isEmpty={(recentEvents?.items.length ?? 0) === 0} emptyTitle="No sightings yet">
+                <ul className="divide-y divide-line/70">
+                  {(recentEvents?.items ?? []).slice(0, 40).map((e) => (
+                    <li key={e.id}>
                       <button
                         type="button"
-                        onClick={() => setPanTo([c.latitude, c.longitude])}
-                        className="flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left hover:bg-surface-2"
+                        onClick={() => {
+                          setEvidence(e.id);
+                          setPanTo([e.latitude, e.longitude]);
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-2/70 active:bg-surface-3/60"
                       >
-                        <span className="min-w-0">
-                          <span className="block font-mono text-xs text-ink">{c.name}</span>
-                          <span className="block truncate text-2xs text-ink-faint">{c.location}</span>
+                        <span
+                          className={cn('h-6 w-[3px] shrink-0 rounded-full', e.watchlistMatch ? severityTone.CRITICAL.bar : 'bg-accent/50')}
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1">
+                          <PlateLink plate={e.plate} size="xs" />
+                          <span className="mono mt-0.5 block truncate text-[11px] text-ink-faint">
+                            {e.cameraName ?? e.cameraId.toUpperCase()} · {formatTime(e.timestamp)}
+                          </span>
                         </span>
-                        <StatusChip status={c.status} showDot={false} />
+                        {e.watchlistMatch && <Badge tone="danger">Wanted</Badge>}
                       </button>
                     </li>
                   ))}
                 </ul>
-              )}
-            </Panel>
-          )}
-        </div>
+              </Boundary>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Network snapshot" subtitle="Registry totals" />
+            <CardBody className="grid grid-cols-3 divide-x divide-line">
+              {([
+                ['Online', camsLoading ? '—' : cameras.filter((c) => c.status === 'ONLINE').length],
+                ['Degraded', camsLoading ? '—' : cameras.filter((c) => c.status === 'DEGRADED').length],
+                ['Offline', camsLoading ? '—' : cameras.filter((c) => c.status === 'OFFLINE').length],
+              ] as [string, number | string][]).map(([label, n]) => (
+                <div key={label} className="px-4 py-3.5 text-center">
+                  <p className="mono text-lg font-semibold text-ink">{n}</p>
+                  <p className="mt-0.5 text-[11px] text-ink-faint">{label}</p>
+                </div>
+              ))}
+            </CardBody>
+          </Card>
+        </aside>
       </div>
+
+      <Modal
+        open={Boolean(activeEvent)}
+        onClose={() => setEvidence(null)}
+        title="Sighting evidence"
+        size="lg"
+      >
+        {activeEvent ? (
+          <Evidence ev={activeEvent} />
+        ) : (
+          <EmptyState title="Evidence unavailable" detail="This sighting's imagery is not in the local archive." />
+        )}
+      </Modal>
     </div>
   );
 }

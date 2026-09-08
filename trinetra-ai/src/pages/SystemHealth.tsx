@@ -1,171 +1,178 @@
-import { Activity, AlertTriangle, Cpu, Gauge, Plug, RefreshCcw } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Panel, AsyncBoundary, KeyValue } from '@/components/common/Panel';
-import { ServiceStatusChip } from '@/components/common/Chips';
-import { KpiCard } from '@/components/dashboard/KpiCard';
-import { useAsync } from '@/hooks/useAsync';
-import { systemService } from '@/services/systemService';
-import { useLiveEvents } from '@/hooks/useLiveEvents';
-import { cn, formatDateTime, formatNumber, formatTime, relativeTime } from '@/lib/utils';
-import { config } from '@/lib/config';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
+import { useSystemStatus } from '@/features/system/useSystemStatus';
+import type { ProcessingState, ServiceHealth, ServiceStatus } from '@/types';
+import { Badge } from '@/ui/Badge';
+import { Button } from '@/ui/Button';
+import { Card, CardBody, CardHeader } from '@/ui/Card';
+import { Boundary, KeyVal } from '@/ui/Feedback';
+import { Stat } from '@/ui/Links';
+import { cn } from '@/lib/utils';
+import { formatDateTime } from '@/lib/uiHelpers';
+import { relativeTime } from '@/lib/utils';
 
-const PROCESSING_TONE: Record<string, string> = {
-  PROCESSING: 'text-processing',
-  IDLE: 'text-ink-muted',
-  BACKLOGGED: 'text-degraded',
-  STOPPED: 'text-offline',
+const SERVICE_TONE: Record<ServiceStatus, { badge: 'success' | 'warn' | 'danger'; dot: string; icon: typeof CheckCircle2 }> = {
+  HEALTHY: { badge: 'success', dot: 'bg-online', icon: CheckCircle2 },
+  DEGRADED: { badge: 'warn', dot: 'bg-warn', icon: AlertTriangle },
+  OFFLINE: { badge: 'danger', dot: 'bg-offline', icon: XCircle },
 };
 
+const PROC_LABEL: Record<ProcessingState, string> = {
+  IDLE: 'Idle',
+  PROCESSING: 'Processing',
+  BACKLOGGED: 'Backlogged',
+  STOPPED: 'Stopped',
+};
+
+function ServiceRow({ s }: { s: ServiceHealth }) {
+  const tone = SERVICE_TONE[s.status];
+  const Icon = tone.icon;
+  const [open, setOpen] = useState<boolean>(false);
+  return (
+    <>
+      <tr
+        className="row-click"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title="Click for service details"
+      >
+        <td>
+          <span className="flex items-center gap-2.5">
+            <Icon size={14} className={cn(s.status === 'HEALTHY' ? 'text-online' : s.status === 'DEGRADED' ? 'text-warn' : 'text-offline')} aria-hidden />
+            <span>
+              <span className="block text-[13px] font-medium text-ink">{s.name}</span>
+              <span className="block max-w-[340px] truncate text-[11px] text-ink-faint">{s.description}</span>
+            </span>
+          </span>
+        </td>
+        <td><Badge tone={tone.badge}>{s.status[0] + s.status.slice(1).toLowerCase()}</Badge></td>
+        <td className="text-ink-muted">{PROC_LABEL[s.processingState]}</td>
+        <td className="mono tabular-nums text-ink-muted">{s.uptimePct.toFixed(2)}%</td>
+        <td className="mono tabular-nums text-ink-muted">
+          {s.latencyMs != null ? `${s.latencyMs.toFixed(0)} ms` : '—'}
+        </td>
+        <td className="mono tabular-nums text-ink-muted">{s.queueDepth ?? 0}</td>
+        <td className="text-ink-muted" title={formatDateTime(s.lastHeartbeat)}>
+          {relativeTime(s.lastHeartbeat)}
+        </td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={7} className="bg-surface-2/50">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-2 py-3 sm:grid-cols-4">
+              <KeyVal label="Service ID"><span className="mono">{s.id}</span></KeyVal>
+              <KeyVal label="Version">{s.version ?? '—'}</KeyVal>
+              <KeyVal label="Uptime since">{formatDateTime(s.uptimeSince)}</KeyVal>
+              <KeyVal label="Active connections">{s.activeConnections}</KeyVal>
+              {s.latestError && (
+                <div className="col-span-2 sm:col-span-4">
+                  <KeyVal label="Latest error">
+                    <span className="mono block whitespace-pre-wrap rounded-md border border-critical/25 bg-critical/[0.05] px-2.5 py-1.5 text-xs text-critical">
+                      {s.latestError}
+                    </span>
+                  </KeyVal>
+                </div>
+              )}
+            </dl>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/**
+ * System Status — platform services in one expandable table plus an
+ * ingest-rate band. Click a row for the full service record.
+ */
 export default function SystemHealth() {
-  const health = useAsync(() => systemService.health(), []);
-  const { connection, eventsSeen } = useLiveEvents();
-  const services = health.data?.services ?? [];
-  const degraded = services.filter((s) => s.status !== 'HEALTHY');
+  const { health, kpis, loading, error, refresh } = useSystemStatus(15000);
+
+  const counts = useMemo(() => {
+    const services = health?.services ?? [];
+    return {
+      healthy: services.filter((s) => s.status === 'HEALTHY').length,
+      degraded: services.filter((s) => s.status === 'DEGRADED').length,
+      offline: services.filter((s) => s.status === 'OFFLINE').length,
+      total: services.length,
+    };
+  }, [health]);
 
   return (
-    <div className="animate-page-in flex h-full flex-col">
-      <PageHeader
-        title="System Status"
-        icon={Activity}
-        tone="green"
-        subtitle={
-          health.data
-            ? `Checked at ${formatTime(health.data.generatedAt)}. ${degraded.length === 0 ? 'Everything is working normally.' : `${degraded.length} part${degraded.length > 1 ? 's' : ''} of the system need${degraded.length > 1 ? '' : 's'} attention.`}`
-            : 'Checking each part of the system…'
-        }
-        actions={
-          <button type="button" className="btn-ghost" onClick={health.refresh}>
-            <RefreshCcw size={12} aria-hidden /> Refresh
-          </button>
-        }
-      />
+    <div className="p-4 sm:p-6 lg:p-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold text-ink">System Status</h2>
+          <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
+            Live state of the ingest, recognition and dispatch services behind SENTINEL. This page
+            refreshes itself every 15 seconds.
+          </p>
+        </div>
+        <Button variant="secondary" onClick={refresh}>
+          <RefreshCw size={13} aria-hidden className={loading ? 'animate-spin' : ''} /> Refresh now
+        </Button>
+      </header>
 
-      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
-        <AsyncBoundary loading={health.loading} error={health.error} onRetry={health.refresh} loadingLabel="Checking the system">
-          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 xl:grid-cols-5">
-            <KpiCard
-              label="Parts working normally"
-              value={`${services.length - degraded.length}/${services.length}`}
-              tone={degraded.length ? 'warn' : 'online'}
-              tile={degraded.length ? 'amber' : 'blue'}
-              icon={Cpu}
-            />
-            <KpiCard
-              label="Video being processed"
-              value={formatNumber(health.data?.ingestFps)}
-              sub="camera frames every second"
-              tile="green"
-              icon={Gauge}
-            />
-            <KpiCard
-              label="Vehicles seen each minute"
-              value={formatNumber(health.data?.eventsPerMinute)}
-              sub="Found by the AI"
-              tone="brand"
-              tile="sky"
-              icon={Activity}
-            />
-            <KpiCard
-              label="Plates read each minute"
-              value={formatNumber(health.data?.anprPerMinute)}
-              sub="Read automatically"
-              tile="blue"
-              icon={Activity}
-            />
-            <KpiCard
-              label="Live updates"
-              value={connection === 'SIMULATED' ? 'Demo' : connection === 'LIVE' ? 'On' : connection === 'CONNECTING' ? 'Connecting' : 'Off'}
-              sub={`${eventsSeen} update${eventsSeen === 1 ? '' : 's'} received`}
-              tone={connection === 'OFFLINE' ? 'critical' : 'brand'}
-              tile="purple"
-              icon={Plug}
-            />
-          </div>
-
-          {degraded.length > 0 && (
-            <div className="panel mt-5 border-l-2 border-l-degraded p-5" role="status">
-              <p className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-widest text-degraded">
-                <AlertTriangle size={12} aria-hidden /> {degraded.length} part
-                {degraded.length > 1 ? 's' : ''} of the system need{degraded.length > 1 ? '' : 's'} attention
-              </p>
-              <ul className="mt-2 space-y-1">
-                {degraded.map((s) => (
-                  <li key={s.id} className="text-2xs text-ink-muted">
-                    <span className="font-semibold text-ink">{s.name}</span> — {s.latestError ?? 'not working normally'}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            {services.map((s) => (
-              <Panel key={s.id} title={s.name} icon={Cpu} actions={<ServiceStatusChip status={s.status} />}>
-                <div className="p-4">
-                  <p className="text-2xs text-ink-faint">{s.description}</p>
-                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
-                    <KeyValue label="Working time">
-                      <span className="font-mono">{s.uptimePct.toFixed(2)}%</span>
-                    </KeyValue>
-                    <KeyValue label="Running since">{relativeTime(s.uptimeSince)}</KeyValue>
-                    <KeyValue label="Last checked">
-                      <span className="font-mono">{formatTime(s.lastHeartbeat)}</span>
-                    </KeyValue>
-                    <KeyValue label="Cameras connected">
-                      <span className="font-mono tabular-nums">{s.activeConnections}</span>
-                    </KeyValue>
-                    <KeyValue label="Currently">
-                      <span className={cn('font-semibold', PROCESSING_TONE[s.processingState])}>
-                        {s.processingState === 'PROCESSING'
-                          ? 'Working'
-                          : s.processingState === 'IDLE'
-                            ? 'Waiting'
-                            : 'Stopped'}
-                      </span>
-                    </KeyValue>
-                    <KeyValue label="Response time">
-                      <span className="font-mono">{s.latencyMs ?? '—'} ms</span>
-                    </KeyValue>
-                    {s.queueDepth != null && (
-                      <KeyValue label="Waiting in queue">
-                        <span className="font-mono tabular-nums">{s.queueDepth}</span>
-                      </KeyValue>
-                    )}
-                    <KeyValue label="Version">
-                      <span className="font-mono">{s.version}</span>
-                    </KeyValue>
-                  </dl>
-                  <div className="mt-3 border-t border-line/60 pt-2.5">
-                    <p className="kv-label">Last problem</p>
-                    <p className={cn('mt-1 text-2xs', s.latestError ? 'text-degraded' : 'text-ink-faint')}>
-                      {s.latestError ?? 'No problems reported.'}
-                    </p>
-                  </div>
-                </div>
-              </Panel>
-            ))}
-          </div>
-
-          <Panel title="Technical settings" icon={Plug} className="mt-4">
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 p-4 sm:grid-cols-4">
-              <KeyValue label="Where the data comes from">
-                {config.useMocks ? 'Demo mode (made-up sample data)' : 'Live police backend'}
-              </KeyValue>
-              <KeyValue label="Backend address">
-                <span className="font-mono">{config.apiBaseUrl}</span>
-              </KeyValue>
-              <KeyValue label="Live updates method">
-                <span className="font-mono">{config.useMocks ? 'simulator' : config.realtimeTransport}</span>
-              </KeyValue>
-              <KeyValue label="Information as of">{formatDateTime(health.data?.generatedAt)}</KeyValue>
-            </dl>
-            <p className="border-t border-line px-4 py-2.5 text-2xs text-ink-faint">
-              No credentials, passwords or private keys are held by this frontend. Stream URLs and evidence
-              links are issued as short-lived signed tickets by the backend.
-            </p>
-          </Panel>
-        </AsyncBoundary>
+      {/* Ingest band */}
+      <div className="mt-5 grid grid-cols-2 divide-line rounded-xl border border-line bg-surface-1 shadow-xs sm:grid-cols-3 sm:divide-x lg:grid-cols-6">
+        <Stat label="Cameras online" value={kpis ? kpis.camerasOnline : '—'} sub={kpis ? `${kpis.camerasDegraded} degraded · ${kpis.camerasOffline} offline` : undefined} />
+        <Stat label="Ingest rate" value={health ? `${health.ingestFps.toFixed(1)}` : '—'} sub="frames per second" />
+        <Stat label="Events" value={health ? health.eventsPerMinute.toFixed(0) : '—'} sub="per minute" />
+        <Stat label="Plate reads" value={health ? health.anprPerMinute.toFixed(0) : '—'} sub="per minute" />
+        <Stat
+          label="Services healthy"
+          value={loading && !health ? '—' : `${counts.healthy}/${counts.total}`}
+          sub={counts.degraded > 0 ? `${counts.degraded} degraded` : counts.offline > 0 ? `${counts.offline} offline` : 'all nominal'}
+          tone={counts.offline > 0 ? 'danger' : 'default'}
+        />
+        <Stat label="Snapshot" value={health ? formatDateTime(health.generatedAt).split(', ')[1] ?? '—' : '—'} sub={health ? formatDateTime(health.generatedAt).split(', ')[0] : undefined} />
       </div>
+
+      <Card className="mt-6">
+        <CardHeader
+          title="Services"
+          subtitle="Click a row for the full service record"
+          actions={
+            health && (
+              <Badge tone={counts.offline > 0 ? 'danger' : counts.degraded > 0 ? 'warn' : 'success'} dot pulse>
+                {counts.offline > 0 ? 'Attention needed' : counts.degraded > 0 ? 'Partial degradation' : 'All systems nominal'}
+              </Badge>
+            )
+          }
+        />
+        <CardBody>
+          <Boundary
+            loading={loading && !health}
+            error={error}
+            onRetry={refresh}
+            isEmpty={(health?.services.length ?? 0) === 0}
+            emptyTitle="No service data"
+            emptyDetail="The platform has not reported any services yet."
+            loadingLabel="Reading service health"
+          >
+            <div className="overflow-x-auto">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>State</th>
+                    <th>Processing</th>
+                    <th>Uptime</th>
+                    <th>Latency</th>
+                    <th>Queue</th>
+                    <th>Heartbeat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(health?.services ?? []).map((s) => (
+                    <ServiceRow key={s.id} s={s} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Boundary>
+        </CardBody>
+      </Card>
     </div>
   );
 }

@@ -4,10 +4,10 @@ import App from '@/app/App';
 import './index.css';
 
 /**
- * TRINETRA AI · SENTINEL runs the light (white) theme permanently.
- * Enforce it before the first paint and clear any legacy theme state so a
- * refresh or reopen can never re-activate another scheme, regardless of the
- * OS or browser color scheme (this also guards fullscreen views).
+ * TRINETRA AI · SENTINEL runs its Government Operations light theme
+ * permanently. Enforce it before the first paint and clear any legacy
+ * theme state so a refresh or reopen can never re-activate another
+ * scheme, regardless of the OS or browser color scheme.
  */
 const rootElement = document.documentElement;
 rootElement.classList.remove('dark');

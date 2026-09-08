@@ -1,250 +1,235 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownUp, Download, ScrollText, Search } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Panel, AsyncBoundary } from '@/components/common/Panel';
-import { StatusChip } from '@/components/common/Chips';
+import { Download, LayoutList, LayoutGrid } from 'lucide-react';
 import { useCameras } from '@/hooks/useCameras';
+import type { CameraStatus } from '@/types';
+import { CameraCard } from '@/components/CameraCard';
+import { CameraStatusBadge } from '@/ui/Badge';
+import { Button } from '@/ui/Button';
+import { Boundary } from '@/ui/Feedback';
 import { useDebounced } from '@/hooks/useUi';
-import type { Camera, CameraFilters } from '@/types';
-import { cn, formatDateTime, relativeTime } from '@/lib/utils';
+import { cn, relativeTime } from '@/lib/utils';
+import { formatDateTime } from '@/lib/uiHelpers';
 
 type SortKey = 'name' | 'location' | 'department' | 'status' | 'eventCount24h' | 'lastEventAt';
-type SortState = { key: SortKey; dir: 'asc' | 'desc' };
 
-/** Sortable column header (module scope so it is never re-created per render). */
-function SortHeader({
-  label,
-  sortKey,
-  sort,
-  onSort,
-}: {
-  label: string;
-  sortKey: SortKey;
-  sort: SortState;
-  onSort: (k: SortKey) => void;
-}) {
-  const activeCol = sort.key === sortKey;
-  return (
-    <th scope="col" aria-sort={activeCol ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn('inline-flex items-center gap-1 hover:text-ink', activeCol && 'text-brand')}
-      >
-        {label}
-        <ArrowDownUp size={9} aria-hidden />
-      </button>
-    </th>
-  );
-}
+const STATUS_ORDER: Record<CameraStatus, number> = { ONLINE: 0, DEGRADED: 1, OFFLINE: 2 };
 
 /**
- * CAMERA REGISTRY — Model 1 surfaced directly in the product:
- * master records, GIS coordinates, codecs, resolution and heartbeat.
+ * Camera Registry — the authoritative installation record. A dense,
+ * sortable table (with CSV export) plus a card view for browsing.
  */
 export default function Registry() {
   const navigate = useNavigate();
+  const { cameras, filtered, facets, loading, error, refresh } = useCameras();
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<CameraFilters['status']>('ALL');
+  const debounced = useDebounced(query, 200);
+  const [status, setStatus] = useState<'ALL' | CameraStatus>('ALL');
   const [department, setDepartment] = useState('ALL');
-  const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' });
-
-  const debounced = useDebounced(query, 250);
-  const { filtered, facets, stats, loading, error, refresh } = useCameras({
-    query: debounced,
-    status,
-    department,
-  });
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [asc, setAsc] = useState(true);
+  const [view, setView] = useState<'table' | 'cards'>('table');
 
   const rows = useMemo(() => {
-    const dir = sort.dir === 'asc' ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      const av = a[sort.key as keyof Camera];
-      const bv = b[sort.key as keyof Camera];
-      if (av == null) return 1;
-      if (bv == null) return -1;
-      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
-      return String(av).localeCompare(String(bv)) * dir;
+    const base = debounced || status !== 'ALL' || department !== 'ALL' ? filtered : cameras;
+    const sorted = [...base].sort((a, b) => {
+      let r = 0;
+      switch (sortKey) {
+        case 'name':
+          r = a.name.localeCompare(b.name);
+          break;
+        case 'location':
+          r = a.location.localeCompare(b.location);
+          break;
+        case 'department':
+          r = (a.department ?? '').localeCompare(b.department ?? '');
+          break;
+        case 'status':
+          r = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+          break;
+        case 'eventCount24h':
+          r = (a.eventCount24h ?? 0) - (b.eventCount24h ?? 0);
+          break;
+        case 'lastEventAt':
+          r = Date.parse(a.lastEventAt ?? '0') - Date.parse(b.lastEventAt ?? '0');
+          break;
+      }
+      return asc ? r : -r;
     });
-  }, [filtered, sort]);
-
-  const toggleSort = (key: SortKey) =>
-    setSort((s) => ({ key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' }));
+    return sorted;
+  }, [cameras, filtered, debounced, status, department, sortKey, asc]);
 
   const exportCsv = () => {
     const header = [
-      'camera_id',
-      'name',
-      'department',
-      'location',
-      'latitude',
-      'longitude',
-      'status',
-      'codec',
-      'resolution',
-      'last_seen',
+      'id', 'name', 'location', 'department', 'zone', 'status', 'codec',
+      'width', 'height', 'fps', 'streamType', 'installedAt', 'lastEventAt', 'events24h',
     ];
     const lines = rows.map((c) =>
-      [
-        c.id,
-        c.name,
-        c.department ?? '',
-        `"${c.location}"`,
-        c.latitude,
-        c.longitude,
-        c.status,
-        c.codec ?? '',
-        `${c.width}x${c.height}`,
-        c.lastSeen ?? '',
-      ].join(','),
+      [c.id, c.name, c.location, c.department ?? '', c.zone ?? '', c.status, c.codec ?? '',
+       c.width ?? '', c.height ?? '', c.fps ?? '', c.streamType ?? '', c.installedAt ?? '',
+       c.lastEventAt ?? '', c.eventCount24h ?? 0]
+        .map((v) => `"${String(v).replaceAll('"', '""')}"`)
+        .join(','),
     );
-    const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv' });
+    const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'trinetra-camera-registry.csv';
+    a.download = `sentinel-camera-registry-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <div className="animate-page-in flex h-full flex-col">
-      <PageHeader
-        title="Camera List"
-        icon={ScrollText}
-        tone="blue"
-        subtitle={`Full details for all ${stats.total} cameras. Sort any column, or export the list.`}
-        actions={
-          <button type="button" className="btn-ghost" onClick={exportCsv}>
-            <Download size={12} aria-hidden /> Export CSV
-          </button>
+  const sortBtn = (key: SortKey, label: string) => (
+    <button
+      type="button"
+      onClick={() => {
+        if (sortKey === key) setAsc(!asc);
+        else {
+          setSortKey(key);
+          setAsc(true);
         }
-      />
+      }}
+      className={cn(
+        'inline-flex items-center gap-1 uppercase transition-colors',
+        sortKey === key ? 'text-ink' : 'hover:text-ink',
+      )}
+      aria-label={`Sort by ${label}`}
+    >
+      {label}
+      <span className={cn('text-[9px]', sortKey === key ? 'opacity-100' : 'opacity-0')} aria-hidden>
+        {asc ? '▲' : '▼'}
+      </span>
+    </button>
+  );
 
-      <div className="px-5 pt-5 sm:px-6 xl:px-8">
-      <div className="panel flex flex-wrap items-end gap-x-5 gap-y-4 p-5">
-        <div className="min-w-[240px] flex-1">
-          <label className="label" htmlFor="reg-search">
-            Search cameras
-          </label>
-          <div className="relative">
-            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
-            <input
-              id="reg-search"
-              className="input pl-10"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by camera number, place or department"
-            />
+  const filterActive = debounced || status !== 'ALL' || department !== 'ALL';
+
+  return (
+    <div className="p-4 sm:p-6 lg:p-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold text-ink">Camera Registry</h2>
+          <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
+            The authoritative record of every installation — identity, placement, capture format
+            and service state. Export any view as CSV for audit or planning.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-line-strong/70 p-0.5" role="group" aria-label="View mode">
+            {([['table', LayoutList, 'Table view'], ['cards', LayoutGrid, 'Card view']] as const).map(([v, Icon, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                aria-pressed={view === v}
+                aria-label={label}
+                className={cn(
+                  'grid h-7.5 w-8 place-items-center rounded-md transition-all duration-150 active:scale-95',
+                  view === v ? 'bg-accent-weak text-accent-strong' : 'text-ink-faint hover:text-ink',
+                )}
+              >
+                <Icon size={14} aria-hidden />
+              </button>
+            ))}
           </div>
+          <Button variant="secondary" onClick={exportCsv} disabled={rows.length === 0}>
+            <Download size={13} aria-hidden /> Export CSV
+          </Button>
         </div>
-        <div className="w-[150px]">
-          <label className="label" htmlFor="reg-status">
-            Status
-          </label>
-          <select
-            id="reg-status"
-            className="select"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as CameraFilters['status'])}
-          >
-            {['ALL', 'ONLINE', 'DEGRADED', 'OFFLINE'].map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="w-[160px]">
-          <label className="label" htmlFor="reg-dept">
-            Department
-          </label>
-          <select id="reg-dept" className="select" value={department} onChange={(e) => setDepartment(e.target.value)}>
-            <option value="ALL">ALL</option>
-            {facets.departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ml-auto flex items-center gap-2.5 self-center">
-          <span className="chip border-online/30 bg-online/10 text-online">{stats.online} working</span>
-          <span className="chip border-degraded/30 bg-degraded/10 text-degraded">{stats.degraded} poor quality</span>
-          <span className="chip border-offline/30 bg-offline/10 text-offline">{stats.offline} not working</span>
-        </div>
-      </div>
+      </header>
+
+      {/* Filters */}
+      <div className="mt-5 flex flex-wrap items-center gap-2.5 rounded-xl border border-line bg-surface-1 p-3.5 shadow-xs">
+        <label htmlFor="reg-search" className="sr-only">Search the registry</label>
+        <input
+          id="reg-search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name, location, department…"
+          className="field h-9 w-64"
+          type="search"
+        />
+        <label className="sr-only" htmlFor="reg-status">Filter by status</label>
+        <select id="reg-status" className="select h-9 w-32" value={status} onChange={(e) => setStatus(e.target.value as 'ALL' | CameraStatus)}>
+          <option value="ALL">All statuses</option>
+          <option value="ONLINE">Online</option>
+          <option value="DEGRADED">Degraded</option>
+          <option value="OFFLINE">Offline</option>
+        </select>
+        <label className="sr-only" htmlFor="reg-dept">Filter by department</label>
+        <select id="reg-dept" className="select h-9 w-40" value={department} onChange={(e) => setDepartment(e.target.value)}>
+          <option value="ALL">All departments</option>
+          {facets.departments.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+        {filterActive && (
+          <Button variant="ghost" size="xs" onClick={() => { setQuery(''); setStatus('ALL'); setDepartment('ALL'); }}>
+            Reset
+          </Button>
+        )}
+        <span className="ml-auto text-xs text-ink-faint" aria-live="polite">
+          {loading ? 'Loading…' : `${rows.length} installation${rows.length === 1 ? '' : 's'}`}
+        </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
-        <Panel>
-          <AsyncBoundary
-            loading={loading}
-            error={error}
-            onRetry={refresh}
-            isEmpty={!rows.length}
-            emptyTitle="No registry records"
-            loadingLabel="Loading registry"
-          >
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <caption className="sr-only">Camera registry master records</caption>
-                <thead>
-                  <tr>
-                    <SortHeader label="Camera ID" sortKey="name" sort={sort} onSort={toggleSort} />
-                    <th scope="col">Name</th>
-                    <SortHeader label="Department" sortKey="department" sort={sort} onSort={toggleSort} />
-                    <SortHeader label="Place" sortKey="location" sort={sort} onSort={toggleSort} />
-                    <th scope="col">Latitude</th>
-                    <th scope="col">Longitude</th>
-                    <SortHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
-                    <th scope="col">Video format</th>
-                    <th scope="col">Picture size</th>
-                    <SortHeader label="Vehicles today" sortKey="eventCount24h" sort={sort} onSort={toggleSort} />
-                    <SortHeader label="Last vehicle" sortKey="lastEventAt" sort={sort} onSort={toggleSort} />
-                    <th scope="col" className="text-right">
-                      Action
-                    </th>
+      <Boundary
+        loading={loading}
+        error={error}
+        onRetry={refresh}
+        isEmpty={rows.length === 0}
+        emptyTitle="No cameras match"
+        emptyDetail="Clear a filter to see the full registry."
+        className="mt-5"
+      >
+        {view === 'table' ? (
+          <div className="overflow-x-auto rounded-xl border border-line bg-surface-1 shadow-xs">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>{sortBtn('name', 'Camera')}</th>
+                  <th>{sortBtn('location', 'Location')}</th>
+                  <th>{sortBtn('department', 'Department')}</th>
+                  <th>{sortBtn('status', 'Status')}</th>
+                  <th>Format</th>
+                  <th>{sortBtn('eventCount24h', 'Veh · 24h')}</th>
+                  <th>{sortBtn('lastEventAt', 'Last event')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id} className="row-click" onClick={() => navigate(`/cameras/${c.id}`)}>
+                    <td>
+                      <span className="mono text-xs font-semibold text-ink">{c.name}</span>
+                      <span className="mono ml-2 text-[10.5px] text-ink-faint">{c.id.toUpperCase()}</span>
+                    </td>
+                    <td className="text-ink-muted">{c.location}</td>
+                    <td className="text-ink-muted">{c.department ?? '—'}</td>
+                    <td>
+                      <CameraStatusBadge status={c.status} />
+                    </td>
+                    <td className="mono text-ink-muted">
+                      {c.codec ?? '—'}
+                      {c.width ? ` · ${c.width}×${c.height}` : ''}
+                    </td>
+                    <td className="mono tabular-nums text-ink">{c.eventCount24h ?? 0}</td>
+                    <td className="text-ink-muted" title={c.lastEventAt ? formatDateTime(c.lastEventAt) : undefined}>
+                      {c.lastEventAt ? relativeTime(c.lastEventAt) : '—'}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((c) => (
-                    <tr key={c.id}>
-                      <td className="font-mono text-ink-faint">{c.id}</td>
-                      <td className="font-mono font-semibold text-ink">{c.name}</td>
-                      <td className="text-ink-muted">{c.department}</td>
-                      <td className="text-ink-muted">{c.location}</td>
-                      <td className="font-mono tabular-nums text-ink-muted">{c.latitude.toFixed(5)}</td>
-                      <td className="font-mono tabular-nums text-ink-muted">{c.longitude.toFixed(5)}</td>
-                      <td>
-                        <StatusChip status={c.status} />
-                      </td>
-                      <td className="font-mono text-ink-muted">{c.codec}</td>
-                      <td className="font-mono text-ink-muted">
-                        {c.width}×{c.height}
-                      </td>
-                      <td className="font-mono tabular-nums text-ink-muted">{c.eventCount24h ?? 0}</td>
-                      <td className="text-ink-muted" title={formatDateTime(c.lastSeen)}>
-                        {relativeTime(c.lastSeen)}
-                      </td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="btn-ghost btn-xs"
-                          onClick={() => navigate(`/cameras/${c.id}`)}
-                        >
-                          Open
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </AsyncBoundary>
-        </Panel>
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {rows.map((c) => (
+              <CameraCard key={c.id} camera={c} />
+            ))}
+          </div>
+        )}
+      </Boundary>
     </div>
   );
 }

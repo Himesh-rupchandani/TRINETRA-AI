@@ -1,263 +1,132 @@
-import { useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Car, MapPin, Route, ShieldAlert, ShieldCheck } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
-import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
-import { SeverityChip } from '@/components/common/Chips';
-import { PlateLink } from '@/components/common/Links';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, ShieldAlert } from 'lucide-react';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
-import { useAsync } from '@/hooks/useAsync';
-import { vehicleService } from '@/services/vehicleService';
-import { formatDateTime, formatTime, formatVideoOffset, prettyPlate } from '@/lib/utils';
+import { buttonClass } from '@/ui/Button';
+import { Button } from '@/ui/Button';
+import { Card, CardBody, CardHeader } from '@/ui/Card';
+import { KeyVal } from '@/ui/Feedback';
+import { normalisePlate } from '@/lib/utils';
 
 /**
- * VEHICLE SEARCH — the hero screen.
- * Registration number in, watchlist verdict + sightings out, one click to
- * the full investigation workspace.
+ * Find a Vehicle — the front door of every investigation. Recent
+ * cases surface below the search so common plates are one click away.
  */
 export default function Vehicles() {
-  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const { result, loading, error, searched, trace } = useVehicleSearch();
-  const watchlist = useAsync(() => vehicleService.watchlist(), []);
-  const initial = params.get('plate') ?? '';
+  const [q, setQ] = useState('');
+  const { result, loading, error, searched, trace, reset } = useVehicleSearch();
 
-  useEffect(() => {
-    if (initial) void trace(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial]);
-
-  const onTrace = (plate: string) => {
-    setParams({ plate });
-    void trace(plate);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const plate = normalisePlate(q);
+    if (!plate) return;
+    const found = await trace(plate);
+    if (found) navigate(`/vehicles/${plate}`, { replace: false });
   };
 
-  const wl = result?.profile?.watchlist;
-  const sightings = useMemo(() => result?.events ?? [], [result]);
-
   return (
-    <div className="animate-page-in flex h-full flex-col">
-      <PageHeader
-        title="Find a Vehicle"
-        icon={Car}
-        subtitle="Type a number plate to see everywhere it has been seen."
-      />
+    <div className="mx-auto max-w-3xl p-4 sm:p-6 lg:p-8">
+      <header className="text-center">
+        <h2 className="text-xl font-bold text-ink">Find a Vehicle</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
+          Enter a registration number to pull its full record: owner details, every camera
+          sighting and the reconstructed route across the city.
+        </p>
+      </header>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-5xl p-5 sm:p-6 xl:p-8">
-          <section className="panel p-6 sm:p-8">
-            <h2 className="text-base font-semibold text-ink">Which vehicle are you looking for?</h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
-              Enter the number plate. We will check all cameras and show you every place it
-              has been seen, in order, on a map.
-            </p>
-            <div className="mt-6">
-              <TraceSearchBar initialValue={initial} onTrace={onTrace} loading={loading} size="lg" />
-            </div>
-          </section>
-
-          {loading && (
-            <div className="panel mt-5">
-              <LoadingState label={`Checking all 30 cameras for ${initial || 'this vehicle'}…`} rows={5} />
-            </div>
-          )}
-
-          {error && !loading && (
-            <div className="panel mt-5">
-              <ErrorState message={error} />
-            </div>
-          )}
-
-          {!loading && !error && searched && result && sightings.length === 0 && (
-            <div className="panel mt-5">
-              <EmptyState
-                title={`No sightings for ${result.plate}`}
-                detail="This registration number has not been recorded by any camera in the retained window. Check the format or widen the time range in the Event Explorer."
-              />
-            </div>
-          )}
-
-          {!loading && !error && result && sightings.length > 0 && (
-            <>
-              {/* Verdict card */}
-              <section
-                className={`panel mt-5 border-l-2 ${wl?.active ? 'border-l-critical' : 'border-l-online'}`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5">
-                  <div>
-                    <p className="plate text-2xl text-ink">{prettyPlate(result.plate)}</p>
-                    <p className="mt-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide">
-                      {wl?.active ? (
-                        <span className="flex items-center gap-1.5 text-critical">
-                          <ShieldAlert size={14} aria-hidden /> Watchlist Match
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1.5 text-online">
-                          <ShieldCheck size={15} aria-hidden /> Not on the wanted list
-                        </span>
-                      )}
-                    </p>
-                  </div>
-
-                  <dl className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-4">
-                    <div>
-                      <dt className="kv-label">Why it is wanted</dt>
-                      <dd className="mt-1 text-sm font-semibold text-ink">{wl?.category ?? '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="kv-label">Priority</dt>
-                      <dd className="mt-1">
-                        {wl ? <SeverityChip severity={wl.severity} /> : <span className="text-sm font-semibold text-ink">—</span>}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="kv-label">Times seen</dt>
-                      <dd className="mt-1 font-mono text-xl font-bold tabular-nums text-ink">{sightings.length}</dd>
-                    </div>
-                    <div>
-                      <dt className="kv-label">Seen by</dt>
-                      <dd className="mt-1 font-mono text-xl font-bold tabular-nums text-ink">
-                        {result.route?.camerasTouched ?? 0}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-
-                {wl?.active && (
-                  <p className="border-t border-line px-4 py-2.5 text-2xs text-ink-muted sm:px-5">
-                    <span className="font-semibold text-ink">{wl.caseRef}</span> · {wl.reason} · Added by{' '}
-                    {wl.addedBy} on {formatDateTime(wl.addedAt)}
-                  </p>
-                )}
-
-                <div className="flex flex-wrap items-center gap-2.5 border-t border-line px-4 py-3 sm:px-5">
-                  <button
-                    type="button"
-                    className="btn-solid"
-                    onClick={() => navigate(`/vehicles/${result.plate}`)}
-                  >
-                    See where it went <ArrowRight size={14} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    onClick={() => navigate(`/gis?plate=${result.plate}`)}
-                  >
-                    <Route size={13} aria-hidden /> Show on map
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    onClick={() => navigate(`/events?plate=${result.plate}`)}
-                  >
-                    Every sighting
-                  </button>
-                  <span className="ml-auto text-2xs text-ink-faint">
-                    First seen {formatDateTime(result.profile?.firstSeen)} · last seen{' '}
-                    {formatDateTime(result.profile?.lastSeen)}
-                  </span>
-                </div>
-              </section>
-
-              {/* Sightings list */}
-              <Panel
-                title={`Sightings — ${sightings.length} records`}
-                icon={MapPin}
-                className="mt-4"
-                actions={
-                  <span className="chip border-line bg-surface-3 text-ink-muted">
-                    {result.route?.totalDistanceKm ?? 0} km tracked
-                  </span>
-                }
-              >
-                <ol className="divide-y divide-line/60">
-                  {sightings.map((e, i) => (
-                    <li key={e.id} className="flex items-center gap-3.5 px-4 py-2.5 hover:bg-surface-2">
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line bg-surface-3 font-mono text-2xs font-bold text-ink-muted">
-                        {i + 1}
-                      </span>
-                      <time className="w-[74px] shrink-0 font-mono text-xs tabular-nums text-ink" dateTime={e.timestamp}>
-                        {formatTime(e.timestamp)}
-                        {e.videoOffsetSec != null && (
-                          <span className="block text-2xs font-normal text-ink-faint">
-                            {formatVideoOffset(e.videoOffsetSec)}
-                          </span>
-                        )}
-                      </time>
-                      <span className="w-[62px] shrink-0 font-mono text-xs text-ink-muted">
-                        {e.cameraName ?? e.cameraId.toUpperCase()}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{e.location}</span>
-                      <span className="hidden font-mono text-2xs tabular-nums text-ink-faint sm:block">
-                        {e.plateConfidence.toFixed(1)}%
-                      </span>
-                      <button
-                        type="button"
-                        className="btn-ghost btn-xs shrink-0"
-                        onClick={() => navigate(`/cameras/${e.cameraId}`)}
-                      >
-                        Open camera
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              </Panel>
-            </>
-          )}
-
-          {/* Watchlist shortcut */}
-          {!result && !loading && (
-            <Panel title="Vehicles being watched" icon={ShieldAlert} className="mt-4">
-              {watchlist.loading ? (
-                <LoadingState label="Loading watchlist" />
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Plate</th>
-                        <th scope="col">Why it is wanted</th>
-                        <th scope="col">Priority</th>
-                        <th scope="col">Case number</th>
-                        <th scope="col">Added on</th>
-                        <th scope="col" className="text-right">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(watchlist.data ?? [])
-                        .filter((w) => w.active)
-                        .map((w) => (
-                          <tr key={w.id}>
-                            <td>
-                              <PlateLink plate={w.plate} />
-                            </td>
-                            <td className="text-ink-muted">{w.category}</td>
-                            <td>
-                              <SeverityChip severity={w.severity} />
-                            </td>
-                            <td className="font-mono text-2xs text-ink-muted">{w.caseRef}</td>
-                            <td className="text-2xs text-ink-faint">{formatDateTime(w.addedAt)}</td>
-                            <td className="text-right">
-                              <button
-                                type="button"
-                                className="btn-tint btn-xs"
-                                onClick={() => onTrace(w.plate)}
-                              >
-                                Find it
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Panel>
-          )}
+      <form onSubmit={submit} className="mx-auto mt-6 flex max-w-xl gap-2.5" role="search">
+        <label htmlFor="plate-search" className="sr-only">
+          Registration number
+        </label>
+        <div className="relative min-w-0 flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+          <input
+            id="plate-search"
+            value={q}
+            onChange={(e) => setQ(e.target.value.toUpperCase())}
+            placeholder="GJ01AB1234"
+            className="field h-11 pl-10 font-mono text-base uppercase tracking-[0.12em]"
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+          />
         </div>
+        <Button type="submit" variant="primary" size="md" loading={loading} disabled={!normalisePlate(q)}>
+          Trace
+        </Button>
+      </form>
+
+      {error && (
+        <p role="alert" className="mx-auto mt-4 max-w-xl rounded-lg border border-critical/25 bg-critical/[0.05] px-4 py-3 text-[13px] text-ink">
+          {error}
+        </p>
+      )}
+
+      {searched && result && (
+        <Card className="mt-8">
+          <CardHeader
+            title={<span className="plate text-base">{result.plate}</span>}
+            subtitle="Best match from the vehicle records"
+            actions={
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => {
+                  reset();
+                  setQ('');
+                }}
+              >
+                Clear
+              </Button>
+            }
+          />
+          <CardBody className="p-5">
+            {result.profile?.watchlist && (
+              <p className="mb-4 flex items-center gap-2 rounded-lg border border-critical/25 bg-critical/[0.05] px-3.5 py-2.5 text-[13px] font-medium text-critical">
+                <ShieldAlert size={14} aria-hidden /> This vehicle is on the wanted list
+                {result.profile.watchlist.caseRef && ` — ${result.profile.watchlist.caseRef}`}
+              </p>
+            )}
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
+              <KeyVal label="Make / model">
+                {[result.profile?.make, result.profile?.model].filter(Boolean).join(' ') || '—'}
+              </KeyVal>
+              <KeyVal label="Colour">{result.profile?.colour ?? '—'}</KeyVal>
+              <KeyVal label="Sightings on record">{result.profile?.totalSightings ?? result.events.length}</KeyVal>
+              <KeyVal label="Owner">{result.profile?.owner ?? '—'}</KeyVal>
+            </dl>
+            <div className="mt-5 border-t border-line pt-4">
+              <Link to={`/vehicles/${result.plate}`} className={buttonClass('primary', 'sm')}>
+                Open full investigation
+              </Link>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {searched && !result && !loading && !error && (
+        <div className="mt-8 rounded-xl border border-line bg-surface-1 px-6 py-10 text-center shadow-xs">
+          <p className="text-sm font-semibold text-ink">No record found</p>
+          <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-ink-faint">
+            {q} has never been recognised by a camera in this network. Check the number and try
+            again — state code first, then district, then the letters and digits.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-10 border-t border-line pt-5 text-center">
+        <p className="text-xs text-ink-faint">
+          Tip — any plate shown anywhere in SENTINEL is clickable. Try one from the{' '}
+          <Link to="/events" className="font-semibold text-accent hover:underline">
+            Vehicle Log
+          </Link>{' '}
+          or the{' '}
+          <Link to="/watchlist" className="font-semibold text-accent hover:underline">
+            Wanted List
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );

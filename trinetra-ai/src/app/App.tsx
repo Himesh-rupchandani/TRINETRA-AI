@@ -7,7 +7,7 @@ export default function App() {
     <AppProviders>
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-[2000] focus:rounded focus:bg-brand focus:px-3 focus:py-1.5 focus:text-xs focus:font-semibold focus:text-surface-1"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-[2000] focus:rounded-md focus:bg-accent focus:px-3 focus:py-1.5 focus:text-xs focus:font-semibold focus:text-white"
       >
         Skip to main content
       </a>
