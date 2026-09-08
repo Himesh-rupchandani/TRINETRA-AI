@@ -81,12 +81,20 @@ export function Header() {
   /**
    * Dashboard → home rides a short cross-fade/slide transition (skipped for
    * reduced-motion users and browsers without the View Transitions API).
+   * Already home just glides back to the top; coming from elsewhere always
+   * lands at the top of the home page.
    */
   const goHome = () => {
-    if (location.pathname === '/') return;
-    const update = () => navigate('/');
     const doc = document as Document & { startViewTransition?: (update: () => void) => void };
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (location.pathname === '/') {
+      window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+      return;
+    }
+    const update = () => {
+      navigate('/');
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    };
     if (!reduced && typeof doc.startViewTransition === 'function') doc.startViewTransition(update);
     else update();
   };
