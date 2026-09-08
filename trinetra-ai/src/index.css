@@ -205,3 +205,181 @@
   background: transparent;
   border: 0;
 }
+
+/* ============================================================
+   TRINETRA AI — Motion system
+   Icon click feedback (pop + ripple), entrances, modal & nav FX.
+   ============================================================ */
+
+/* Every lucide icon eases its transforms (powers the hover lift + click pop). */
+.lucide {
+  transition: transform 80ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 80ms ease;
+}
+
+/* Playful hover lift + glow on icons inside interactive controls. */
+.btn:hover .lucide,
+button:hover .lucide,
+a:hover .lucide,
+[role='button']:hover .lucide {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+/* Primary / tint buttons get a coloured glow halo on hover. */
+.btn-primary:hover {
+  box-shadow: 0 8px 22px -6px rgb(var(--brand) / 0.6);
+}
+.btn-tint:hover {
+  box-shadow: 0 6px 18px -6px rgb(var(--brand) / 0.4);
+}
+
+/* One-shot "pop" added to an icon the moment it is clicked (useIconFx hook). */
+.icon-pop-on {
+  animation: trin-icon-pop 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes trin-icon-pop {
+  0%   { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 currentColor); }
+  20%  { transform: scale(0.68) rotate(-9deg); filter: drop-shadow(0 0 11px currentColor); }
+  52%  { transform: scale(1.3) rotate(8deg); filter: drop-shadow(0 0 13px currentColor); }
+  74%  { transform: scale(0.9) rotate(-3deg); filter: drop-shadow(0 0 6px currentColor); }
+  100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 currentColor); }
+}
+
+/* Material-style ripple spawned at the exact click point on compact controls. */
+.icon-ripple {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  opacity: 0.4;
+  pointer-events: none;
+  transform: scale(0);
+  animation: trin-ripple 300ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes trin-ripple {
+  0%   { transform: scale(0); opacity: 0.5; box-shadow: 0 0 0 0 currentColor; }
+  100% { transform: scale(17); opacity: 0; box-shadow: 0 0 0 16px transparent; }
+}
+
+/* Entrance animations */
+.enter-up {
+  animation: trin-enter-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes trin-enter-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: trin-fade-in 90ms ease-out both;
+}
+@keyframes trin-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Hero icon gently floats to draw the eye. */
+.float-soft {
+  animation: trin-float 1.8s ease-in-out infinite;
+}
+@keyframes trin-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* Modal / popover scale-in */
+.modal-pop {
+  animation: trin-modal-pop 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes trin-modal-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Staggered KPI strip entrance + one-time shine sweep */
+.kpi-stagger > * {
+  position: relative;
+  overflow: hidden;
+  animation: trin-enter-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.kpi-stagger > *::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.6) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: trin-shimmer 450ms ease-out 120ms 1 both;
+  pointer-events: none;
+}
+@keyframes trin-shimmer {
+  to { transform: translateX(130%); }
+}
+.kpi-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.kpi-stagger > *:nth-child(2) { animation-delay: 70ms; }
+.kpi-stagger > *:nth-child(3) { animation-delay: 140ms; }
+.kpi-stagger > *:nth-child(4) { animation-delay: 210ms; }
+.kpi-stagger > *:nth-child(5) { animation-delay: 280ms; }
+.kpi-stagger > *:nth-child(6) { animation-delay: 350ms; }
+
+/* Alert card: entrance + (for brand-new critical) attention pulse */
+.alert-enter-pulse {
+  animation:
+    trin-enter-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    trin-pulse-ring 1.2s 200ms infinite;
+}
+@keyframes trin-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgb(225 29 72 / 0.55); }
+  70%  { box-shadow: 0 0 0 13px rgb(225 29 72 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(225 29 72 / 0); }
+}
+
+/* Sidebar active item: sliding accent bar */
+.nav-accent {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 58%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: rgb(var(--brand));
+  transform: translateY(-50%) scaleY(0);
+  transform-origin: center;
+  transition: transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.nav-accent.is-active {
+  transform: translateY(-50%) scaleY(1);
+}
+
+/* Active nav icon glows + breathes so the current page is unmistakable. */
+a[aria-current='page'] .lucide {
+  filter: drop-shadow(0 0 5px rgb(var(--brand) / 0.9));
+  animation: trin-nav-icon 1.6s ease-in-out infinite;
+}
+@keyframes trin-nav-icon {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.16); }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .lucide { transition: none; filter: none; }
+  .icon-pop-on,
+  .icon-ripple,
+  .enter-up,
+  .fade-in,
+  .modal-pop,
+  .alert-enter-pulse,
+  .kpi-stagger > *,
+  .kpi-stagger > *::after,
+  a[aria-current='page'] .lucide,
+  .float-soft {
+    animation: none !important;
+  }
+  .nav-accent { transition: none; transform: translateY(-50%) scaleY(0); }
+  .nav-accent.is-active { transform: translateY(-50%) scaleY(1); }
+}

@@ -59,7 +59,7 @@ export default function Dashboard() {
       <section className="panel flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-stretch">
         <div className="flex flex-col justify-center lg:w-[280px] lg:shrink-0">
           <div className="flex items-center gap-3">
-            <IconTile tone="blue" size="lg">
+            <IconTile tone="blue" size="lg" className="float-soft">
               <Car size={20} aria-hidden />
             </IconTile>
             <h2 className="text-lg font-bold text-ink">Find a Vehicle</h2>
@@ -105,7 +105,7 @@ export default function Dashboard() {
 
       {/* KPI strip */}
       <section
-        className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4"
+        className="kpi-stagger grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4"
         aria-label="Key performance indicators"
       >
         <KpiCard

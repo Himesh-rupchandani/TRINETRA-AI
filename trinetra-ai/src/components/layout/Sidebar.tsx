@@ -136,6 +136,7 @@ export function Sidebar({
                       >
                         {({ isActive }) => (
                           <>
+                            <span className={cn('nav-accent', isActive && 'is-active')} aria-hidden />
                             <IconTile tone={item.tone} size="md" active={isActive}>
                               <Icon size={17} />
                             </IconTile>

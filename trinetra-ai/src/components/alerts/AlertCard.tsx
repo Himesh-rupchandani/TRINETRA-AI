@@ -64,7 +64,9 @@ export function AlertCard({
     <article
       className={cn(
         'panel relative overflow-hidden transition-shadow hover:shadow-cardHover',
-        alert.status === 'NEW' && alert.severity === 'CRITICAL' && 'animate-pulse-ring',
+        alert.status === 'NEW' && alert.severity === 'CRITICAL'
+          ? 'alert-enter-pulse'
+          : 'enter-up',
       )}
       aria-label={`${alert.severity} alert for ${alert.plate}`}
     >
