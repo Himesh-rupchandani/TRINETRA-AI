@@ -291,7 +291,7 @@ export default function Dashboard() {
         <Panel
           title="Where vehicles are being seen"
           icon={MapIcon}
-          className="min-h-[320px] xl:col-span-5"
+          className="min-h-[380px] xl:col-span-5"
           bodyClassName="relative isolate"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/gis')}>
