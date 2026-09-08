@@ -28,19 +28,17 @@ export const config = {
     ] as [number, number],
     zoom: Number(env.VITE_MAP_DEFAULT_ZOOM ?? 7),
     /**
-     * Purpose-built light canvas basemap (keyless, attribution required).
-     * `base` carries geometry, `labels` is the transparent reference overlay —
-     * the same split a GIS operator would expect. The dark canvas set was
-     * removed together with Night/Dark Mode: Light tiles only.
+     * Standard OpenStreetMap carto basemap — the same light canvas with
+     * yellow highways and baked-in labels that tracking consoles use.
+     * Single layer (no separate reference overlay); ODbL attribution
+     * is rendered by Leaflet's attribution control below.
      */
     tiles: {
       light: {
-        base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-        labels:
-          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+        base: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       },
     },
-    tileAttribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',
+    tileAttribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
   demo: {
     primaryPlate: 'GJ01AB1234',

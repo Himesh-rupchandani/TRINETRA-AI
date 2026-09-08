@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { cameraIcon, eventIcon, routeIcon } from './mapIcons';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
-/** Transparent placeholder so a blocked tile server degrades to the dark canvas. */
+/** Transparent placeholder so a blocked tile server degrades gracefully. */
 const ERROR_TILE =
   "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3C/svg%3E";
 
@@ -139,10 +139,9 @@ export function MapView({
         <TileLayer
           url={tiles.base}
           attribution={config.map.tileAttribution}
-          maxZoom={18}
+          maxZoom={19}
           errorTileUrl={ERROR_TILE}
         />
-        <TileLayer url={tiles.labels} maxZoom={18} errorTileUrl={ERROR_TILE} />
         <ResizeGuard />
         <FitBounds points={fitPoints} enabled={fit} />
         <PanTo target={panTo} />
