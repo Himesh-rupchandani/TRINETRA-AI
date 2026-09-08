@@ -43,6 +43,15 @@ export function routeIcon(
   });
 }
 
+export function playbackIcon(): L.DivIcon {
+  return L.divIcon({
+    className: 'trinetra-marker',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    html: '<div class="trinetra-playback-dot"></div>',
+  });
+}
+
 export function eventIcon(watchlist = false): L.DivIcon {
   const color = watchlist ? severityHex.CRITICAL : '#38bdf8';
   return L.divIcon({

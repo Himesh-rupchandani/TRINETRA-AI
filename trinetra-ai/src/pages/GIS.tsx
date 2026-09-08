@@ -8,6 +8,7 @@ import { Panel, EmptyState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
 import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { useCameras } from '@/hooks/useCameras';
+import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
@@ -21,6 +22,7 @@ export default function GIS() {
   const { cameras } = useCameras();
   const { result, trace, loading, reset } = useVehicleSearch();
   const recent = useAsync(() => eventService.recent(150), []);
+  const { events: liveEvents } = useLiveEvents();
 
   const [plateInput, setPlateInput] = useState(params.get('plate') ?? '');
   const [showCameras, setShowCameras] = useState(true);
@@ -46,9 +48,11 @@ export default function GIS() {
 
   const points = useMemo(() => result?.route?.points ?? [], [result]);
   const detections = useMemo(() => {
-    const list = recent.data ?? [];
+    const list = [...liveEvents, ...(recent.data ?? [])]
+      .filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return showDetections ? list.filter((e) => e.plate !== '—').slice(0, 60) : [];
-  }, [recent.data, showDetections]);
+  }, [recent.data, liveEvents, showDetections]);
 
   const selectPoint = (p: RoutePoint) => {
     setActiveSequence(p.sequence);
@@ -113,7 +117,7 @@ export default function GIS() {
         <Panel
           className="min-h-[420px] xl:col-span-9"
           bodyClassName="relative isolate"
-          title="Map of the city"
+          title="Network map"
           icon={Layers}
           actions={
             <div className="flex flex-wrap items-center gap-2.5 text-2xs text-ink-muted">
@@ -140,6 +144,7 @@ export default function GIS() {
             activeRouteSequence={activeSequence}
             selectedCameraId={focusCamera}
             onSelectRoutePoint={selectPoint}
+            onPlaybackStop={(pt) => setActiveSequence(pt.sequence)}
             onSelectCamera={(c) => setPanTo([c.latitude, c.longitude])}
             panTo={panTo}
             showCoverage={showCoverage}

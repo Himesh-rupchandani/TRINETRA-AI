@@ -5,6 +5,19 @@
  */
 const env = import.meta.env;
 
+export type BasemapId = 'street' | 'satellite';
+
+const mapTiles: Record<BasemapId, { base: string; labels?: string }> = {
+  street: {
+    base: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  },
+  satellite: {
+    base: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    labels:
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+  },
+};
+
 export const config = {
   appName: 'TRINETRA AI',
   tagline: 'Intelligent Vision. Faster Response.',
@@ -28,17 +41,17 @@ export const config = {
     ] as [number, number],
     zoom: Number(env.VITE_MAP_DEFAULT_ZOOM ?? 7),
     /**
-     * Standard OpenStreetMap carto basemap — the same light canvas with
-     * yellow highways and baked-in labels that tracking consoles use.
-     * Single layer (no separate reference overlay); ODbL attribution
-     * is rendered by Leaflet's attribution control below.
+     * Switchable basemaps, tracking-console style. Street is the standard
+     * OpenStreetMap carto layer (labels baked in); satellite pairs Esri
+     * imagery with its boundaries-and-places reference overlay. Both are
+     * keyless; attribution is rendered by Leaflet's attribution control.
      */
-    tiles: {
-      light: {
-        base: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      },
+    tiles: mapTiles,
+    attribution: {
+      street: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      satellite:
+        'Imagery &copy; Esri, Maxar, Earthstar Geographics &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',
     },
-    tileAttribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
   demo: {
     primaryPlate: 'GJ01AB1234',
