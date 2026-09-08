@@ -7,6 +7,9 @@ const env = import.meta.env;
 
 export const config = {
   appName: 'TRINETRA AI',
+  /** Platform identity — the SENTINEL command center. */
+  productName: 'SENTINEL',
+  productTagline: 'AI Surveillance Intelligence',
   tagline: 'Intelligent Vision. Faster Response.',
   useMocks: (env.VITE_USE_MOCKS ?? 'true') !== 'false',
   apiBaseUrl: env.VITE_API_BASE_URL ?? '/api',
@@ -28,16 +31,16 @@ export const config = {
     ] as [number, number],
     zoom: Number(env.VITE_MAP_DEFAULT_ZOOM ?? 7),
     /**
-     * Purpose-built light canvas basemap (keyless, attribution required).
+     * Purpose-built dark canvas basemap (keyless, attribution required).
      * `base` carries geometry, `labels` is the transparent reference overlay —
-     * the same split a GIS operator would expect. The dark canvas set was
-     * removed together with Night/Dark Mode: Light tiles only.
+     * the same split a GIS operator would expect, on the dark canvas set that
+     * matches the command-center theme.
      */
     tiles: {
-      light: {
-        base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      dark: {
+        base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
         labels:
-          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
       },
     },
     tileAttribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',

@@ -84,16 +84,27 @@ export function Sidebar({
         aria-label="Primary navigation"
       >
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-3.5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand shadow-sm" aria-hidden>
+          <span
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-brand to-brand-strong shadow-[0_0_14px_rgb(77_141_255/0.35)]"
+            aria-hidden
+          >
             <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M12 3 3 7.5v4.2c0 5 3.8 8.6 9 9.3 5.2-.7 9-4.3 9-9.3V7.5L12 3Z" />
               <circle cx="12" cy="11" r="2.6" />
+              <circle cx="12" cy="11" r="0.5" fill="currentColor" stroke="none" />
             </svg>
           </span>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold tracking-tight text-ink">TRINETRA AI</p>
-              <p className="truncate text-2xs text-ink-faint">Intelligent Vision</p>
+              <p className="flex items-baseline gap-1.5 truncate">
+                <span className="text-[15px] font-black leading-none tracking-[0.08em] text-ink">SENTINEL</span>
+                <span className="rounded border border-brand/35 bg-brand/10 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-brand">
+                  AI
+                </span>
+              </p>
+              <p className="mt-0.5 truncate text-2xs leading-tight text-ink-faint">
+                by <span className="font-semibold text-ink-muted">TRINETRA AI</span> · Command Center
+              </p>
             </div>
           )}
           <button
@@ -129,7 +140,7 @@ export function Sidebar({
                           cn(
                             'group relative flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors',
                             isActive
-                              ? 'bg-brand/10'
+                              ? 'bg-brand/10 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-brand before:content-[""]'
                               : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
                           )
                         }

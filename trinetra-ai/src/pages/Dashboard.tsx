@@ -28,6 +28,7 @@ import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
 import { formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
 import { demoFlow } from '@/data/demoFlow';
+import { config } from '@/lib/config';
 
 /**
  * COMMAND CENTER
@@ -55,51 +56,82 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
-      {/* Hero: registration number is always the fastest path into the product */}
-      <section className="panel flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-stretch">
-        <div className="flex flex-col justify-center lg:w-[280px] lg:shrink-0">
-          <div className="flex items-center gap-3">
-            <IconTile tone="blue" size="lg">
-              <Car size={20} aria-hidden />
-            </IconTile>
-            <h2 className="text-lg font-bold text-ink">Find a Vehicle</h2>
-          </div>
-          <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
-            Search any vehicle by number plate to see all camera sightings, routes, and alerts.
-          </p>
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TraceSearchBar onTrace={(p) => navigate(`/vehicles/${p}`)} />
-          <nav
-            className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-            aria-label="Common tasks"
+      {/* Hero: platform identity + registration number as the fastest path in */}
+      <section className="panel relative flex flex-col gap-5 overflow-hidden p-5 sm:p-6">
+        <div className="command-grid pointer-events-none absolute inset-0" aria-hidden />
+        <div className="relative flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-brand to-brand-strong shadow-[0_0_18px_rgb(77_141_255/0.4)]"
+            aria-hidden
           >
-            {demoFlow.map((task) => (
-              <Link
-                key={task.step}
-                to={task.to}
-                className="group flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3.5 transition-colors hover:border-brand/40 hover:bg-surface-2"
-              >
-                <span className="flex items-start justify-between gap-2">
-                  <span className="text-xs font-bold text-ink-faint/70">{task.step}</span>
-                  <IconTile tone={task.tone} size="md">
-                    <task.icon size={17} aria-hidden />
-                  </IconTile>
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-ink group-hover:text-brand">
-                    {task.label}
+            <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 3 3 7.5v4.2c0 5 3.8 8.6 9 9.3 5.2-.7 9-4.3 9-9.3V7.5L12 3Z" />
+              <circle cx="12" cy="11" r="2.6" />
+            </svg>
+          </span>
+          <div className="min-w-0">
+            <p className="flex items-baseline gap-2">
+              <span className="text-xl font-black tracking-[0.1em] text-ink">{config.productName}</span>
+              <span className="text-2xs font-semibold uppercase tracking-[0.16em] text-ink-faint">
+                by {config.appName}
+              </span>
+            </p>
+            <p className="text-xs leading-snug text-ink-muted">
+              AI-powered real-time surveillance intelligence — live camera monitoring, vehicle detection
+              &amp; automatic number-plate recognition for law enforcement.
+            </p>
+          </div>
+          <span className="chip ml-auto hidden border-online/40 bg-online/10 text-online md:inline-flex">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-online" aria-hidden />
+            Surveillance network active
+          </span>
+        </div>
+
+        <div className="relative flex flex-col gap-5 border-t border-line pt-5 lg:flex-row lg:items-stretch">
+          <div className="flex flex-col justify-center lg:w-[280px] lg:shrink-0">
+            <div className="flex items-center gap-3">
+              <IconTile tone="blue" size="lg">
+                <Car size={20} aria-hidden />
+              </IconTile>
+              <h2 className="text-lg font-bold text-ink">Find a Vehicle</h2>
+            </div>
+            <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
+              Search any vehicle by number plate to see all camera sightings, routes, and alerts.
+            </p>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TraceSearchBar onTrace={(p) => navigate(`/vehicles/${p}`)} />
+            <nav
+              className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+              aria-label="Common tasks"
+            >
+              {demoFlow.map((task) => (
+                <Link
+                  key={task.step}
+                  to={task.to}
+                  className="group flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3.5 transition-colors hover:border-brand/40 hover:bg-surface-2"
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-bold text-ink-faint/70">{task.step}</span>
+                    <IconTile tone={task.tone} size="md">
+                      <task.icon size={17} aria-hidden />
+                    </IconTile>
                   </span>
-                  <span className="mt-1 block text-2xs leading-snug text-ink-faint">{task.hint}</span>
-                </span>
-                <ArrowRight
-                  size={14}
-                  className="mt-auto text-ink-faint/60 transition-colors group-hover:text-brand"
-                  aria-hidden
-                />
-              </Link>
-            ))}
-          </nav>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-ink group-hover:text-brand">
+                      {task.label}
+                    </span>
+                    <span className="mt-1 block text-2xs leading-snug text-ink-faint">{task.hint}</span>
+                  </span>
+                  <ArrowRight
+                    size={14}
+                    className="mt-auto text-ink-faint/60 transition-colors group-hover:text-brand"
+                    aria-hidden
+                  />
+                </Link>
+              ))}
+            </nav>
+          </div>
         </div>
       </section>
 
@@ -305,7 +337,7 @@ export default function Dashboard() {
         icon={ScanLine}
         actions={
           <button type="button" className="link-btn" onClick={() => navigate('/events')}>
-            Open Event See all <ArrowRight size={13} aria-hidden />
+            View all <ArrowRight size={13} aria-hidden />
           </button>
         }
       >

@@ -47,18 +47,19 @@ export default function Vehicles() {
 
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto max-w-5xl p-4 sm:p-6">
-          <section className="panel p-5 sm:p-6">
-            <div className="flex items-center gap-3">
+          <section className="panel relative overflow-hidden p-5 sm:p-6">
+            <div className="command-grid pointer-events-none absolute inset-0" aria-hidden />
+            <div className="relative flex items-center gap-3">
               <IconTile tone="blue" size="lg">
                 <SearchIcon size={20} aria-hidden />
               </IconTile>
               <h2 className="text-lg font-bold text-ink">Which vehicle are you looking for?</h2>
             </div>
-            <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
+            <p className="relative mt-2.5 text-sm leading-relaxed text-ink-muted">
               Enter the number plate. We will check all 30 cameras and show you every place it
               has been seen, in order, on a map.
             </p>
-            <div className="mt-4">
+            <div className="relative mt-4">
               <TraceSearchBar initialValue={initial} onTrace={onTrace} loading={loading} size="lg" />
             </div>
           </section>

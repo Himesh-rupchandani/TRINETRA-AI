@@ -8,8 +8,8 @@ import { OfficerProvider } from '@/features/officer/OfficerProvider';
  * LiveProvider owns the single realtime connection (simulator today,
  * WebSocket/SSE once the backend is live) and the session alert state.
  *
- * There is no ThemeProvider: Night/Dark Mode was removed and the app is
- * permanently Light Mode (enforced pre-render in main.tsx).
+ * There is no ThemeProvider: the app runs the dark command-center theme
+ * permanently (enforced pre-render in main.tsx).
  */
 export function AppProviders({ children }: { children: ReactNode }) {
   return (

@@ -51,8 +51,8 @@ Two more journeys are seeded for variety: `GJ05XY4321` (wanted suspect, CRITICAL
 
 ## 3. Screenshots
 
-All captured from the running app in the default **light** theme, except the camera-detail
-shot, which was taken in dark mode in a Chrome build with an H.264 decoder so the real
+All captured from the running app in the dark command-center theme, except the camera-detail
+shot, which was taken in a Chrome build with an H.264 decoder so the real
 Sentinel video is visible.
 
 | | |
@@ -293,8 +293,8 @@ for real material.
 Semantic landmarks, skip link, labelled controls, `aria-live` alert regions, visible focus rings,
 keyboard-operable dialogs (Esc to close), and `aria-sort` on sortable registry columns.
 Desktop-first with graceful degradation: sidebar collapses under 1024 px, panels stack, camera
-grid drops to 1–2 columns, tables scroll horizontally. **Light theme is the default**; dark
-theme is a one-click toggle and is persisted.
+grid drops to 1–2 columns, tables scroll horizontally. **Dark command-center theme is the
+default** (enforced pre-render; respects `prefers-reduced-motion`).
 
 ### Plain language
 

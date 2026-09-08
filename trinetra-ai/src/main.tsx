@@ -4,14 +4,14 @@ import App from '@/app/App';
 import './index.css';
 
 /**
- * TRINETRA AI is permanently Light Mode — Night/Dark Mode has been removed.
- * Enforce that before the first paint and clear any legacy dark-mode state so
- * a refresh or reopen can never re-activate Dark Mode, regardless of the OS or
- * browser color scheme (this also guards fullscreen views).
+ * TRINETRA AI · SENTINEL runs the dark command-center theme permanently.
+ * Enforce it before the first paint and clear any legacy theme state so a
+ * refresh or reopen can never re-activate another scheme, regardless of the
+ * OS or browser color scheme (this also guards fullscreen views).
  */
 const rootElement = document.documentElement;
 rootElement.classList.remove('dark');
-rootElement.style.colorScheme = 'light';
+rootElement.style.colorScheme = 'dark';
 try {
   localStorage.removeItem('trinetra.theme');
 } catch {

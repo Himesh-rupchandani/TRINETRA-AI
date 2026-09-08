@@ -36,7 +36,7 @@ export function KpiCard({
   loading?: boolean;
 }) {
   const body = (
-    <div className="panel relative flex h-full flex-col gap-3 overflow-hidden p-4 transition-shadow hover:shadow-cardHover">
+    <div className="panel relative flex h-full flex-col gap-3 overflow-hidden p-4 transition-all hover:border-line-strong hover:shadow-cardHover">
       <div className="flex items-center justify-between gap-2.5">
         {Icon && (
           <IconTile tone={tile ?? TONE_TO_TILE[tone]} size="md">

@@ -26,18 +26,20 @@ export default {
         },
         brand: {
           DEFAULT: 'rgb(var(--brand) / <alpha-value>)',
+          // Filled-control variant — dark-enough azure that white labels pass AA.
+          strong: 'rgb(var(--brand-strong) / <alpha-value>)',
           soft: 'rgb(var(--brand-soft) / <alpha-value>)',
         },
-        // Severity / status semantic tokens
-        critical: '#e11d48',
-        high: '#f97316',
+        // Severity / status semantic tokens — tuned for dark surfaces
+        critical: '#f43f5e',
+        high: '#fb923c',
         medium: '#eab308',
-        low: '#0ea5e9',
-        info: '#64748b',
-        online: '#16a34a',
-        offline: '#dc2626',
-        degraded: '#d97706',
-        processing: '#2563eb',
+        low: '#38bdf8',
+        info: '#94a3b8',
+        online: '#22c55e',
+        offline: '#ef4444',
+        degraded: '#f59e0b',
+        processing: '#3b82f6',
       },
       fontSize: {
         // Legibility pass: everything is a step larger than a classic dense
@@ -51,14 +53,14 @@ export default {
         xl: ['1.3125rem', { lineHeight: '1.85rem' }],
       },
       boxShadow: {
-        panel: '0 1px 2px rgb(15 23 42 / 0.05), 0 1px 6px rgb(15 23 42 / 0.04)',
-        cardHover: '0 4px 16px rgb(15 23 42 / 0.08)',
+        panel: '0 1px 2px rgb(0 0 0 / 0.45), 0 1px 8px rgb(0 0 0 / 0.35)',
+        cardHover: '0 6px 20px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(var(--line) / 0.9)',
       },
       keyframes: {
         'pulse-ring': {
-          '0%': { boxShadow: '0 0 0 0 rgb(225 29 72 / 0.45)' },
-          '70%': { boxShadow: '0 0 0 8px rgb(225 29 72 / 0)' },
-          '100%': { boxShadow: '0 0 0 0 rgb(225 29 72 / 0)' },
+          '0%': { boxShadow: '0 0 0 0 rgb(244 63 94 / 0.45)' },
+          '70%': { boxShadow: '0 0 0 8px rgb(244 63 94 / 0)' },
+          '100%': { boxShadow: '0 0 0 0 rgb(244 63 94 / 0)' },
         },
         'slide-in': {
           from: { opacity: '0', transform: 'translateY(-6px)' },

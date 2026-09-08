@@ -20,7 +20,7 @@ export function AlertBanner() {
     <div
       role="alert"
       aria-live="assertive"
-      className="animate-slide-in border-b border-critical/40 bg-critical/10"
+      className="animate-slide-in border-b border-critical/50 bg-critical/15"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
         <span className={cn('h-6 w-1 shrink-0 rounded-full', severityBar[a.severity])} aria-hidden />

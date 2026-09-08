@@ -109,7 +109,7 @@ export function MapView({
   className,
   showCoverage = false,
 }: MapViewProps) {
-  const tiles = config.map.tiles.light;
+  const tiles = config.map.tiles.dark;
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],

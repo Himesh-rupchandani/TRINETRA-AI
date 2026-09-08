@@ -3,25 +3,27 @@
 @tailwind utilities;
 
 /* ------------------------------------------------------------------
-   TRINETRA AI — Modern Government Command Center design tokens
-   Neutral, high-density, readable at control-room distance.
+   TRINETRA AI · SENTINEL — Dark Command-Center design tokens
+   Deep operational navy surfaces, high-contrast ink, single azure accent.
+   Every component reads these variables, so the whole console themes here.
    ------------------------------------------------------------------ */
 @layer base {
   :root {
-    /* Light operational theme (always active — Night/Dark Mode removed) */
-    /* Hard opt-out of browser/OS auto-darkening (incl. fullscreen views). */
-    color-scheme: light;
-    --surface-0: 243 246 250;
-    --surface-1: 255 255 255;
-    --surface-2: 248 250 253;
-    --surface-3: 241 244 249;
-    --line: 226 232 240;
-    --line-strong: 148 163 184;
-    --ink: 15 23 42;
-    --ink-muted: 71 85 105;
-    --ink-faint: 100 116 139;
-    --brand: 37 99 235;
-    --brand-soft: 219 234 254;
+    /* Dark operational theme (always active — the control-room look) */
+    /* Hard opt-out of browser/OS auto-lightening (incl. fullscreen views). */
+    color-scheme: dark;
+    --surface-0: 8 12 20; /* app canvas */
+    --surface-1: 13 18 29; /* panels */
+    --surface-2: 19 25 38; /* raised / hover */
+    --surface-3: 26 33 49; /* insets, wells, skeletons */
+    --line: 38 47 65;
+    --line-strong: 64 77 101;
+    --ink: 228 233 241;
+    --ink-muted: 153 166 186;
+    --ink-faint: 113 127 149;
+    --brand: 77 141 255; /* interactive accent / links */
+    --brand-strong: 37 99 235; /* filled buttons — AA with white text */
+    --brand-soft: 23 42 76;
   }
 
   * {
@@ -37,6 +39,15 @@
   body {
     @apply bg-surface-0 text-ink antialiased;
     font-feature-settings: 'tnum' 1, 'cv05' 1;
+    /* Command-center ambience: a single cold light source above the console. */
+    background-image:
+      radial-gradient(1100px 420px at 18% -8%, rgb(var(--brand) / 0.075), transparent 62%),
+      radial-gradient(900px 380px at 88% -12%, rgb(56 189 248 / 0.05), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgb(var(--brand) / 0.32);
   }
 
   /* Visible focus everywhere — accessibility requirement */
@@ -54,22 +65,42 @@
     background: rgb(var(--surface-0));
   }
   ::-webkit-scrollbar-thumb {
-    background: rgb(var(--line));
+    background: rgb(var(--line-strong) / 0.6);
     border-radius: 6px;
     border: 2px solid rgb(var(--surface-0));
   }
   ::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--line-strong));
   }
+
+  /* Keep browser autofill readable on dark inputs */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--ink));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface-2)) inset;
+    caret-color: rgb(var(--ink));
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
   .panel {
-    @apply bg-surface-1 border border-line rounded-2xl shadow-panel;
+    @apply border border-line bg-surface-1 shadow-panel rounded-2xl;
   }
 
   .panel-header {
-    @apply flex items-center justify-between gap-3 px-4 h-12 border-b border-line shrink-0;
+    @apply flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line px-4;
   }
 
   .panel-title {
@@ -77,49 +108,48 @@
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold
-           tracking-normal px-3.5 h-9 transition-colors select-none
-           disabled:opacity-45 disabled:pointer-events-none whitespace-nowrap;
+    @apply inline-flex select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 text-xs font-semibold tracking-normal h-9 transition-colors
+           disabled:opacity-45 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-brand border-brand text-white shadow-sm hover:bg-brand/90;
+    @apply btn border-brand-strong bg-brand-strong text-white shadow-sm hover:brightness-110;
   }
   .btn-solid {
-    @apply btn bg-brand border-brand text-white hover:opacity-90;
+    @apply btn border-brand-strong bg-brand-strong text-white hover:brightness-110;
   }
   .btn-tint {
-    @apply btn bg-brand/10 border-brand/25 text-brand hover:bg-brand/15;
+    @apply btn border-brand/30 bg-brand/10 text-brand hover:bg-brand/15;
   }
   .btn-ghost {
-    @apply btn bg-transparent border-line text-ink-muted hover:bg-surface-2 hover:text-ink;
+    @apply btn border-line bg-transparent text-ink-muted hover:bg-surface-2 hover:text-ink;
   }
   .btn-danger {
-    @apply btn bg-critical/10 border-critical/30 text-critical hover:bg-critical/15;
+    @apply btn border-critical/35 bg-critical/10 text-critical hover:bg-critical/15;
   }
   .btn-xs {
-    @apply h-7 px-2.5 text-2xs gap-1 rounded-md;
+    @apply h-7 gap-1 rounded-md px-2.5 text-2xs;
   }
 
   .input {
-    @apply w-full h-9 rounded-lg border border-line bg-surface-1 px-3 text-sm text-ink
-           placeholder:text-ink-faint focus:border-brand focus:outline-none
+    @apply w-full rounded-lg border border-line bg-surface-2/60 px-3 text-sm text-ink h-9
+           placeholder:text-ink-faint focus:border-brand/70 focus:bg-surface-2 focus:outline-none
            focus-visible:outline-none focus:ring-2 focus:ring-brand/25;
   }
   .select {
-    @apply input pr-8 appearance-none cursor-pointer;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2394a3b8'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
+    @apply input cursor-pointer appearance-none pr-8;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23717f95'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 8px center;
     background-size: 14px;
   }
 
   .label {
-    @apply block text-xs font-medium text-ink-faint mb-1.5;
+    @apply mb-1.5 block text-xs font-medium text-ink-faint;
   }
 
   .chip {
-    @apply inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-semibold
-           leading-4 whitespace-nowrap;
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-2xs font-semibold
+           leading-4;
   }
 
   .kv-label {
@@ -130,17 +160,17 @@
   }
 
   .data-table {
-    @apply w-full text-xs border-collapse;
+    @apply w-full border-collapse text-xs;
   }
   .data-table thead th {
-    @apply sticky top-0 z-10 bg-surface-2 text-left text-xs font-semibold
-           text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
+    @apply sticky top-0 z-10 whitespace-nowrap border-b border-line bg-surface-2 px-4 py-2.5 text-left text-xs font-semibold
+           text-ink-muted;
   }
   .data-table tbody td {
-    @apply px-4 py-3 border-b border-line/60 align-middle whitespace-nowrap;
+    @apply whitespace-nowrap border-b border-line/55 px-4 py-3 align-middle;
   }
   .data-table tbody tr:hover {
-    @apply bg-surface-2;
+    @apply bg-surface-2/70;
   }
 
   .plate {
@@ -151,6 +181,7 @@
     @apply inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline;
   }
 
+  /* Faint CRT scan texture for video surfaces */
   .scanline {
     background-image: repeating-linear-gradient(
       0deg,
@@ -161,14 +192,24 @@
     );
   }
 
+  /* Blueprint grid + corner glow for command-center hero surfaces */
+  .command-grid {
+    background-image:
+      linear-gradient(rgb(var(--ink) / 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--ink) / 0.045) 1px, transparent 1px);
+    background-size: 34px 34px;
+    -webkit-mask-image: radial-gradient(720px 320px at 22% 0%, black 30%, transparent 78%);
+    mask-image: radial-gradient(720px 320px at 22% 0%, black 30%, transparent 78%);
+  }
+
   .skeleton {
     @apply animate-pulse rounded bg-surface-3;
   }
 }
 
-/* ---------------- Leaflet theming ---------------- */
+/* ---------------- Leaflet theming (dark canvas) ---------------- */
 .leaflet-container {
-  background: rgb(var(--surface-0));
+  background: rgb(var(--surface-2));
   font-family: inherit;
   outline: none;
 }
@@ -190,7 +231,8 @@
 }
 .leaflet-popup-content-wrapper {
   border-radius: 4px !important;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35) !important;
+  border: 1px solid rgb(var(--line)) !important;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.55) !important;
 }
 .leaflet-popup-content {
   margin: 0 !important;
@@ -199,7 +241,8 @@
 }
 .leaflet-control-attribution {
   font-size: 9px !important;
-  opacity: 0.65;
+  background: rgb(var(--surface-0) / 0.7) !important;
+  color: rgb(var(--ink-faint)) !important;
 }
 .leaflet-marker-icon.trinetra-marker {
   background: transparent;

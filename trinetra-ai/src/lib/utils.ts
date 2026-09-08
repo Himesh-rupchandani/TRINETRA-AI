@@ -110,11 +110,11 @@ export const severityBar: Record<Severity, string> = {
 };
 
 export const severityHex: Record<Severity, string> = {
-  CRITICAL: '#e11d48',
-  HIGH: '#f97316',
+  CRITICAL: '#f43f5e',
+  HIGH: '#fb923c',
   MEDIUM: '#eab308',
-  LOW: '#0ea5e9',
-  INFO: '#64748b',
+  LOW: '#38bdf8',
+  INFO: '#94a3b8',
 };
 
 export const cameraStatusClass: Record<CameraStatus, string> = {
@@ -130,9 +130,9 @@ export const cameraStatusDot: Record<CameraStatus, string> = {
 };
 
 export const cameraStatusHex: Record<CameraStatus, string> = {
-  ONLINE: '#16a34a',
-  OFFLINE: '#dc2626',
-  DEGRADED: '#d97706',
+  ONLINE: '#22c55e',
+  OFFLINE: '#ef4444',
+  DEGRADED: '#f59e0b',
 };
 
 export const alertStatusClass: Record<AlertStatus, string> = {

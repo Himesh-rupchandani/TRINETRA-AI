@@ -16,14 +16,14 @@ export type TileTone =
   | 'slate';
 
 export const TILE_TONES: Record<TileTone, string> = {
-  blue: 'bg-blue-500/12 text-blue-600',
-  sky: 'bg-sky-500/12 text-sky-600',
-  green: 'bg-emerald-500/12 text-emerald-600',
-  orange: 'bg-orange-500/12 text-orange-600',
-  amber: 'bg-amber-500/15 text-amber-600',
-  purple: 'bg-violet-500/12 text-violet-600',
-  red: 'bg-rose-500/12 text-rose-600',
-  slate: 'bg-slate-500/12 text-slate-500',
+  blue: 'bg-blue-500/15 text-blue-300',
+  sky: 'bg-sky-500/15 text-sky-300',
+  green: 'bg-emerald-500/15 text-emerald-300',
+  orange: 'bg-orange-500/15 text-orange-300',
+  amber: 'bg-amber-500/18 text-amber-300',
+  purple: 'bg-violet-500/15 text-violet-300',
+  red: 'bg-rose-500/15 text-rose-300',
+  slate: 'bg-slate-500/15 text-slate-300',
 };
 
 /** Solid tile used for the active sidebar item. */

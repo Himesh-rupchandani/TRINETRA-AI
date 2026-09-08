@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Bell,
   Menu,
@@ -21,6 +21,22 @@ const CONNECTION_TONE: Record<string, string> = {
   OFFLINE: 'text-offline',
 };
 
+/** Operations clock — control rooms always run on a visible wallclock (IST). */
+function useOpsClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Kolkata',
+  }).format(now);
+}
+
 export function Header({
   onMenu,
   onToggleCollapse,
@@ -35,6 +51,7 @@ export function Header({
   const { connection } = useLiveEvents();
   const { current: officer } = useOfficer();
   const [quick, setQuick] = useState('');
+  const clock = useOpsClock();
 
   const submitQuick = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +60,7 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface-1 px-3.5 sm:gap-3 sm:px-5">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface-1/85 px-3.5 backdrop-blur-md sm:gap-3 sm:px-5">
       <button type="button" className="btn-ghost h-9 w-9 px-0 lg:hidden" onClick={onMenu} aria-label="Open navigation">
         <Menu size={16} aria-hidden />
       </button>
@@ -57,8 +74,8 @@ export function Header({
       </button>
 
       <div className="min-w-0 lg:hidden">
-        <p className="truncate text-sm font-bold leading-tight tracking-tight text-ink">{config.appName}</p>
-        <p className="hidden truncate text-2xs leading-tight text-ink-faint sm:block">{config.tagline}</p>
+        <p className="truncate text-sm font-black leading-tight tracking-[0.08em] text-ink">{config.productName}</p>
+        <p className="hidden truncate text-2xs leading-tight text-ink-faint sm:block">{config.appName} · Control Room</p>
       </div>
 
       {/* Global plate search — the hero entry point, reachable from every screen */}
@@ -81,6 +98,15 @@ export function Header({
       </form>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        {/* Operations clock — IST wallclock, standard in control rooms */}
+        <span
+          className="hidden items-center gap-1.5 rounded-md border border-line bg-surface-2/70 px-2 py-1 font-mono text-2xs tabular-nums text-ink-muted md:inline-flex"
+          title="Operations clock — Indian Standard Time"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden />
+          {clock} <span className="font-semibold text-ink-faint">IST</span>
+        </span>
+
         {config.useMocks && (
           <span className="chip hidden border-brand/25 bg-brand/10 font-semibold text-brand xl:inline-flex">
             Demo Data
