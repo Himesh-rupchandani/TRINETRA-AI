@@ -101,6 +101,54 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
+      {/* Investigation workflow — compact labeled cards in a single row. */}
+      <section aria-label="Investigation workflow">
+        <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+          <div>
+            <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
+              Investigation workflow
+            </p>
+            <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">
+              Five steps, one case
+            </h2>
+          </div>
+          <p className="text-xs text-ink-faint">Start with a video, end with the full history.</p>
+        </div>
+        <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+          {demoFlow.map((task) => {
+            const tone = TASK_TONES[task.tone];
+            return (
+              <Link
+                key={task.step}
+                to={task.to}
+                className={cn(
+                  'group flex items-center gap-2.5 rounded-xl border p-3 shadow-panel transition-all duration-150 hover:-translate-y-0.5 hover:shadow-cardHover',
+                  tone.card,
+                )}
+              >
+                <IconTile tone={task.tone} size="lg" className="shadow-sm ring-1 ring-inset ring-black/5">
+                  <task.icon size={19} aria-hidden />
+                </IconTile>
+                <span className="min-w-0 flex-1">
+                  <span className={cn('block text-[10px] font-bold uppercase tracking-[0.12em]', tone.arrow)}>
+                    Step {task.step}
+                  </span>
+                  <span className="block truncate text-[13px] font-bold leading-snug text-ink">
+                    {task.label}
+                  </span>
+                  <span className="block truncate text-2xs leading-snug text-ink-muted">{task.hint}</span>
+                </span>
+                <ArrowRight
+                  size={15}
+                  className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-ink"
+                  aria-hidden
+                />
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Hero: registration number is always the fastest path into the product */}
       <section className="panel flex flex-col gap-5 bg-gradient-to-br from-white via-white to-sky-50 p-5 sm:p-6 lg:flex-row lg:items-stretch">
         <div className="flex flex-col justify-center lg:w-[290px] lg:shrink-0">
@@ -133,49 +181,6 @@ export default function Dashboard() {
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <TraceSearchBar onTrace={(p) => navigate(`/vehicles/${p}`)} />
-          <nav
-            className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
-            aria-label="Common tasks"
-          >
-            {demoFlow.map((task) => {
-              const tone = TASK_TONES[task.tone];
-              return (
-                <Link
-                  key={task.step}
-                  to={task.to}
-                  className={cn(
-                    'group flex flex-col gap-2 rounded-xl border p-3.5 shadow-panel transition-all duration-150 hover:-translate-y-0.5',
-                    tone.card,
-                  )}
-                >
-                  <span className="flex items-start justify-between gap-2">
-                    <span
-                      className={cn(
-                        'grid h-6 w-6 place-items-center rounded-full font-mono text-[11px] font-bold text-white',
-                        tone.step,
-                      )}
-                    >
-                      {task.step}
-                    </span>
-                    <IconTile tone={task.tone} size="md" className="shadow-sm ring-1 ring-inset ring-black/5">
-                      <task.icon size={17} aria-hidden />
-                    </IconTile>
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-bold text-ink">
-                      {task.label}
-                    </span>
-                    <span className="mt-1 block text-2xs leading-snug text-ink-muted">{task.hint}</span>
-                  </span>
-                  <ArrowRight
-                    size={15}
-                    className={cn('mt-auto transition-all duration-150 group-hover:translate-x-1', tone.arrow)}
-                    aria-hidden
-                  />
-                </Link>
-              );
-            })}
-          </nav>
         </div>
       </section>
 
