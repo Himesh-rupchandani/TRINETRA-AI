@@ -20,14 +20,14 @@ import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { CameraCard } from '@/components/camera/CameraCard';
 import { Panel, AsyncBoundary, EmptyState } from '@/components/common/Panel';
-import { IconTile } from '@/components/common/IconTile';
+import { IconTile, type TileTone } from '@/components/common/IconTile';
 import { ServiceStatusChip, StatusChip } from '@/components/common/Chips';
 import { useCameras } from '@/hooks/useCameras';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
-import { formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
+import { cn, formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
 import { DEMO_PLATE, demoFlow } from '@/data/demoFlow';
 
 /**
@@ -36,6 +36,51 @@ import { DEMO_PLATE, demoFlow } from '@/data/demoFlow';
  * with GIS, trend and system health below. Everything is one click from an
  * investigation.
  */
+
+/** Per-step colour for the hero task cards, matching the top nav cards. */
+const TASK_TONES: Record<TileTone, { card: string; step: string; arrow: string }> = {
+  blue: {
+    card: 'border-blue-200 bg-gradient-to-br from-blue-100/70 via-blue-50 to-white hover:border-blue-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-blue-500 to-blue-700 shadow-sm',
+    arrow: 'text-blue-500 group-hover:text-blue-700',
+  },
+  sky: {
+    card: 'border-sky-200 bg-gradient-to-br from-sky-100/70 via-sky-50 to-white hover:border-sky-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-sky-500 to-sky-700 shadow-sm',
+    arrow: 'text-sky-500 group-hover:text-sky-700',
+  },
+  green: {
+    card: 'border-emerald-200 bg-gradient-to-br from-emerald-100/70 via-emerald-50 to-white hover:border-emerald-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-sm',
+    arrow: 'text-emerald-500 group-hover:text-emerald-700',
+  },
+  orange: {
+    card: 'border-orange-200 bg-gradient-to-br from-orange-100/70 via-orange-50 to-white hover:border-orange-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-orange-500 to-orange-700 shadow-sm',
+    arrow: 'text-orange-500 group-hover:text-orange-700',
+  },
+  amber: {
+    card: 'border-amber-200 bg-gradient-to-br from-amber-100/70 via-amber-50 to-white hover:border-amber-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-amber-500 to-amber-700 shadow-sm',
+    arrow: 'text-amber-500 group-hover:text-amber-700',
+  },
+  purple: {
+    card: 'border-violet-200 bg-gradient-to-br from-violet-100/70 via-violet-50 to-white hover:border-violet-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-violet-500 to-violet-700 shadow-sm',
+    arrow: 'text-violet-500 group-hover:text-violet-700',
+  },
+  red: {
+    card: 'border-rose-200 bg-gradient-to-br from-rose-100/70 via-rose-50 to-white hover:border-rose-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-rose-500 to-rose-700 shadow-sm',
+    arrow: 'text-rose-500 group-hover:text-rose-700',
+  },
+  slate: {
+    card: 'border-slate-200 bg-gradient-to-br from-slate-100/70 via-slate-50 to-white hover:border-slate-400 hover:shadow-cardHover',
+    step: 'bg-gradient-to-br from-slate-500 to-slate-700 shadow-sm',
+    arrow: 'text-slate-500 group-hover:text-slate-700',
+  },
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { cameras, stats, loading: camsLoading, error: camsError, refresh } = useCameras();
@@ -58,16 +103,33 @@ export default function Dashboard() {
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
       {/* Hero: registration number is always the fastest path into the product */}
       <section className="panel flex flex-col gap-5 bg-gradient-to-br from-white via-white to-sky-50 p-5 sm:p-6 lg:flex-row lg:items-stretch">
-        <div className="flex flex-col justify-center lg:w-[280px] lg:shrink-0">
-          <div className="flex items-center gap-3">
-            <IconTile tone="blue" size="lg" className="float-soft">
-              <Car size={20} aria-hidden />
+        <div className="flex flex-col justify-center lg:w-[290px] lg:shrink-0">
+          <span className="chip w-fit border-brand/25 bg-brand/10 font-bold uppercase tracking-widest text-brand">
+            Start here
+          </span>
+          <div className="mt-3 flex items-center gap-3">
+            <IconTile tone="blue" size="xl" className="float-soft shadow-md ring-1 ring-inset ring-black/5">
+              <Car size={22} aria-hidden />
             </IconTile>
-            <h2 className="text-lg font-bold text-ink">Find a Vehicle</h2>
+            <h2 className="text-xl font-bold tracking-tight text-ink">Find a Vehicle</h2>
           </div>
           <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
             Search any vehicle by number plate to see all camera sightings, routes, and alerts.
           </p>
+          <ul className="mt-3.5 space-y-2" aria-label="What you get">
+            {[
+              { icon: Cctv, text: 'Every camera sighting' },
+              { icon: MapIcon, text: 'Route from camera to camera' },
+              { icon: Bell, text: 'Matching alerts, if any' },
+            ].map((f) => (
+              <li key={f.text} className="flex items-center gap-2 text-xs font-medium text-ink-muted">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600">
+                  <f.icon size={13} aria-hidden />
+                </span>
+                {f.text}
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <TraceSearchBar onTrace={(p) => navigate(`/vehicles/${p}`)} />
@@ -75,31 +137,44 @@ export default function Dashboard() {
             className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
             aria-label="Common tasks"
           >
-            {demoFlow.map((task) => (
-              <Link
-                key={task.step}
-                to={task.to}
-                className="group flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3.5 transition-all duration-150 hover:-translate-y-0.5 hover:border-brand/40 hover:bg-surface-2 hover:shadow-cardHover"
-              >
-                <span className="flex items-start justify-between gap-2">
-                  <span className="text-xs font-bold text-ink-faint/70">{task.step}</span>
-                  <IconTile tone={task.tone} size="md">
-                    <task.icon size={17} aria-hidden />
-                  </IconTile>
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-ink group-hover:text-brand">
-                    {task.label}
+            {demoFlow.map((task) => {
+              const tone = TASK_TONES[task.tone];
+              return (
+                <Link
+                  key={task.step}
+                  to={task.to}
+                  className={cn(
+                    'group flex flex-col gap-2 rounded-xl border p-3.5 shadow-panel transition-all duration-150 hover:-translate-y-0.5',
+                    tone.card,
+                  )}
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span
+                      className={cn(
+                        'grid h-6 w-6 place-items-center rounded-full font-mono text-[11px] font-bold text-white',
+                        tone.step,
+                      )}
+                    >
+                      {task.step}
+                    </span>
+                    <IconTile tone={task.tone} size="md" className="shadow-sm ring-1 ring-inset ring-black/5">
+                      <task.icon size={17} aria-hidden />
+                    </IconTile>
                   </span>
-                  <span className="mt-1 block text-2xs leading-snug text-ink-faint">{task.hint}</span>
-                </span>
-                <ArrowRight
-                  size={14}
-                  className="mt-auto text-ink-faint/60 transition-colors group-hover:text-brand"
-                  aria-hidden
-                />
-              </Link>
-            ))}
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-ink">
+                      {task.label}
+                    </span>
+                    <span className="mt-1 block text-2xs leading-snug text-ink-muted">{task.hint}</span>
+                  </span>
+                  <ArrowRight
+                    size={15}
+                    className={cn('mt-auto transition-all duration-150 group-hover:translate-x-1', tone.arrow)}
+                    aria-hidden
+                  />
+                </Link>
+              );
+            })}
           </nav>
         </div>
       </section>
