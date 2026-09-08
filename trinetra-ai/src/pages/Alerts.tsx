@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Bell, Search, X } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AlertCard } from '@/components/alerts/AlertCard';
@@ -129,6 +130,11 @@ export default function Alerts() {
                 tab === 'ACTIVE'
                   ? 'Every wanted vehicle found so far has been dealt with. New ones show up here straight away.'
                   : 'Alerts you close are kept here as a record.'
+              }
+              action={
+                <Link to="/watchlist" className="btn-tint btn-xs mt-1">
+                  Review the wanted list
+                </Link>
               }
             />
           </div>

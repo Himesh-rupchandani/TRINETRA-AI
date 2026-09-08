@@ -313,7 +313,10 @@ export default function Cameras() {
             </p>
           </>
         ) : (
-          <EmptyState title="No camera selected" />
+          <EmptyState
+            title="No camera selected"
+            detail="Pick a camera from the grid to preview its feed here."
+          />
         )}
       </Modal>
     </div>

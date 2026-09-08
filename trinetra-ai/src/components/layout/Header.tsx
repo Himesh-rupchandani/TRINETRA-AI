@@ -6,6 +6,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  ShieldAlert,
   UserRound,
 } from 'lucide-react';
 import { cn, normalisePlate } from '@/lib/utils';
@@ -14,11 +15,23 @@ import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { config } from '@/lib/config';
 import { useOfficer } from '@/features/officer/OfficerProvider';
 
-const CONNECTION_TONE: Record<string, string> = {
-  LIVE: 'text-online',
-  SIMULATED: 'text-critical',
-  CONNECTING: 'text-degraded',
-  OFFLINE: 'text-offline',
+/**
+ * Realtime channel state machine. Every state has a distinct look so an
+ * operator can read the health of the live feed from across the room:
+ * LIVE (green pulse) · CONNECTING (amber) · DEMO (cyan) · OFFLINE (red).
+ */
+const CONNECTION_STATE: Record<
+  string,
+  { label: string; dot: string; chip?: string; pulse?: boolean }
+> = {
+  LIVE: { label: 'LIVE', dot: 'bg-online text-online', chip: 'border-online/40 bg-online/10 text-online', pulse: true },
+  CONNECTING: { label: 'CONNECTING', dot: 'bg-degraded text-degraded', chip: 'border-degraded/40 bg-degraded/10 text-degraded' },
+  SIMULATED: { label: 'DEMO FEED', dot: 'bg-brand text-brand', chip: 'border-brand/35 bg-brand/10 text-brand' },
+  OFFLINE: {
+    label: 'BACKEND OFFLINE — RETRYING',
+    dot: 'bg-offline text-offline',
+    chip: 'border-offline/45 bg-offline/10 text-offline animate-pulse',
+  },
 };
 
 export function Header({
@@ -35,6 +48,8 @@ export function Header({
   const { connection } = useLiveEvents();
   const { current: officer } = useOfficer();
   const [quick, setQuick] = useState('');
+
+  const conn = CONNECTION_STATE[connection] ?? CONNECTION_STATE.CONNECTING;
 
   const submitQuick = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,32 +102,25 @@ export function Header({
           </span>
         )}
 
+        {/* Realtime state — the demo must survive a dead backend in plain sight */}
         <span
-          className={cn(
-            'hidden items-center gap-1.5 text-2xs font-bold uppercase tracking-wide sm:inline-flex',
-            CONNECTION_TONE[connection],
-          )}
+          className={cn('chip hidden font-mono uppercase tracking-wider sm:inline-flex', conn.chip)}
           title={`Realtime channel: ${connection}`}
         >
-          <span className={cn('h-2 w-2 rounded-full bg-current', connection === 'LIVE' && 'animate-pulse')} aria-hidden />
-          {connection === 'SIMULATED'
-            ? 'Demo Feed'
-            : connection === 'LIVE'
-              ? 'Live Feed'
-              : connection === 'CONNECTING'
-                ? 'Connecting'
-                : 'Offline'}
+          {connection === 'OFFLINE' && <ShieldAlert size={11} aria-hidden />}
+          <span className={cn('h-1.5 w-1.5 rounded-full bg-current', conn.pulse && 'live-dot')} aria-hidden />
+          {conn.label}
         </span>
 
         <button
           type="button"
           onClick={() => navigate('/alerts')}
-          className="relative grid h-9 w-9 place-items-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          className="relative grid h-9 w-9 place-items-center rounded-lg border border-line text-ink-muted transition-colors hover:border-brand/30 hover:bg-surface-2 hover:text-ink"
           aria-label={`${counts.ACTIVE} alerts need your attention — open Alerts`}
         >
           <Bell size={16} className={counts.ACTIVE > 0 ? 'animate-pulse text-critical' : ''} aria-hidden />
           {counts.ACTIVE > 0 && (
-            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-critical px-1 font-mono text-[10px] font-bold text-white">
+            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-critical px-1 font-mono text-[10px] font-bold text-[#16040B]">
               {counts.ACTIVE}
             </span>
           )}
@@ -128,7 +136,7 @@ export function Header({
             <img
               src={officer.photoUrl}
               alt=""
-              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-line"
+              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-line-strong"
               aria-hidden
             />
           ) : (

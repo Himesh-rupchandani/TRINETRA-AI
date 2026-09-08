@@ -22,7 +22,17 @@ export function DetectionTable({
   const navigate = useNavigate();
 
   if (!events.length) {
-    return <EmptyState title="No detections" detail="No camera has recorded this registration number." />;
+    return (
+      <EmptyState
+        title="No detections"
+        detail="No camera has recorded this registration number."
+        action={
+          <button type="button" className="btn-tint btn-xs mt-1" onClick={() => navigate('/vehicles')}>
+            Trace another plate
+          </button>
+        }
+      />
+    );
   }
 
   return (

@@ -61,11 +61,15 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex h-full min-h-[140px] flex-col items-center justify-center gap-2.5 p-8 text-center">
-      <Icon size={22} className="text-ink-faint/60" aria-hidden />
-      <p className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{title}</p>
-      {detail && <p className="max-w-sm text-2xs leading-relaxed text-ink-faint">{detail}</p>}
-      {action}
+    <div className="relative flex h-full min-h-[150px] flex-col items-center justify-center gap-2.5 overflow-hidden p-8 text-center">
+      {/* Third-eye rings — decorative, never behind the text itself */}
+      <div className="eye-rings pointer-events-none absolute inset-0 opacity-40" aria-hidden />
+      <div className="relative grid h-12 w-12 place-items-center rounded-full border border-line bg-surface-2">
+        <Icon size={20} className="text-ink-faint" aria-hidden />
+      </div>
+      <p className="section-label relative">{title}</p>
+      {detail && <p className="relative max-w-sm text-2xs leading-relaxed text-ink-faint">{detail}</p>}
+      {action && <div className="relative mt-1">{action}</div>}
     </div>
   );
 }

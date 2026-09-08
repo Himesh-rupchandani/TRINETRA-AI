@@ -20,6 +20,14 @@ import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 const ERROR_TILE =
   "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3C/svg%3E";
 
+/** Interpolate between two hex colours (route gradient: cyan → amber). */
+function lerpColor(a: string, b: string, t: number): string {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  const mix = pa.map((v, i) => Math.round(v + (pb[i] - v) * Math.min(Math.max(t, 0), 1)));
+  return `#${mix.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 /**
  * Re-fits the viewport whenever the plotted geometry changes.
  * Size is invalidated first: panels mount before layout settles, and a
@@ -109,7 +117,7 @@ export function MapView({
   className,
   showCoverage = false,
 }: MapViewProps) {
-  const tiles = config.map.tiles.light;
+  const tiles = config.map.tiles.dark;
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],
@@ -155,8 +163,8 @@ export function MapView({
               radius={16}
               pathOptions={{
                 color: 'transparent',
-                fillColor: c.status === 'ONLINE' ? '#16a34a' : c.status === 'DEGRADED' ? '#d97706' : '#dc2626',
-                fillOpacity: 0.09,
+                fillColor: c.status === 'ONLINE' ? '#22D3EE' : c.status === 'DEGRADED' ? '#FBBF24' : '#F87171',
+                fillOpacity: 0.08,
               }}
               interactive={false}
             />
@@ -194,11 +202,19 @@ export function MapView({
         {routeLine.length > 1 && (
           <>
             {/* Casing for contrast over any basemap */}
-            <Polyline positions={routeLine} pathOptions={{ color: '#000000', weight: 7, opacity: 0.35 }} />
-            <Polyline
-              positions={routeLine}
-              pathOptions={{ color: '#f97316', weight: 3.5, opacity: 0.95, dashArray: '1 0' }}
-            />
+            <Polyline positions={routeLine} pathOptions={{ color: '#000000', weight: 7, opacity: 0.45 }} />
+            {/* Gradient route: cyan (first sighting) → amber (latest) */}
+            {routeLine.slice(1).map((pt, i) => (
+              <Polyline
+                key={`seg-${i}`}
+                positions={[routeLine[i], pt]}
+                pathOptions={{
+                  color: lerpColor('#22D3EE', '#F5A524', i / Math.max(routeLine.length - 2, 1)),
+                  weight: 3.5,
+                  opacity: 0.95,
+                }}
+              />
+            ))}
           </>
         )}
 
@@ -206,7 +222,7 @@ export function MapView({
           <Marker
             key={`${p.eventId}-${p.sequence}`}
             position={[p.latitude, p.longitude]}
-            icon={routeIcon(p.sequence, 'HIGH', p.sequence === activeRouteSequence, '#2563eb')}
+            icon={routeIcon(p.sequence, 'HIGH', p.sequence === activeRouteSequence, '#22D3EE')}
             eventHandlers={{ click: () => onSelectRoutePoint?.(p) }}
             zIndexOffset={500}
             title={`Sighting ${p.sequence} — ${p.cameraName}`}

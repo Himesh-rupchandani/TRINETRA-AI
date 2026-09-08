@@ -69,7 +69,7 @@ export function RoutePopup({ point, plate }: { point: RoutePoint; plate?: string
   return (
     <div className="min-w-[210px] p-2.5 text-ink">
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-high font-mono text-2xs font-bold text-black">
+        <span className="grid h-5 w-5 place-items-center rounded-full border border-brand bg-surface-2 font-mono text-2xs font-bold text-brand">
           {point.sequence}
         </span>
         <p className="font-mono text-xs font-bold">{point.cameraName}</p>

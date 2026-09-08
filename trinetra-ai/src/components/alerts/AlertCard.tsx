@@ -1,22 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, CheckCircle2, FileImage, Map, Siren } from 'lucide-react';
+import { CheckCircle2, Crosshair, FileImage, Map, Siren } from 'lucide-react';
 import type { Alert } from '@/types';
 import { AlertStatusChip, SeverityChip } from '@/components/common/Chips';
-import { IconTile, type TileTone } from '@/components/common/IconTile';
 import { PlateLink } from '@/components/common/Links';
 import { ConfirmDialog } from '@/components/common/Modal';
 import { useToast } from '@/features/system/ToastProvider';
 import { cn, formatTime, relativeTime, severityBar } from '@/lib/utils';
 
-const SEVERITY_TONE: Record<Alert['severity'], TileTone> = {
-  CRITICAL: 'red',
-  HIGH: 'orange',
-  MEDIUM: 'amber',
-  LOW: 'sky',
-  INFO: 'slate',
-};
-
+/**
+ * Alert triage row. Severity language, top to bottom:
+ * 3px severity rail · severity chip · mono plate · mono confidence ·
+ * one-line reason · exactly one primary action (Trace). Critical + new
+ * alerts pulse so they are impossible to miss from across the room.
+ */
 export function AlertCard({
   alert,
   onAcknowledge,
@@ -60,96 +57,118 @@ export function AlertCard({
     }
   };
 
+  const critical = alert.status === 'NEW' && alert.severity === 'CRITICAL';
+
   return (
     <article
       className={cn(
-        'panel relative overflow-hidden transition-shadow hover:shadow-cardHover',
-        alert.status === 'NEW' && alert.severity === 'CRITICAL' && 'animate-pulse-ring',
+        'panel card-hover relative overflow-hidden',
+        critical && 'animate-pulse-ring',
+        compact ? 'rounded-lg' : 'rounded-xl',
       )}
       aria-label={`${alert.severity} alert for ${alert.plate}`}
     >
-      <span className={cn('absolute inset-y-0 left-0 w-1', severityBar[alert.severity])} aria-hidden />
+      {/* 3px severity rail */}
+      <span className={cn('absolute inset-y-0 left-0 w-[3px]', severityBar[alert.severity])} aria-hidden />
 
-      <div className="flex flex-wrap items-start justify-between gap-3 py-3 pl-4 pr-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <IconTile tone={SEVERITY_TONE[alert.severity]} size="md">
-            <Siren size={15} className={alert.status === 'NEW' ? '' : 'opacity-60'} aria-hidden />
-          </IconTile>
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink">{alert.category}</p>
-            <p className="mt-0.5 text-2xs text-ink-faint">
-              {formatTime(alert.createdAt)} · {relativeTime(alert.createdAt)}
+      <div className={cn('flex flex-wrap items-start gap-x-3 gap-y-2 py-2.5 pl-4 pr-3.5', compact && 'py-2')}>
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <Siren
+            size={15}
+            className={cn(
+              'mt-0.5 shrink-0',
+              critical ? 'animate-pulse text-critical' : 'text-ink-faint',
+            )}
+            aria-hidden
+          />
+          <div className="min-w-0 flex-1">
+            {/* Line 1: category + chips */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="text-xs font-bold uppercase tracking-wide text-ink">{alert.category}</p>
+              <SeverityChip severity={alert.severity} />
+              {!compact && <AlertStatusChip status={alert.status} />}
+            </div>
+
+            {/* Line 2: mono plate + one-line reason */}
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+              <PlateLink plate={alert.plate} size="sm" className="shrink-0" />
+              <p className="min-w-0 flex-1 truncate text-2xs text-ink-muted">
+                {alert.note?.trim() || `Watchlist match — ${alert.category.toLowerCase()}`}
+              </p>
+            </div>
+
+            {/* Line 3: where, when, how sure — all mono where numeric */}
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-ink-faint">
+              <span className="font-mono">{alert.cameraName ?? alert.cameraId.toUpperCase()}</span>
+              <span aria-hidden>·</span>
+              <span className="max-w-[220px] truncate">{alert.location}</span>
+              <span aria-hidden>·</span>
+              <time className="font-mono tabular-nums" dateTime={alert.createdAt}>
+                {formatTime(alert.createdAt)}
+              </time>
+              <span className="text-ink-faint/70">({relativeTime(alert.createdAt)})</span>
+              {alert.confidence != null && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="font-mono font-semibold tabular-nums text-ink-muted">
+                    {alert.confidence.toFixed(1)}% match
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <SeverityChip severity={alert.severity} />
-          <AlertStatusChip status={alert.status} />
-        </div>
-      </div>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 pb-3 sm:grid-cols-4">
-        <div>
-          <dt className="kv-label">Vehicle</dt>
-          <dd>
-            <PlateLink plate={alert.plate} size="sm" />
-          </dd>
-        </div>
-        <div>
-          <dt className="kv-label">Camera</dt>
-          <dd className="kv-value font-mono">{alert.cameraName ?? alert.cameraId.toUpperCase()}</dd>
-        </div>
-        <div className="col-span-2 sm:col-span-1">
-          <dt className="kv-label">Place</dt>
-          <dd className="kv-value truncate">{alert.location}</dd>
-        </div>
-        <div>
-          <dt className="kv-label">Plate match</dt>
-          <dd className="kv-value font-mono tabular-nums">
-            {alert.confidence != null ? `${alert.confidence.toFixed(1)}%` : '—'}
-          </dd>
-        </div>
-      </dl>
-
-      {!compact && (alert.acknowledgedBy || alert.note) && (
-        <p className="border-t border-line/60 py-2 pl-4 pr-4 text-2xs text-ink-faint">
-          {alert.acknowledgedBy && <>Seen by {alert.acknowledgedBy}. </>}
-          {alert.note}
-        </p>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
-        <button type="button" className="btn-tint btn-xs" onClick={() => navigate(`/vehicles/${alert.plate}`)}>
-          Look up this vehicle
-        </button>
-        <button type="button" className="btn-ghost btn-xs" onClick={() => navigate(`/cameras/${alert.cameraId}`)}>
-          <Camera size={12} aria-hidden /> Open camera
-        </button>
-        <button
-          type="button"
-          className="btn-ghost btn-xs"
-          onClick={() => navigate(`/gis?plate=${alert.plate}&focus=${alert.cameraId}`)}
-        >
-          <Map size={12} aria-hidden /> Show on map
-        </button>
-        {onViewEvidence && (
-          <button type="button" className="btn-ghost btn-xs" onClick={() => onViewEvidence(alert)}>
-            <FileImage size={12} aria-hidden /> See photo
+        {/* Actions — one primary, the rest quiet */}
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <button type="button" className="btn-tint btn-xs" onClick={() => navigate(`/vehicles/${alert.plate}`)}>
+            <Crosshair size={12} aria-hidden /> Trace
           </button>
-        )}
-        <div className="ml-auto flex gap-2">
-          {alert.status === 'NEW' && (
-            <button type="button" className="btn-danger btn-xs" onClick={ack} disabled={busy}>
+          {onViewEvidence && (
+            <button
+              type="button"
+              className="btn-ghost btn-xs"
+              onClick={() => onViewEvidence(alert)}
+              aria-label={`View evidence for ${alert.plate}`}
+            >
+              <FileImage size={12} aria-hidden />
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-ghost btn-xs"
+            onClick={() => navigate(`/gis?plate=${alert.plate}&focus=${alert.cameraId}`)}
+            aria-label={`Show ${alert.plate} on the map`}
+          >
+            <Map size={12} aria-hidden />
+          </button>
+          {alert.status === 'NEW' ? (
+            <button
+              type="button"
+              className="btn-ghost btn-xs"
+              onClick={ack}
+              disabled={busy}
+              title="Acknowledge this alert"
+            >
               <CheckCircle2 size={12} aria-hidden /> Mark as seen
             </button>
-          )}
-          {alert.status === 'ACKNOWLEDGED' && onResolve && (
-            <button type="button" className="btn-ghost btn-xs" onClick={() => setConfirmResolve(true)} disabled={busy}>
-              Close alert
-            </button>
+          ) : (
+            alert.status === 'ACKNOWLEDGED' &&
+            onResolve && (
+              <button type="button" className="btn-ghost btn-xs" onClick={() => setConfirmResolve(true)} disabled={busy}>
+                Close
+              </button>
+            )
           )}
         </div>
       </div>
+
+      {!compact && (alert.acknowledgedBy || alert.resolvedAt) && (
+        <p className="border-t border-line/60 py-1.5 pl-4 pr-3.5 text-2xs text-ink-faint">
+          {alert.acknowledgedBy && <>Seen by {alert.acknowledgedBy}. </>}
+          {alert.resolvedAt && <>Closed {relativeTime(alert.resolvedAt)}.</>}
+        </p>
+      )}
 
       <ConfirmDialog
         open={confirmResolve}

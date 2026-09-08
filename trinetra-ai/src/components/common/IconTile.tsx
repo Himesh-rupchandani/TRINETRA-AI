@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 /**
  * Colored rounded-square icon tile — the visual signature of the design.
  * Used in the sidebar, page headers, KPI cards, hero and list rows.
+ * Tones are dark-tuned: translucent 400-level wells with 300-level ink.
  */
 export type TileTone =
   | 'blue'
@@ -16,18 +17,18 @@ export type TileTone =
   | 'slate';
 
 export const TILE_TONES: Record<TileTone, string> = {
-  blue: 'bg-blue-500/12 text-blue-600',
-  sky: 'bg-sky-500/12 text-sky-600',
-  green: 'bg-emerald-500/12 text-emerald-600',
-  orange: 'bg-orange-500/12 text-orange-600',
-  amber: 'bg-amber-500/15 text-amber-600',
-  purple: 'bg-violet-500/12 text-violet-600',
-  red: 'bg-rose-500/12 text-rose-600',
-  slate: 'bg-slate-500/12 text-slate-500',
+  blue: 'bg-cyan-400/10 text-cyan-300 border border-cyan-400/15',
+  sky: 'bg-sky-400/10 text-sky-300 border border-sky-400/15',
+  green: 'bg-emerald-400/10 text-emerald-300 border border-emerald-400/15',
+  orange: 'bg-orange-400/10 text-orange-300 border border-orange-400/15',
+  amber: 'bg-amber-400/10 text-amber-300 border border-amber-400/15',
+  purple: 'bg-violet-400/10 text-violet-300 border border-violet-400/15',
+  red: 'bg-rose-400/10 text-rose-300 border border-rose-400/15',
+  slate: 'bg-slate-400/10 text-slate-300 border border-slate-400/15',
 };
 
 /** Solid tile used for the active sidebar item. */
-export const TILE_ACTIVE = 'bg-brand text-white shadow-sm';
+export const TILE_ACTIVE = 'bg-brand text-on-brand border border-brand shadow-glow';
 
 const SIZES = {
   sm: 'h-8 w-8 rounded-lg',

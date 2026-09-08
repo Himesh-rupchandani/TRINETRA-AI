@@ -4,7 +4,7 @@ import { Layers, Map as MapIcon, Route, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { MapLegend } from '@/components/gis/MapLegend';
-import { Panel, EmptyState } from '@/components/common/Panel';
+import { Panel, LoadingState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
 import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { useCameras } from '@/hooks/useCameras';
@@ -171,7 +171,7 @@ export default function GIS() {
           ) : (
             <Panel title="All cameras" icon={MapIcon} className="min-h-0 flex-1" bodyClassName="overflow-y-auto">
               {cameras.length === 0 ? (
-                <EmptyState title="Loading network" />
+                <LoadingState label="Loading camera network" rows={6} />
               ) : (
                 <ul className="divide-y divide-line/60">
                   {cameras.map((c) => (

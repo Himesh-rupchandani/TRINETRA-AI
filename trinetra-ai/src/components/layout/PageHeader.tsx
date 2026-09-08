@@ -21,21 +21,21 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-line bg-surface-1 px-4 py-4 sm:px-5',
+        'flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-line bg-surface-1 px-4 py-3 sm:px-5',
         className,
       )}
     >
       <div className="flex min-w-0 items-center gap-3">
         {Icon && (
           <IconTile tone={tone} size="lg">
-            <Icon size={20} />
+            <Icon size={19} />
           </IconTile>
         )}
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold leading-tight tracking-tight text-ink sm:text-2xl">
+          <h1 className="truncate text-[22px] font-semibold leading-tight tracking-tight text-ink">
             {title}
           </h1>
-          {subtitle && <div className="mt-0.5 text-sm leading-snug text-ink-muted">{subtitle}</div>}
+          {subtitle && <div className="mt-0.5 text-xs leading-snug text-ink-muted">{subtitle}</div>}
         </div>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

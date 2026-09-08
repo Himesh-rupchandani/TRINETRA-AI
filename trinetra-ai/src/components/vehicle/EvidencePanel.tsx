@@ -56,11 +56,11 @@ export function EvidencePanel({
             />
             {/* detection box */}
             <div
-              className="pointer-events-none absolute left-1/2 top-1/2 h-[54%] w-[46%] -translate-x-1/2 -translate-y-[53%] border-2 border-sky-400/90"
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[54%] w-[46%] -translate-x-1/2 -translate-y-[53%] border-2 border-brand/90"
               aria-hidden
             />
             {/* detection label */}
-            <div className="pointer-events-none absolute left-1/2 top-[25%] -translate-x-1/2 whitespace-nowrap bg-sky-400 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-900">
+            <div className="pointer-events-none absolute left-1/2 top-[25%] -translate-x-1/2 whitespace-nowrap bg-brand px-1.5 py-0.5 font-mono text-[10px] font-bold text-on-brand">
               {prettyVehicleClass(event.vehicleClass)} · TRACK {trackId(event.id)}
             </div>
             {/* plate on the vehicle */}

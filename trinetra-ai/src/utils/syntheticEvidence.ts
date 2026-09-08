@@ -75,8 +75,8 @@ export function syntheticFrame({
   <circle cx="${x + w - 34}" cy="${y + bh}" r="13" fill="#161b21"/>
   <rect x="${x + w / 2 - 34}" y="${y + bh - 30}" width="68" height="20" rx="2" fill="#f2f5f8"/>
   <text x="${x + w / 2}" y="${y + bh - 15}" font-family="monospace" font-size="12" font-weight="bold" fill="#11161c" text-anchor="middle">${esc(plate)}</text>
-  <rect x="${x - 4}" y="${y - 4}" width="${w + 8}" height="${bh + 26}" fill="none" stroke="#38bdf8" stroke-width="2"/>
-  <rect x="${x - 4}" y="${y - 24}" width="${Math.min(w + 8, 190)}" height="20" fill="#38bdf8"/>
+  <rect x="${x - 4}" y="${y - 4}" width="${w + 8}" height="${bh + 26}" fill="none" stroke="#22D3EE" stroke-width="2"/>
+  <rect x="${x - 4}" y="${y - 24}" width="${Math.min(w + 8, 190)}" height="20" fill="#22D3EE"/>
   <text x="${x + 2}" y="${y - 10}" font-family="monospace" font-size="12" font-weight="bold" fill="#06131c">${esc(vehicleClass)} · TRACK ${(h % 900) + 100}</text>
   <rect width="640" height="360" fill="url(#scan)"/>
   <rect x="0" y="0" width="640" height="26" fill="#000000" opacity="0.55"/>

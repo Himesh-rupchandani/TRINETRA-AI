@@ -40,7 +40,7 @@ export function MovementTimeline({
               className={cn(
                 'absolute left-0 top-1 grid h-[26px] w-[26px] place-items-center rounded-full border-2 font-mono text-2xs font-bold',
                 active
-                  ? 'border-brand bg-brand text-white shadow-sm'
+                  ? 'border-brand bg-brand text-on-brand shadow-glow'
                   : 'border-brand/30 bg-brand/10 text-brand',
               )}
               aria-hidden

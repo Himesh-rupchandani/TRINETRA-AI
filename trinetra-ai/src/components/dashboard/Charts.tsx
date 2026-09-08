@@ -14,18 +14,20 @@ import type { VehicleEvent } from '@/types';
 
 const AXIS = { fontSize: 10, fill: 'rgb(var(--ink-faint))' };
 
+/** Shared dark tooltip — 1px hairline border, no chart background fill. */
 function tooltipStyle() {
   return {
-    background: 'rgb(var(--surface-1))',
-    border: '1px solid rgb(var(--line))',
-    borderRadius: 4,
+    background: 'rgb(var(--surface-2))',
+    border: '1px solid rgb(var(--line-strong))',
+    borderRadius: 8,
     fontSize: 11,
     color: 'rgb(var(--ink))',
-    padding: '6px 8px',
+    padding: '6px 9px',
+    boxShadow: '0 12px 32px rgb(0 0 0 / 0.55)',
   };
 }
 
-/** Detections per hour across the retained window. */
+/** Detections per hour across the retained window. Primary series: cyan. */
 export const DetectionTrend = memo(function DetectionTrend({ events }: { events: VehicleEvent[] }) {
   const data = useMemo(() => {
     const buckets = new Map<number, number>();
@@ -45,11 +47,11 @@ export const DetectionTrend = memo(function DetectionTrend({ events }: { events:
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -22 }}>
         <defs>
           <linearGradient id="detGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgb(var(--brand))" stopOpacity={0.45} />
+            <stop offset="0%" stopColor="rgb(var(--brand))" stopOpacity={0.32} />
             <stop offset="100%" stopColor="rgb(var(--brand))" stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke="rgb(var(--line))" strokeDasharray="2 3" vertical={false} />
+        <CartesianGrid stroke="rgb(255 255 255 / 0.08)" strokeDasharray="2 4" vertical={false} />
         <XAxis dataKey="hour" tick={AXIS} tickLine={false} axisLine={false} interval={3} />
         <YAxis tick={AXIS} tickLine={false} axisLine={false} width={38} allowDecimals={false} />
         <Tooltip contentStyle={tooltipStyle()} cursor={{ stroke: 'rgb(var(--line-strong))' }} />
@@ -66,7 +68,7 @@ export const DetectionTrend = memo(function DetectionTrend({ events }: { events:
   );
 });
 
-/** Busiest cameras by detection volume. */
+/** Busiest cameras by detection volume. Secondary series: amber. */
 export const CameraActivityChart = memo(function CameraActivityChart({
   events,
   limit = 8,
@@ -88,18 +90,18 @@ export const CameraActivityChart = memo(function CameraActivityChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, bottom: 0, left: 8 }}>
-        <CartesianGrid stroke="rgb(var(--line))" strokeDasharray="2 3" horizontal={false} />
+        <CartesianGrid stroke="rgb(255 255 255 / 0.08)" strokeDasharray="2 4" horizontal={false} />
         <XAxis type="number" tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} />
         <YAxis
           type="category"
           dataKey="camera"
-          tick={{ ...AXIS, fontFamily: 'monospace' }}
+          tick={{ ...AXIS, fontFamily: 'JetBrains Mono, monospace' }}
           tickLine={false}
           axisLine={false}
           width={58}
         />
-        <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: 'rgb(var(--surface-3))' }} />
-        <Bar dataKey="count" name="Detections" fill="rgb(var(--brand))" radius={[0, 2, 2, 0]} barSize={11} />
+        <Tooltip contentStyle={tooltipStyle()} cursor={{ fill: 'rgb(var(--surface-3) / 0.4)' }} />
+        <Bar dataKey="count" name="Detections" fill="#F5A524" radius={[0, 2, 2, 0]} barSize={11} />
       </BarChart>
     </ResponsiveContainer>
   );

@@ -28,19 +28,20 @@ export const config = {
     ] as [number, number],
     zoom: Number(env.VITE_MAP_DEFAULT_ZOOM ?? 7),
     /**
-     * Purpose-built light canvas basemap (keyless, attribution required).
-     * `base` carries geometry, `labels` is the transparent reference overlay —
-     * the same split a GIS operator would expect. The dark canvas set was
-     * removed together with Night/Dark Mode: Light tiles only.
+     * Dark canvas basemap matching the "Sentinel Ops" command-room surfaces
+     * (keyless, attribution required). `base` carries geometry, `labels` is
+     * the transparent reference overlay — the same split a GIS operator
+     * would expect. If a tile server is unreachable the map degrades to the
+     * dark canvas colour via ERROR_TILE in MapView.
      */
     tiles: {
-      light: {
-        base: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-        labels:
-          'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+      dark: {
+        base: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        labels: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
       },
     },
-    tileAttribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',
+    tileAttribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
   },
   demo: {
     primaryPlate: 'GJ01AB1234',

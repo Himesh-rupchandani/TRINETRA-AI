@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Car, MapPin, Route, Search as SearchIcon, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
@@ -80,6 +80,11 @@ export default function Vehicles() {
               <EmptyState
                 title={`No sightings for ${result.plate}`}
                 detail="This registration number has not been recorded by any camera in the retained window. Check the format or widen the time range in the Event Explorer."
+                action={
+                  <Link to="/events" className="btn-tint btn-xs mt-1">
+                    Open Event Explorer
+                  </Link>
+                }
               />
             </div>
           )}

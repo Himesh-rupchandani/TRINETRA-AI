@@ -1,8 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, Car, MapPin, Maximize2, Video } from 'lucide-react';
+import { Activity, MapPin, Maximize2, Radio, Video } from 'lucide-react';
 import type { Camera } from '@/types';
-import { StatusChip } from '@/components/common/Chips';
 import { cn, formatTime, relativeTime } from '@/lib/utils';
 import { config } from '@/lib/config';
 import { cameraStill, hideBrokenImage } from '@/utils/mediaAssets';
@@ -12,30 +11,126 @@ interface Props {
   onView?: (camera: Camera) => void;
   compact?: boolean;
   selected?: boolean;
-  variant?: 'card' | 'list';
+  variant?: 'card' | 'list' | 'feed';
 }
 
+/** Deterministic demo latency for a camera (mock mode only, 60–160 ms). */
+function demoLatencyMs(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 997;
+  return 60 + (h % 100);
+}
+
+/** Detections per minute over the recent window we actually hold. */
+function detectionsPerMinute(recentCount: number, windowMinutes: number): string {
+  if (!recentCount && !windowMinutes) return '—';
+  return (recentCount / Math.max(windowMinutes, 1)).toFixed(1);
+}
+
+const STATE_BADGE: Record<Camera['status'], { label: string; cls: string }> = {
+  ONLINE: { label: 'LIVE', cls: 'text-online' },
+  DEGRADED: { label: 'POOR', cls: 'text-degraded' },
+  OFFLINE: { label: 'OFFLINE', cls: 'text-offline' },
+};
+
 /**
- * Registry card. Deliberately does NOT mount a stream — feeds are only
- * loaded when an operator explicitly opens one (see performance notes).
- * In demo mode a clearly-labelled synthetic preview is shown instead.
+ * Registry card / mosaic feed tile. Deliberately does NOT mount a stream —
+ * feeds are only loaded when an operator explicitly opens one (see
+ * performance notes). Every tile carries the control-room HUD: camera ID,
+ * location, frame rate / latency and detections-per-minute, over a scanline
+ * surface with a slow radar sweep.
  */
-export const CameraCard = memo(function CameraCard({ camera, onView, compact, selected, variant = 'card' }: Props) {
+export const CameraCard = memo(function CameraCard({
+  camera,
+  onView,
+  compact,
+  selected,
+  variant = 'card',
+  recentCount,
+  windowMinutes = 15,
+}: Props & { recentCount?: number; windowMinutes?: number }) {
   const preview = useMemo(
     () => (config.useMocks ? cameraStill(camera.id) : null),
     [camera.id],
   );
 
+  const dpm = detectionsPerMinute(recentCount ?? camera.eventCount24h ?? 0, recentCount != null ? windowMinutes : 1440);
+  const fps = camera.fps ? camera.fps.toFixed(0) : '—';
+  const state = STATE_BADGE[camera.status];
+
+  /* ---------------- Mosaic feed tile (dashboard camera wall) ---------------- */
+  if (variant === 'feed') {
+    return (
+      <Link
+        to={`/cameras/${camera.id}`}
+        className={cn(
+          'card-hover group relative block overflow-hidden rounded-lg border border-line bg-surface-2',
+          'aspect-video focus-visible:rounded-lg',
+          selected && 'border-brand/60 ring-1 ring-brand/30',
+        )}
+        aria-label={`${camera.name} — ${camera.location}. Open camera.`}
+      >
+        {/* Poster / placeholder */}
+        <span className="grid h-full w-full place-items-center text-ink-faint" aria-hidden>
+          <Video size={18} />
+        </span>
+        {preview && (
+          <img
+            src={preview}
+            alt=""
+            onError={hideBrokenImage}
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="lazy"
+          />
+        )}
+
+        {/* CRT scanlines + radar sweep */}
+        <span className="scanline pointer-events-none absolute inset-0" aria-hidden />
+        <span className="scan-sweep" aria-hidden />
+
+        {/* HUD — top row: camera ID + state */}
+        <span className="hud-chip absolute left-1.5 top-1.5 text-brand">{camera.name}</span>
+        <span className={cn('hud-chip absolute right-1.5 top-1.5', state.cls)}>
+          <span
+            className={cn(
+              'h-1.5 w-1.5 rounded-full bg-current',
+              camera.status === 'ONLINE' && 'live-dot',
+            )}
+            aria-hidden
+          />
+          {state.label}
+        </span>
+
+        {/* HUD — bottom bar: location + fps/latency + detections/min */}
+        <span className="absolute inset-x-1.5 bottom-1.5 flex items-center gap-1.5">
+          <span className="hud-chip min-w-0 flex-1 justify-start text-white/75">
+            <MapPin size={9} className="shrink-0" aria-hidden />
+            <span className="truncate">{camera.location}</span>
+          </span>
+          <span className="hud-chip shrink-0 tabular-nums text-white/85">
+            {fps} FPS{config.useMocks && ` · ${demoLatencyMs(camera.id)} MS`}
+          </span>
+          <span className="hud-chip shrink-0 tabular-nums text-accent">{dpm}/MIN</span>
+        </span>
+
+        {preview && (
+          <span className="hud-chip absolute left-1.5 top-9 text-accent/90">DEMO</span>
+        )}
+      </Link>
+    );
+  }
+
+  /* ---------------- Compact list row ---------------- */
   if (variant === 'list') {
     return (
       <Link
         to={`/cameras/${camera.id}`}
         className={cn(
-          'flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-2.5 transition-colors hover:border-line-strong',
+          'card-hover flex items-center gap-3 rounded-lg border border-line bg-surface-1 p-2.5',
           selected && 'border-brand/50 ring-1 ring-brand/20',
         )}
       >
-        <span className="relative grid h-12 w-[76px] shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-surface-2 text-ink-faint">
+        <span className="scanline relative grid h-12 w-[76px] shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-surface-2 text-ink-faint">
           <Video size={16} aria-hidden />
           {preview && (
             <img
@@ -54,15 +149,19 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
             {camera.location}
           </p>
         </div>
-        <StatusChip status={camera.status} />
+        <span className="flex flex-col items-end gap-0.5">
+          <span className="font-mono text-2xs tabular-nums text-ink-faint">{dpm}/min</span>
+          <span className={cn('font-mono text-2xs font-semibold', state.cls)}>{state.label}</span>
+        </span>
       </Link>
     );
   }
 
+  /* ---------------- Registry card ---------------- */
   return (
     <article
       className={cn(
-        'panel group flex flex-col overflow-hidden transition-shadow hover:shadow-cardHover',
+        'panel card-hover group flex flex-col overflow-hidden hover:shadow-cardHover',
         selected && 'border-brand/60 ring-1 ring-brand/30',
       )}
     >
@@ -80,10 +179,25 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
               loading="lazy"
             />
           )}
+          {/* HUD */}
+          <span className="hud-chip absolute left-1.5 top-1.5 text-brand">{camera.name}</span>
+          <span className={cn('hud-chip absolute right-1.5 top-1.5', state.cls)}>
+            <span
+              className={cn(
+                'h-1.5 w-1.5 rounded-full bg-current',
+                camera.status === 'ONLINE' && 'live-dot',
+              )}
+              aria-hidden
+            />
+            {state.label}
+          </span>
+          <span className="hud-chip absolute bottom-1.5 right-1.5 tabular-nums text-white/85">
+            {fps} FPS · {dpm}/MIN
+          </span>
+          <span className="scanline pointer-events-none absolute inset-0" aria-hidden />
+          <span className="scan-sweep" aria-hidden />
           {preview && (
-            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-amber-300">
-              DEMO
-            </span>
+            <span className="hud-chip absolute bottom-1.5 left-1.5 text-accent/90">DEMO</span>
           )}
         </div>
       )}
@@ -99,7 +213,10 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
             {camera.location}
           </p>
         </div>
-        <StatusChip status={camera.status} />
+        <span className={cn('flex items-center gap-1.5 font-mono text-2xs font-semibold', state.cls)}>
+          <Radio size={11} aria-hidden />
+          {state.label}
+        </span>
       </div>
 
       {!compact && (
@@ -109,23 +226,23 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
           <dt className="text-ink-faint">Video format</dt>
           <dd className="text-right font-mono text-ink-muted">{camera.codec ?? '—'}</dd>
           <dt className="text-ink-faint">Picture size</dt>
-          <dd className="text-right font-mono text-ink-muted">
+          <dd className="text-right font-mono tabular-nums text-ink-muted">
             {camera.width ? `${camera.width}×${camera.height}` : '—'}
           </dd>
           <dt className="text-ink-faint">Last vehicle</dt>
-          <dd className="text-right font-mono text-ink-muted">
+          <dd className="text-right font-mono tabular-nums text-ink-muted">
             {camera.lastEventAt ? formatTime(camera.lastEventAt) : '—'}
           </dd>
         </dl>
       )}
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2.5 gap-y-2 border-t border-line/70 px-4 py-3">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2.5 gap-y-2 border-t border-line/70 px-4 py-2.5">
         <span
           className="flex items-center gap-1.5 whitespace-nowrap text-2xs text-ink-faint"
           title="Vehicles seen by this camera in the last 24 hours"
         >
           <Activity size={12} aria-hidden />
-          {camera.eventCount24h ?? 0} {(camera.eventCount24h ?? 0) === 1 ? 'vehicle' : 'vehicles'} · {relativeTime(camera.lastEventAt)}
+          <span className="font-mono tabular-nums">{camera.eventCount24h ?? 0}</span> · {relativeTime(camera.lastEventAt)}
         </span>
         <div className="ml-auto flex items-center gap-2">
           {onView && (
@@ -138,8 +255,8 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
               <Maximize2 size={12} aria-hidden /> Quick look
             </button>
           )}
-          <Link to={`/cameras/${camera.id}`} className="btn-primary btn-xs">
-            <Car size={12} aria-hidden /> Open camera
+          <Link to={`/cameras/${camera.id}`} className="btn-tint btn-xs">
+            Open camera
           </Link>
         </div>
       </div>

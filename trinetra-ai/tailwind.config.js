@@ -1,7 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  // Light Mode only: Night/Dark Mode was removed, so there is no darkMode
-  // variant ('class'/'media') registered here anymore.
+  // Single always-on dark theme ("Sentinel Ops"). The palette is driven by
+  // CSS variables in src/index.css :root; the severity/status ramp below is
+  // re-tuned for dark surfaces (WCAG-checked against #0D1524 panels).
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
@@ -10,7 +11,7 @@ export default {
         mono: ['JetBrains Mono', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       colors: {
-        // Surface scale — control room neutrals
+        // Surface scale — control room neutrals (see token table in index.css)
         surface: {
           0: 'rgb(var(--surface-0) / <alpha-value>)',
           1: 'rgb(var(--surface-1) / <alpha-value>)',
@@ -28,21 +29,25 @@ export default {
           DEFAULT: 'rgb(var(--brand) / <alpha-value>)',
           soft: 'rgb(var(--brand-soft) / <alpha-value>)',
         },
-        // Severity / status semantic tokens
-        critical: '#e11d48',
-        high: '#f97316',
-        medium: '#eab308',
-        low: '#0ea5e9',
-        info: '#64748b',
-        online: '#16a34a',
-        offline: '#dc2626',
-        degraded: '#d97706',
-        processing: '#2563eb',
+        // Near-black ink for text sitting on cyan fills (10.4:1 on #22D3EE)
+        'on-brand': 'rgb(var(--on-brand) / <alpha-value>)',
+        // Warm secondary — accents only
+        accent: '#F5A524',
+        // Severity / status semantic tokens — dark-tuned ramp
+        critical: '#FF3B5C',
+        high: '#FF8A3D',
+        medium: '#FFC53D',
+        low: '#38BDF8',
+        info: '#94A3B8',
+        online: '#34D399',
+        offline: '#F87171',
+        degraded: '#FBBF24',
+        processing: '#60A5FA',
       },
       fontSize: {
         // Legibility pass: everything is a step larger than a classic dense
         // console so the screen stays readable at arm's length in a control
-        // room, or on a duty officer's laptop.
+        // room, or on a duty officer's laptop / projector at 1440x900.
         '2xs': ['0.8125rem', { lineHeight: '1.2rem', letterSpacing: '0.01em' }],
         xs: ['0.875rem', { lineHeight: '1.25rem' }],
         sm: ['0.9375rem', { lineHeight: '1.4rem' }],
@@ -51,14 +56,16 @@ export default {
         xl: ['1.3125rem', { lineHeight: '1.85rem' }],
       },
       boxShadow: {
-        panel: '0 1px 2px rgb(15 23 42 / 0.05), 0 1px 6px rgb(15 23 42 / 0.04)',
-        cardHover: '0 4px 16px rgb(15 23 42 / 0.08)',
+        // Dark UIs read with hairlines, not shadows — keep these whisper-soft.
+        panel: '0 1px 2px rgb(0 0 0 / 0.35), 0 8px 28px -18px rgb(0 0 0 / 0.55)',
+        cardHover: '0 2px 4px rgb(0 0 0 / 0.4), 0 14px 36px -20px rgb(0 0 0 / 0.7)',
+        glow: '0 0 18px rgb(34 211 238 / 0.28)',
       },
       keyframes: {
         'pulse-ring': {
-          '0%': { boxShadow: '0 0 0 0 rgb(225 29 72 / 0.45)' },
-          '70%': { boxShadow: '0 0 0 8px rgb(225 29 72 / 0)' },
-          '100%': { boxShadow: '0 0 0 0 rgb(225 29 72 / 0)' },
+          '0%': { boxShadow: '0 0 0 0 rgb(255 59 92 / 0.5)' },
+          '70%': { boxShadow: '0 0 0 8px rgb(255 59 92 / 0)' },
+          '100%': { boxShadow: '0 0 0 0 rgb(255 59 92 / 0)' },
         },
         'slide-in': {
           from: { opacity: '0', transform: 'translateY(-6px)' },

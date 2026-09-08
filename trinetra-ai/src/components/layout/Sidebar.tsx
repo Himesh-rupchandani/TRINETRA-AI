@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { IconTile, type TileTone } from '@/components/common/IconTile';
+import { EyeMark } from '@/components/common/EyeMark';
 import { cn } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useOfficer } from '@/features/officer/OfficerProvider';
@@ -31,7 +32,7 @@ interface NavItem {
 
 const NAV: { section: string; items: NavItem[] }[] = [
   {
-    section: 'Main',
+    section: 'Operations',
     items: [
       { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, tone: 'blue', end: true },
       { to: '/vehicles', label: 'Find a Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
@@ -70,7 +71,7 @@ export function Sidebar({
     <>
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] lg:hidden"
           onClick={onClose}
           aria-hidden
         />
@@ -83,17 +84,17 @@ export function Sidebar({
         )}
         aria-label="Primary navigation"
       >
+        {/* Logo lockup — the third eye */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-3.5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand shadow-sm" aria-hidden>
-            <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M12 3 3 7.5v4.2c0 5 3.8 8.6 9 9.3 5.2-.7 9-4.3 9-9.3V7.5L12 3Z" />
-              <circle cx="12" cy="11" r="2.6" />
-            </svg>
+          <span className="relative grid h-9 w-9 shrink-0 place-items-center" aria-hidden>
+            <EyeMark size={36} />
           </span>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold tracking-tight text-ink">TRINETRA AI</p>
-              <p className="truncate text-2xs text-ink-faint">Intelligent Vision</p>
+              <p className="truncate text-sm font-extrabold tracking-[0.02em] text-ink">TRINETRA AI</p>
+              <p className="truncate text-[10px] font-medium uppercase tracking-[0.14em] text-brand/80">
+                The third eye
+              </p>
             </div>
           )}
           <button
@@ -109,11 +110,7 @@ export function Sidebar({
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {NAV.map((group) => (
             <div key={group.section} className="mb-4">
-              {!collapsed && (
-                <p className="px-2 pb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-ink-faint/80">
-                  {group.section}
-                </p>
-              )}
+              {!collapsed && <p className="section-label px-2 pb-2">{group.section}</p>}
               <ul className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
@@ -127,7 +124,7 @@ export function Sidebar({
                         title={collapsed ? `${item.label} — ${item.hint}` : undefined}
                         className={({ isActive }) =>
                           cn(
-                            'group relative flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors',
+                            'group relative flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors',
                             isActive
                               ? 'bg-brand/10'
                               : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
@@ -136,6 +133,12 @@ export function Sidebar({
                       >
                         {({ isActive }) => (
                           <>
+                            {isActive && (
+                              <span
+                                className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r bg-brand"
+                                aria-hidden
+                              />
+                            )}
                             <IconTile tone={item.tone} size="md" active={isActive}>
                               <Icon size={17} />
                             </IconTile>
@@ -157,7 +160,7 @@ export function Sidebar({
                             {badgeCount > 0 && (
                               <span
                                 className={cn(
-                                  'ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-critical px-1 font-mono text-2xs font-bold text-white',
+                                  'ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-critical px-1 font-mono text-2xs font-bold text-[#16040B]',
                                   collapsed && 'absolute right-0.5 top-0.5 ml-0 h-4 min-w-4',
                                 )}
                                 aria-label={`${badgeCount} active alerts`}
@@ -177,21 +180,21 @@ export function Sidebar({
         </nav>
 
         {!collapsed && (
-          <div className="px-3 pb-4">
+          <div className="px-3 pb-3">
             <button
               type="button"
               onClick={() => {
                 onClose();
                 navigate('/profile');
               }}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-surface-2/70 p-3 text-left transition-colors hover:bg-surface-2"
+              className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface-2/60 p-2.5 text-left transition-colors hover:border-line-strong hover:bg-surface-2"
               aria-label="Open officer profile"
             >
               {officer ? (
                 <img
                   src={officer.photoUrl}
                   alt=""
-                  className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-line"
+                  className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-line-strong"
                   aria-hidden
                 />
               ) : (
@@ -210,6 +213,24 @@ export function Sidebar({
             </button>
           </div>
         )}
+
+        {/* Persistent brand badge — every screenshot is on-brand. */}
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-2 border-t border-line px-3.5 py-2.5',
+            collapsed && 'justify-center px-0',
+          )}
+          title="Sentinel Hackathon · TRINETRA AI"
+        >
+          <EyeMark size={18} sweep={false} />
+          {!collapsed && (
+            <p className="text-[10px] font-semibold uppercase leading-tight tracking-[0.1em] text-ink-faint">
+              Sentinel Hackathon
+              <span className="px-1 text-ink-faint">·</span>
+              <span className="text-ink-muted">TRINETRA AI</span>
+            </p>
+          )}
+        </div>
       </aside>
     </>
   );
