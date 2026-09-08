@@ -307,7 +307,7 @@ export default function Dashboard() {
       {/* Who built this and what it does — plain words, no jargon. */}
       <section className="panel overflow-hidden" aria-label="About the team and the project">
         <div className="grid lg:grid-cols-2">
-          <div className="bg-gradient-to-br from-blue-100/60 via-blue-50/40 to-white p-5 sm:p-6">
+          <div className="flex flex-col bg-gradient-to-br from-blue-100/60 via-blue-50/40 to-white p-5 sm:p-6">
             <div className="flex items-center gap-3">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md" aria-hidden>
                 <Cctv size={20} aria-hidden />
@@ -319,7 +319,7 @@ export default function Dashboard() {
                 <h2 className="mt-1.5 text-lg font-extrabold tracking-tight text-ink">One screen for every camera in the city</h2>
               </div>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+            <p className="mb-4 mt-3 text-sm leading-relaxed text-ink-muted">
               TRINETRA AI started with a simple observation: a control room may have dozens
               of CCTV feeds, but an officer can only watch a few at a time. So we joined
               the pieces together — live cameras, automatic number-plate reading, and a
@@ -327,59 +327,35 @@ export default function Dashboard() {
               any camera, the control room knows within seconds, with the photo, the
               camera location, and the route it took.
             </p>
-            <ul className="mt-4 space-y-2">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => navigate('/cameras')}
-                  className="group flex w-full items-center gap-3 rounded-xl border border-line bg-white/80 p-2.5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow"
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm" aria-hidden>
-                    <Cctv size={16} aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-ink">Live Cameras</span>
-                    <span className="block truncate text-2xs text-ink-muted">Open any feed straight from the bar above.</span>
-                  </span>
-                  <ArrowRight size={15} className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-emerald-600" aria-hidden />
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => navigate('/vehicles')}
-                  className="group flex w-full items-center gap-3 rounded-xl border border-line bg-white/80 p-2.5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow"
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-sky-500 to-sky-700 text-white shadow-sm" aria-hidden>
-                    <Car size={16} aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-ink">Find a Vehicle</span>
-                    <span className="block truncate text-2xs text-ink-muted">Trace a number plate across every sighting.</span>
-                  </span>
-                  <ArrowRight size={15} className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-sky-600" aria-hidden />
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => navigate('/alerts')}
-                  className="group flex w-full items-center gap-3 rounded-xl border border-line bg-white/80 p-2.5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-rose-300 hover:shadow"
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-sm" aria-hidden>
-                    <Bell size={16} aria-hidden />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-ink">Alerts</span>
-                    <span className="block truncate text-2xs text-ink-muted">Wanted-list matches flagged the moment they happen.</span>
-                  </span>
-                  <ArrowRight size={15} className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-rose-600" aria-hidden />
-                </button>
-              </li>
-            </ul>
+            <dl className="mt-auto divide-y divide-line/70 rounded-xl border border-line bg-white/80 px-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3 py-3">
+                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Live Cameras</dt>
+                <dd className="text-right text-xs">
+                  <button type="button" className="link-btn" onClick={() => navigate('/cameras')}>
+                    Open feeds <ArrowRight size={13} aria-hidden />
+                  </button>
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-3">
+                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Find a Vehicle</dt>
+                <dd className="text-right text-xs">
+                  <button type="button" className="link-btn" onClick={() => navigate('/vehicles')}>
+                    Trace a plate <ArrowRight size={13} aria-hidden />
+                  </button>
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-3">
+                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Alerts</dt>
+                <dd className="text-right text-xs">
+                  <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
+                    View alerts <ArrowRight size={13} aria-hidden />
+                  </button>
+                </dd>
+              </div>
+            </dl>
           </div>
 
-          <div className="border-t border-line bg-gradient-to-bl from-violet-100/60 via-violet-50/40 to-white p-5 sm:p-6 lg:border-l lg:border-t-0">
+          <div className="flex flex-col border-t border-line bg-gradient-to-bl from-violet-100/60 via-violet-50/40 to-white p-5 sm:p-6 lg:border-l lg:border-t-0">
             <div className="flex items-center gap-3">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md" aria-hidden>
                 <Users size={20} aria-hidden />
@@ -391,14 +367,14 @@ export default function Dashboard() {
                 <h2 className="mt-1.5 text-lg font-extrabold tracking-tight text-ink">Built by students, for the officers on duty</h2>
               </div>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+            <p className="mb-4 mt-3 text-sm leading-relaxed text-ink-muted">
               We are Team Trinetra, building for the Gujarat Police Innovation Hackathon.
               Our aim was practical rather than flashy: software a duty officer can learn
               in ten minutes and trust at 2 in the morning. Everything on this screen
               runs on real camera events — detection, tracking and plate reading feed
               straight into the log, the map and the alerts you see here.
             </p>
-            <dl className="mt-4 divide-y divide-line/70 rounded-xl border border-line bg-white/80 px-4 shadow-sm">
+            <dl className="mt-auto divide-y divide-line/70 rounded-xl border border-line bg-white/80 px-4 shadow-sm">
               <div className="flex items-center justify-between gap-3 py-3">
                 <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Built for</dt>
                 <dd className="text-right text-xs font-bold text-ink">Gujarat Police Hackathon</dd>
