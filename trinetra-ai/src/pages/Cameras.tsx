@@ -51,7 +51,7 @@ export default function Cameras() {
       <PageHeader
         title="Live Cameras"
         icon={Cctv}
-        tone="blue"
+        tone="green"
         subtitle={
           <>
             {stats.total} cameras · <span className="text-online">{stats.online} working</span> ·{' '}

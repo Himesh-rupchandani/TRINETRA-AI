@@ -60,7 +60,7 @@ export default function GIS() {
       <PageHeader
         title="Map"
         icon={MapIcon}
-        tone="purple"
+        tone="orange"
         subtitle={
           points.length
             ? `Where ${result?.plate} went: ${points.map((p) => p.cameraName).join(', then ')}`

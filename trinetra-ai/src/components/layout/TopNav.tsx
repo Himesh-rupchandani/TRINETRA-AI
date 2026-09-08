@@ -38,7 +38,7 @@ const PRIMARY: TopNavItem[] = [
   { to: '/cameras', label: 'Live Cameras', hint: 'Watch live CCTV feeds', icon: Cctv, tone: 'green' },
   { to: '/vehicles', label: 'Find Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
   { to: '/gis', label: 'Map', hint: 'Cameras & vehicles on the map', icon: Map, tone: 'orange' },
-  { to: '/events', label: 'Vehicle Log', hint: 'Full vehicle history', icon: ListTree, tone: 'green' },
+  { to: '/events', label: 'Vehicle Log', hint: 'Full vehicle history', icon: ListTree, tone: 'purple' },
 ];
 
 /**
@@ -54,27 +54,78 @@ const SECONDARY: TopNavItem[] = [
   { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound, tone: 'blue' },
 ];
 
+/** Per-card colour: tinted body, matching arrow button, active title. */
+const CARD_TONES: Record<TileTone, { idle: string; active: string; arrow: string; title: string }> = {
+  blue: {
+    idle: 'border-blue-200 bg-blue-50 hover:border-blue-400',
+    active: 'border-blue-500 bg-blue-100/80 shadow-cardHover',
+    arrow: 'bg-blue-500',
+    title: 'text-blue-700',
+  },
+  sky: {
+    idle: 'border-sky-200 bg-sky-50 hover:border-sky-400',
+    active: 'border-sky-500 bg-sky-100/80 shadow-cardHover',
+    arrow: 'bg-sky-500',
+    title: 'text-sky-700',
+  },
+  green: {
+    idle: 'border-emerald-200 bg-emerald-50 hover:border-emerald-400',
+    active: 'border-emerald-500 bg-emerald-100/80 shadow-cardHover',
+    arrow: 'bg-emerald-500',
+    title: 'text-emerald-700',
+  },
+  orange: {
+    idle: 'border-orange-200 bg-orange-50 hover:border-orange-400',
+    active: 'border-orange-500 bg-orange-100/80 shadow-cardHover',
+    arrow: 'bg-orange-500',
+    title: 'text-orange-700',
+  },
+  amber: {
+    idle: 'border-amber-200 bg-amber-50 hover:border-amber-400',
+    active: 'border-amber-500 bg-amber-100/80 shadow-cardHover',
+    arrow: 'bg-amber-500',
+    title: 'text-amber-700',
+  },
+  purple: {
+    idle: 'border-violet-200 bg-violet-50 hover:border-violet-400',
+    active: 'border-violet-500 bg-violet-100/80 shadow-cardHover',
+    arrow: 'bg-violet-500',
+    title: 'text-violet-700',
+  },
+  red: {
+    idle: 'border-rose-200 bg-rose-50 hover:border-rose-400',
+    active: 'border-rose-500 bg-rose-100/80 shadow-cardHover',
+    arrow: 'bg-rose-500',
+    title: 'text-rose-700',
+  },
+  slate: {
+    idle: 'border-slate-200 bg-slate-50 hover:border-slate-400',
+    active: 'border-slate-500 bg-slate-100/80 shadow-cardHover',
+    arrow: 'bg-slate-500',
+    title: 'text-slate-700',
+  },
+};
+
 export function TopNav() {
   const { counts } = useAlerts();
 
   return (
     <nav aria-label="Primary" className="sticky top-14 z-10 shrink-0 border-b border-line bg-surface-0">
-      {/* Primary workflow cards */}
+      {/* Primary workflow cards — all five fit a single screen row. */}
       <ul className="no-scrollbar mx-auto flex max-w-[1600px] gap-2.5 overflow-x-auto px-3 py-2.5 sm:px-5">
         {PRIMARY.map((item, i) => {
           const Icon = item.icon;
+          const tone = CARD_TONES[item.tone];
           return (
-            <li key={item.to} className="shrink-0">
+            <li key={item.to} className="min-w-[215px] flex-1">
               <NavLink
                 to={item.to}
                 end={item.end}
                 title={`Step ${i + 1}: ${item.label} — ${item.hint}`}
                 className={({ isActive }) =>
                   cn(
-                    'flex w-[248px] items-center gap-3 rounded-xl border bg-surface-1 p-3 shadow-panel transition-colors',
-                    isActive
-                      ? 'border-brand/60 bg-brand/[0.05]'
-                      : 'border-line hover:border-brand/40 hover:shadow-cardHover',
+                    'flex w-full items-center gap-3 rounded-xl border p-3 shadow-panel transition-colors',
+                    isActive ? tone.active : tone.idle,
                   )
                 }
               >
@@ -95,19 +146,19 @@ export function TopNav() {
                       <span
                         className={cn(
                           'block truncate text-sm font-bold leading-tight',
-                          isActive ? 'text-brand' : 'text-ink',
+                          isActive ? tone.title : 'text-ink',
                         )}
                       >
                         {item.label}
                       </span>
-                      <span className="mt-0.5 block min-h-8 overflow-hidden text-2xs leading-snug text-ink-faint [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                      <span className="mt-0.5 block min-h-8 overflow-hidden text-2xs leading-snug text-ink-muted [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box]">
                         {item.hint}
                       </span>
                     </span>
                     <span
                       className={cn(
-                        'grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors',
-                        isActive ? 'bg-brand text-white' : 'bg-brand/10 text-brand',
+                        'grid h-8 w-8 shrink-0 place-items-center rounded-full text-white',
+                        tone.arrow,
                       )}
                       aria-hidden
                     >

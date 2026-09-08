@@ -91,7 +91,7 @@ export default function Events() {
       <PageHeader
         title="Vehicle Log"
         icon={ListTree}
-        tone="green"
+        tone="purple"
         subtitle={`Every vehicle the cameras have seen. ${(data?.total ?? 0).toLocaleString('en-IN')} match your filters.`}
         actions={
           <button type="button" className="btn-ghost" onClick={refresh}>

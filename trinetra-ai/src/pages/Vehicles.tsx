@@ -42,6 +42,7 @@ export default function Vehicles() {
       <PageHeader
         title="Find a Vehicle"
         icon={Car}
+        tone="sky"
         subtitle="Type a number plate to see everywhere it has been seen."
       />
 
