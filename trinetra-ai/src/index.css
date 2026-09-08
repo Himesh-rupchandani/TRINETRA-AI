@@ -213,6 +213,13 @@
 .leaflet-marker-icon.trinetra-marker {
   background: transparent;
   border: 0;
+  /* New markers ease in — opacity only, Leaflet owns the transform. */
+  animation: trinetra-dot-in 0.25s ease both;
+}
+@keyframes trinetra-dot-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* Route-playback dot: solid core with an expanding ping ring. */

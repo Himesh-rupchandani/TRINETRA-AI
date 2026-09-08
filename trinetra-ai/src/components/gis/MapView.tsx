@@ -10,12 +10,9 @@ import {
   TileLayer,
   useMap,
 } from 'react-leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import 'leaflet.markercluster/dist/MarkerCluster.css';
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { Maximize, Minimize, Pause, Play, RotateCcw, X } from 'lucide-react';
+import { Maximize, Minimize, Pause, Play, RotateCcw, X, ZoomIn } from 'lucide-react';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
@@ -54,6 +51,23 @@ function PanTo({ target }: { target?: [number, number] | null }) {
   useEffect(() => {
     if (target) map.flyTo(target, Math.max(map.getZoom(), 15), { duration: 0.6 });
   }, [map, target?.[0], target?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/** Sighting dots appear from this zoom down: statewide views stay clean. */
+const DETECTION_ZOOM = 10;
+
+/** Reports the live zoom so the map can layer markers by it. */
+function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    const report = () => onZoom(map.getZoom());
+    report();
+    map.on('zoomend', report);
+    return () => {
+      map.off('zoomend', report);
+    };
+  }, [map, onZoom]);
   return null;
 }
 
@@ -120,6 +134,7 @@ export function MapView({
   onPlaybackStop,
 }: MapViewProps) {
   const [basemap, setBasemap] = useState<BasemapId>('street');
+  const [mapZoom, setMapZoom] = useState(zoom);
   const tiles = config.map.tiles[basemap];
   /**
    * Fullscreen in two flavours. Native is preferred (the browser's top
@@ -239,6 +254,7 @@ export function MapView({
         {tiles.labels && <TileLayer url={tiles.labels} maxZoom={19} errorTileUrl={ERROR_TILE} />}
         <ScaleControl position="bottomright" imperial={false} />
         <ResizeGuard />
+        <ZoomTracker onZoom={setMapZoom} />
         <FitBounds points={fitPoints} enabled={fit} />
         <PanTo target={panTo} />
 
@@ -257,7 +273,6 @@ export function MapView({
             />
           ))}
 
-        <MarkerClusterGroup chunkedLoading maxClusterRadius={48} showCoverageOnHover={false}>
         {cameras.map((c) => (
           <Marker
             key={c.id}
@@ -272,23 +287,21 @@ export function MapView({
             </Popup>
           </Marker>
         ))}
-        </MarkerClusterGroup>
 
-        <MarkerClusterGroup chunkedLoading maxClusterRadius={48} showCoverageOnHover={false}>
-        {events.map((e) => (
-          <Marker
-            key={e.id}
-            position={[e.latitude, e.longitude]}
-            icon={eventIcon(e.watchlistMatch)}
-            eventHandlers={{ click: () => onSelectEvent?.(e) }}
-            title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
-          >
-            <Popup>
-              <EventPopup event={e} />
-            </Popup>
-          </Marker>
-        ))}
-        </MarkerClusterGroup>
+        {mapZoom >= DETECTION_ZOOM &&
+          events.map((e) => (
+            <Marker
+              key={e.id}
+              position={[e.latitude, e.longitude]}
+              icon={eventIcon(e.watchlistMatch)}
+              eventHandlers={{ click: () => onSelectEvent?.(e) }}
+              title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
+            >
+              <Popup>
+                <EventPopup event={e} />
+              </Popup>
+            </Marker>
+          ))}
 
         {routeLine.length > 1 && (
           <>
@@ -326,6 +339,12 @@ export function MapView({
           />
         )}
       </MapContainer>
+      {events.length > 0 && mapZoom < DETECTION_ZOOM && (
+        <div className="absolute left-3 top-[76px] z-[1001] flex items-center gap-1.5 rounded-full border border-line bg-surface-1/95 px-3 py-1.5 text-2xs font-semibold text-ink-muted shadow-md backdrop-blur">
+          <ZoomIn size={12} aria-hidden />
+          Zoom in to see {events.length} sighting{events.length === 1 ? '' : 's'}
+        </div>
+      )}
       <div className="absolute right-3 top-3 z-[1001] flex flex-col items-end gap-2">
         <div
           className="flex overflow-hidden rounded-lg border border-line bg-surface-1/95 shadow-md backdrop-blur"
