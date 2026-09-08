@@ -7,6 +7,7 @@ import {
   Car,
   Cctv,
   Map as MapIcon,
+  Play,
   ScanLine,
   ShieldAlert,
   Signal,
@@ -87,6 +88,13 @@ export default function Dashboard() {
               </li>
             ))}
           </ul>
+          <button
+            type="button"
+            onClick={() => navigate('/vehicles')}
+            className="btn-primary mt-4 w-fit"
+          >
+            Go to Find Vehicle <ArrowRight size={14} aria-hidden />
+          </button>
         </div>
         <div className="flex min-w-0 flex-1 flex-col justify-center">
           <button
@@ -98,16 +106,22 @@ export default function Dashboard() {
               src="/cctv/cctv-02.jpg"
               alt=""
               aria-hidden
-              className="h-44 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="h-52 w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
             <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent" />
             <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-critical px-2.5 py-1 text-2xs font-bold uppercase tracking-widest text-white">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden /> Live
             </span>
+            <span
+              aria-hidden
+              className="absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/20 shadow-lg backdrop-blur-sm transition-all duration-200 group-hover:scale-110 group-hover:bg-white/30"
+            >
+              <Play size={22} className="ml-0.5 text-white" fill="currentColor" />
+            </span>
             <span className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
               <span className="min-w-0">
                 <span className="block truncate text-sm font-bold text-white">
-                  {featuredCamera ? `${featuredCamera.id.toUpperCase()} · ${featuredCamera.name}` : 'Live camera network'}
+                  {featuredCamera ? (featuredCamera.name || featuredCamera.id.toUpperCase()) : 'Live camera network'}
                 </span>
                 <span className="block truncate text-2xs text-slate-300">
                   {featuredCamera ? featuredCamera.location : 'Open the live wall'}
