@@ -38,7 +38,7 @@ export function KpiCard({
   loading?: boolean;
 }) {
   const body = (
-    <div className="panel relative flex h-full flex-col gap-3 p-5 transition-colors">
+    <div className="panel card-interactive relative flex h-full flex-col gap-3 p-5">
       <p className="text-xs font-medium text-ink-muted">{label}</p>
       <div>
         {loading ? (

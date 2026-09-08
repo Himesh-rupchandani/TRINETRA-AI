@@ -31,7 +31,7 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
       <Link
         to={`/cameras/${camera.id}`}
         className={cn(
-          'flex items-center gap-3.5 rounded-lg border border-line p-3 transition-colors hover:border-line-strong hover:bg-surface-2/50',
+          'flex items-center gap-3.5 rounded-lg border border-line bg-surface-1 p-3 transition duration-150 hover:border-line-strong hover:bg-surface-2/50 active:scale-[0.99]',
           selected && 'border-brand/40 ring-1 ring-brand/20',
         )}
       >
@@ -62,7 +62,7 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
   return (
     <article
       className={cn(
-        'panel group flex flex-col overflow-hidden transition-colors hover:border-line-strong',
+        'panel card-interactive group flex flex-col overflow-hidden hover:border-line-strong',
         selected && 'border-brand/40 ring-1 ring-brand/20',
       )}
     >

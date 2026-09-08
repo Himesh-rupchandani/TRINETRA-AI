@@ -44,7 +44,7 @@ export function Switch({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
+          'relative h-6 w-11 shrink-0 rounded-full border transition duration-150 active:scale-95',
           checked ? 'border-transparent bg-brand-strong' : 'border-line-strong bg-surface-3',
         )}
       >
@@ -52,7 +52,7 @@ export function Switch({
           aria-hidden
           className={cn(
             'absolute top-1/2 -translate-y-1/2 rounded-full transition-all',
-            checked ? 'left-[24px] bg-white' : 'left-[3px] bg-ink-faint',
+            checked ? 'left-[24px] bg-white shadow-sm' : 'left-[3px] bg-white shadow-sm',
           )}
           style={{ height: 18, width: 18 }}
         />
@@ -83,7 +83,7 @@ export function SwitchCompact({
       title={title}
       onClick={() => onChange(!checked)}
       className={cn(
-        'inline-flex min-h-8 cursor-pointer items-center gap-2.5 rounded-lg border px-3 text-xs font-medium transition-colors',
+        'inline-flex min-h-8 cursor-pointer items-center gap-2.5 rounded-lg border px-3 text-xs font-medium transition duration-150 active:scale-[0.97]',
         checked
           ? 'border-brand/30 bg-brand/10 text-brand'
           : 'border-line bg-transparent text-ink-muted hover:bg-surface-2 hover:text-ink',
@@ -100,7 +100,7 @@ export function SwitchCompact({
         <span
           className={cn(
             'absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full transition-all',
-            checked ? 'left-[13px] bg-white' : 'left-[2px] bg-ink-faint',
+            checked ? 'left-[13px] bg-white' : 'left-[2px] bg-white',
           )}
         />
       </span>

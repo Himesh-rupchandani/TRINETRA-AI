@@ -67,13 +67,13 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-surface-0/85 px-4 backdrop-blur-md sm:px-6">
-      <button type="button" className="btn-ghost h-10 w-10 px-0 lg:hidden" onClick={onMenu} aria-label="Open navigation">
+    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-surface-1/85 px-4 backdrop-blur-md sm:px-6">
+      <button type="button" className="btn-ghost h-10 w-10 px-0 transition active:scale-95 lg:hidden" onClick={onMenu} aria-label="Open navigation">
         <Menu size={17} aria-hidden />
       </button>
       <button
         type="button"
-        className="btn-ghost hidden h-10 w-10 px-0 lg:inline-flex"
+        className="btn-ghost hidden h-10 w-10 px-0 transition active:scale-95 lg:inline-flex"
         onClick={onToggleCollapse}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
@@ -145,7 +145,7 @@ export function Header({
         <button
           type="button"
           onClick={() => navigate('/alerts')}
-          className="relative grid h-10 w-10 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-surface-1 hover:text-ink"
+          className="relative grid h-10 w-10 place-items-center rounded-lg text-ink-muted transition duration-150 hover:bg-surface-2 hover:text-ink active:scale-95"
           aria-label={`${counts.ACTIVE} alerts need your attention — open Alerts`}
         >
           <Bell size={17} aria-hidden />
@@ -157,7 +157,7 @@ export function Header({
         <button
           type="button"
           onClick={() => navigate('/profile')}
-          className="hidden items-center gap-3 rounded-lg py-1 pl-4 pr-1 text-left transition-colors hover:bg-surface-1 xl:flex"
+          className="hidden items-center gap-3 rounded-lg py-1 pl-4 pr-1 text-left transition duration-150 hover:bg-surface-2 active:scale-[0.98] xl:flex"
           aria-label="Open officer profile"
         >
           <span className="min-w-0">

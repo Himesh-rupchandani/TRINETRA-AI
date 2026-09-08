@@ -45,7 +45,7 @@ function Stat({
   return (
     <Link
       to={to}
-      className="group flex h-full min-w-0 flex-col gap-2.5 bg-surface-1 px-5 py-5 transition-colors hover:bg-surface-2/60 sm:px-6"
+      className="group flex h-full min-w-0 flex-col gap-2.5 bg-surface-1 px-5 py-5 transition duration-150 hover:bg-surface-2/60 active:bg-surface-3/60 sm:px-6"
     >
       <p className="text-xs font-medium text-ink-muted">{label}</p>
       {loading ? (
@@ -174,7 +174,7 @@ export default function Dashboard() {
                 <Link
                   key={task.step}
                   to={task.to}
-                  className="group flex items-center gap-3.5 rounded-lg border border-line px-4 py-3 transition-colors hover:border-line-strong hover:bg-surface-2/60"
+                  className="card-interactive group flex items-center gap-3.5 rounded-lg border border-line bg-surface-1 px-4 py-3 hover:border-line-strong"
                 >
                   <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line font-mono text-[11px] font-semibold text-ink-faint">
                     {task.step}

@@ -80,7 +80,7 @@ export function Sidebar({
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col border-r border-line bg-surface-0 transition-[width,transform] duration-200',
+          'fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col border-r border-line bg-surface-1 transition-[width,transform] duration-200',
           collapsed && 'w-[76px]',
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
@@ -136,10 +136,10 @@ export function Sidebar({
                         title={collapsed ? `${item.label} — ${item.hint}` : undefined}
                         className={({ isActive }) =>
                           cn(
-                            'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+                            'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition duration-150 active:scale-[0.98]',
                             isActive
                               ? 'bg-surface-2 text-ink'
-                              : 'text-ink-muted hover:bg-surface-1 hover:text-ink',
+                              : 'text-ink-muted hover:bg-surface-2/60 hover:text-ink',
                           )
                         }
                       >
@@ -205,7 +205,7 @@ export function Sidebar({
               onClose();
               navigate('/profile');
             }}
-            className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition-colors hover:bg-surface-1"
+            className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition duration-150 hover:bg-surface-2/60 active:scale-[0.99]"
             aria-label="Open officer profile"
           >
             <span className="relative shrink-0">
@@ -222,7 +222,7 @@ export function Sidebar({
                 </span>
               )}
               <span
-                className="absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full border-2 border-surface-0 bg-online"
+                className="absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full border-2 border-surface-1 bg-online"
                 title="On duty"
                 aria-hidden
               />

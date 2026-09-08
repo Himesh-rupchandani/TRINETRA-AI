@@ -13,7 +13,7 @@ export const EventRow = memo(function EventRow({ event }: { event: VehicleEvent 
     <li
       className={cn(
         'flex items-center gap-3.5 border-b border-line/50 px-5 py-3 text-xs transition-colors hover:bg-surface-2/50',
-        watch && 'bg-critical/[0.04]',
+        watch && 'bg-critical/[0.06]',
       )}
     >
       <span

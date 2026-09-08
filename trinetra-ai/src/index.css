@@ -3,29 +3,29 @@
 @tailwind utilities;
 
 /* ------------------------------------------------------------------
-   TRINETRA AI · SENTINEL — "Atlas" design system
-   Neutral graphite surfaces · hairline borders · one restrained accent.
-   Flat, calm, spacious. Color communicates meaning, never decoration.
+   TRINETRA AI · SENTINEL — "Atlas" design system (Light)
+   White surfaces · soft hairlines · one restrained teal accent.
+   Calm, spacious, premium. Color communicates meaning, never decoration.
    ------------------------------------------------------------------ */
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
 
-    /* Neutral graphite scale — deliberately NOT navy, NOT blue-tinted */
-    --surface-0: 10 10 12; /* app canvas */
-    --surface-1: 17 17 20; /* panels */
-    --surface-2: 24 24 28; /* raised / hover */
-    --surface-3: 31 31 36; /* insets, wells, skeletons */
-    --line: 41 41 47; /* hairlines */
-    --line-strong: 63 63 70;
-    --ink: 236 236 239;
-    --ink-muted: 160 160 170;
-    --ink-faint: 116 116 126;
+    /* Clean light scale — white panels on a soft gray canvas */
+    --surface-0: 248 250 251; /* app canvas */
+    --surface-1: 255 255 255; /* panels — white */
+    --surface-2: 241 244 246; /* raised / hover */
+    --surface-3: 233 237 241; /* insets, wells, skeletons */
+    --line: 226 230 235; /* hairlines */
+    --line-strong: 197 204 213;
+    --ink: 24 30 38;
+    --ink-muted: 84 93 105;
+    --ink-faint: 134 142 153;
 
     /* Single restrained accent: deep teal — calm, institutional, not neon */
-    --brand: 64 200 180; /* links, focus, live accents */
-    --brand-strong: 14 116 105; /* filled controls (white text = AA) */
-    --brand-soft: 21 52 48;
+    --brand: 13 148 136; /* links, focus, live accents (AA on white) */
+    --brand-strong: 15 118 110; /* filled controls (white text = AA) */
+    --brand-soft: 236 251 248;
   }
 
   * {
@@ -42,6 +42,9 @@
     @apply bg-surface-0 text-ink antialiased;
     font-feature-settings: 'tnum' 1, 'cv05' 1;
     letter-spacing: -0.006em;
+    /* A whisper of teal light from above — barely there, keeps white from feeling sterile */
+    background-image: radial-gradient(1100px 380px at 50% -12%, rgb(var(--brand) / 0.05), transparent 65%);
+    background-attachment: fixed;
   }
 
   ::selection {
@@ -63,7 +66,7 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgb(var(--line-strong) / 0.55);
+    background: rgb(var(--line-strong) / 0.7);
     border-radius: 8px;
     border: 3px solid rgb(var(--surface-0));
   }
@@ -95,7 +98,7 @@
 @layer components {
   /* ---------- Surfaces ---------- */
   .panel {
-    @apply rounded-xl border border-line bg-surface-1;
+    @apply rounded-xl border border-line bg-surface-1 shadow-panel;
   }
 
   .panel-header {
@@ -113,8 +116,8 @@
 
   /* ---------- Buttons — taller, calmer, clearly separated ---------- */
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-4 text-sm font-medium h-10 transition-colors
-           disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-4 text-sm font-medium h-10 transition duration-150
+           active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none;
   }
   .btn-primary {
     @apply btn border-transparent bg-brand-strong text-white hover:bg-[color:rgb(var(--brand-strong)/0.85)];
@@ -137,8 +140,8 @@
 
   /* ---------- Forms — roomy fields with clear vertical rhythm ---------- */
   .input {
-    @apply w-full rounded-lg border border-line bg-surface-2/50 px-3.5 text-sm text-ink h-10
-           placeholder:text-ink-faint focus:border-brand/60 focus:bg-surface-2 focus:outline-none
+    @apply w-full rounded-lg border border-line bg-surface-1 px-3.5 text-sm text-ink h-10
+           placeholder:text-ink-faint focus:border-brand/60 focus:bg-surface-1 focus:outline-none
            focus-visible:outline-none focus:ring-2 focus:ring-brand/20;
   }
   .select {
@@ -205,6 +208,26 @@
     @apply animate-pulse rounded-md bg-surface-3;
   }
 
+  /* Card feel: quiet at rest, lifts on hover, settles on press */
+  .card-interactive {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-cardHover active:translate-y-0 active:scale-[0.99];
+  }
+
+  /* Dialog entrance: gentle rise + settle */
+  .animate-modal-in {
+    animation: modal-in 190ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97) translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
   /* Page fade — one quiet transition, no movement tricks */
   .animate-page-in {
     animation: page-in 220ms ease-out;
@@ -221,7 +244,7 @@
 
 /* ---------------- Leaflet theming (neutral dark canvas) ---------------- */
 .leaflet-container {
-  background: rgb(var(--surface-2));
+  background: rgb(var(--surface-3));
   font-family: inherit;
   outline: none;
 }
@@ -244,7 +267,7 @@
 .leaflet-popup-content-wrapper {
   border-radius: 10px !important;
   border: 1px solid rgb(var(--line)) !important;
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.5) !important;
+  box-shadow: 0 16px 40px rgb(16 24 40 / 0.18) !important;
 }
 .leaflet-popup-content {
   margin: 0 !important;

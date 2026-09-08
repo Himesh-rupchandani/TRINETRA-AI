@@ -54,10 +54,8 @@ export function AlertCard({
   return (
     <article
       className={cn(
-        'panel relative overflow-hidden transition-colors',
-        alert.status === 'NEW' && alert.severity === 'CRITICAL'
-          ? 'border-critical/30'
-          : 'hover:border-line-strong',
+        'panel card-interactive relative overflow-hidden hover:border-line-strong',
+        alert.status === 'NEW' && alert.severity === 'CRITICAL' && 'border-critical/30',
       )}
       aria-label={`${alert.severity} alert for ${alert.plate}`}
     >

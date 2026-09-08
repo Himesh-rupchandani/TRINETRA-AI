@@ -37,7 +37,7 @@ export function Modal({
 
   return (
     <div
-      className="animate-page-in fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="animate-page-in fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -46,7 +46,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={cn('panel flex max-h-[90vh] w-full flex-col shadow-cardHover outline-none', widths[size])}
+        className={cn('panel animate-modal-in flex max-h-[90vh] w-full flex-col shadow-cardHover outline-none', widths[size])}
       >
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>

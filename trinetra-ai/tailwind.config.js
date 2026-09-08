@@ -29,17 +29,17 @@ export default {
           strong: 'rgb(var(--brand-strong) / <alpha-value>)',
           soft: 'rgb(var(--brand-soft) / <alpha-value>)',
         },
-        // Severity / status semantic tokens — desaturated, dark-surface tuned.
+        // Severity / status semantic tokens — light-surface tuned (AA text).
         // Color carries meaning only; nothing glows.
-        critical: '#fb7185',
-        high: '#fb923c',
-        medium: '#e3b341',
-        low: '#7dd3fc',
-        info: '#a1a1aa',
-        online: '#4ade80',
-        offline: '#f87171',
-        degraded: '#fbbf24',
-        processing: '#a1a1aa',
+        critical: '#e11d48',
+        high: '#ea580c',
+        medium: '#a16207',
+        low: '#0369a1',
+        info: '#64748b',
+        online: '#16a34a',
+        offline: '#dc2626',
+        degraded: '#b45309',
+        processing: '#64748b',
       },
       fontSize: {
         // Legibility pass: everything is a step larger than a classic dense
@@ -53,9 +53,9 @@ export default {
         xl: ['1.3125rem', { lineHeight: '1.85rem' }],
       },
       boxShadow: {
-        // Flat system: panels are defined by hairlines, not shadows.
-        panel: '0 0 0 0.5px rgb(255 255 255 / 0.02)',
-        cardHover: '0 12px 32px rgb(0 0 0 / 0.4)',
+        // Light system: white cards with soft ambient depth.
+        panel: '0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.03)',
+        cardHover: '0 14px 28px -8px rgb(16 24 40 / 0.16), 0 4px 10px rgb(16 24 40 / 0.06)',
       },
       keyframes: {
         'pulse-dot': {
