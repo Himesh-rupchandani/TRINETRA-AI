@@ -57,7 +57,7 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
       {/* Hero: registration number is always the fastest path into the product */}
-      <section className="panel flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-stretch">
+      <section className="panel flex flex-col gap-5 bg-gradient-to-br from-white via-white to-sky-50 p-5 sm:p-6 lg:flex-row lg:items-stretch">
         <div className="flex flex-col justify-center lg:w-[280px] lg:shrink-0">
           <div className="flex items-center gap-3">
             <IconTile tone="blue" size="lg" className="float-soft">
@@ -79,7 +79,7 @@ export default function Dashboard() {
               <Link
                 key={task.step}
                 to={task.to}
-                className="group flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3.5 transition-colors hover:border-brand/40 hover:bg-surface-2"
+                className="group flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3.5 transition-all duration-150 hover:-translate-y-0.5 hover:border-brand/40 hover:bg-surface-2 hover:shadow-cardHover"
               >
                 <span className="flex items-start justify-between gap-2">
                   <span className="text-xs font-bold text-ink-faint/70">{task.step}</span>

@@ -54,54 +54,57 @@ const SECONDARY: TopNavItem[] = [
   { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound, tone: 'blue' },
 ];
 
-/** Per-card colour: tinted body, matching arrow button, active title. */
+/**
+ * Per-card colour: soft gradient body, glossy matching arrow button,
+ * coloured title when active. Idle cards lift on hover.
+ */
 const CARD_TONES: Record<TileTone, { idle: string; active: string; arrow: string; title: string }> = {
   blue: {
-    idle: 'border-blue-200 bg-blue-50 hover:border-blue-400',
-    active: 'border-blue-500 bg-blue-100/80 shadow-cardHover',
-    arrow: 'bg-blue-500',
+    idle: 'border-blue-200 bg-gradient-to-br from-blue-100/80 via-blue-50 to-white hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-cardHover',
+    active: 'border-blue-500 bg-gradient-to-br from-blue-200/70 via-blue-100 to-blue-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-blue-500 to-blue-700',
     title: 'text-blue-700',
   },
   sky: {
-    idle: 'border-sky-200 bg-sky-50 hover:border-sky-400',
-    active: 'border-sky-500 bg-sky-100/80 shadow-cardHover',
-    arrow: 'bg-sky-500',
+    idle: 'border-sky-200 bg-gradient-to-br from-sky-100/80 via-sky-50 to-white hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-cardHover',
+    active: 'border-sky-500 bg-gradient-to-br from-sky-200/70 via-sky-100 to-sky-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-sky-500 to-sky-700',
     title: 'text-sky-700',
   },
   green: {
-    idle: 'border-emerald-200 bg-emerald-50 hover:border-emerald-400',
-    active: 'border-emerald-500 bg-emerald-100/80 shadow-cardHover',
-    arrow: 'bg-emerald-500',
+    idle: 'border-emerald-200 bg-gradient-to-br from-emerald-100/80 via-emerald-50 to-white hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-cardHover',
+    active: 'border-emerald-500 bg-gradient-to-br from-emerald-200/70 via-emerald-100 to-emerald-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
     title: 'text-emerald-700',
   },
   orange: {
-    idle: 'border-orange-200 bg-orange-50 hover:border-orange-400',
-    active: 'border-orange-500 bg-orange-100/80 shadow-cardHover',
-    arrow: 'bg-orange-500',
+    idle: 'border-orange-200 bg-gradient-to-br from-orange-100/80 via-orange-50 to-white hover:-translate-y-0.5 hover:border-orange-400 hover:shadow-cardHover',
+    active: 'border-orange-500 bg-gradient-to-br from-orange-200/70 via-orange-100 to-orange-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-orange-500 to-orange-700',
     title: 'text-orange-700',
   },
   amber: {
-    idle: 'border-amber-200 bg-amber-50 hover:border-amber-400',
-    active: 'border-amber-500 bg-amber-100/80 shadow-cardHover',
-    arrow: 'bg-amber-500',
+    idle: 'border-amber-200 bg-gradient-to-br from-amber-100/80 via-amber-50 to-white hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-cardHover',
+    active: 'border-amber-500 bg-gradient-to-br from-amber-200/70 via-amber-100 to-amber-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-amber-500 to-amber-700',
     title: 'text-amber-700',
   },
   purple: {
-    idle: 'border-violet-200 bg-violet-50 hover:border-violet-400',
-    active: 'border-violet-500 bg-violet-100/80 shadow-cardHover',
-    arrow: 'bg-violet-500',
+    idle: 'border-violet-200 bg-gradient-to-br from-violet-100/80 via-violet-50 to-white hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-cardHover',
+    active: 'border-violet-500 bg-gradient-to-br from-violet-200/70 via-violet-100 to-violet-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-violet-500 to-violet-700',
     title: 'text-violet-700',
   },
   red: {
-    idle: 'border-rose-200 bg-rose-50 hover:border-rose-400',
-    active: 'border-rose-500 bg-rose-100/80 shadow-cardHover',
-    arrow: 'bg-rose-500',
+    idle: 'border-rose-200 bg-gradient-to-br from-rose-100/80 via-rose-50 to-white hover:-translate-y-0.5 hover:border-rose-400 hover:shadow-cardHover',
+    active: 'border-rose-500 bg-gradient-to-br from-rose-200/70 via-rose-100 to-rose-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-rose-500 to-rose-700',
     title: 'text-rose-700',
   },
   slate: {
-    idle: 'border-slate-200 bg-slate-50 hover:border-slate-400',
-    active: 'border-slate-500 bg-slate-100/80 shadow-cardHover',
-    arrow: 'bg-slate-500',
+    idle: 'border-slate-200 bg-gradient-to-br from-slate-100/80 via-slate-50 to-white hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-cardHover',
+    active: 'border-slate-500 bg-gradient-to-br from-slate-200/70 via-slate-100 to-slate-50 shadow-cardHover',
+    arrow: 'bg-gradient-to-br from-slate-500 to-slate-700',
     title: 'text-slate-700',
   },
 };
@@ -124,14 +127,19 @@ export function TopNav() {
                 title={`${item.label} — ${item.hint}`}
                 className={({ isActive }) =>
                   cn(
-                    'flex w-full items-center gap-3 rounded-xl border p-3 shadow-panel transition-colors',
+                    'group flex w-full items-center gap-3 rounded-xl border p-3 shadow-panel transition-all duration-150',
                     isActive ? tone.active : tone.idle,
                   )
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <IconTile tone={item.tone} size="lg" active={isActive}>
+                    <IconTile
+                      tone={item.tone}
+                      size="lg"
+                      active={isActive}
+                      className="shadow-sm ring-1 ring-inset ring-black/5"
+                    >
                       <Icon size={20} />
                     </IconTile>
                     <span className="min-w-0 flex-1">
@@ -149,7 +157,7 @@ export function TopNav() {
                     </span>
                     <span
                       className={cn(
-                        'grid h-8 w-8 shrink-0 place-items-center rounded-full text-white',
+                        'grid h-8 w-8 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform duration-150 group-hover:scale-110',
                         tone.arrow,
                       )}
                       aria-hidden
