@@ -12,8 +12,8 @@ export function MainLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-surface-0">
       <Header />
-      <TopNav />
       <AlertBanner />
+      <TopNav />
       <main id="main" className="min-h-0 flex-1">
         <Outlet />
       </main>
