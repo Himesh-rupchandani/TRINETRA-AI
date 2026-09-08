@@ -12,14 +12,14 @@ export const EventRow = memo(function EventRow({ event }: { event: VehicleEvent 
   return (
     <li
       className={cn(
-        'flex items-center gap-3 border-b border-line/60 px-4 py-2.5 text-xs transition-colors hover:bg-surface-2',
-        watch && 'bg-critical/[0.05]',
+        'flex items-center gap-3.5 border-b border-line/50 px-5 py-3 text-xs transition-colors hover:bg-surface-2/50',
+        watch && 'bg-critical/[0.04]',
       )}
     >
       <span
         className={cn(
-          'relative grid h-9 w-14 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-surface-2 text-ink-faint',
-          watch && 'ring-1 ring-critical/70',
+          'relative grid h-10 w-16 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-surface-2 text-ink-faint',
+          watch && 'border-critical/50',
         )}
       >
         <Car size={14} aria-hidden />
@@ -36,13 +36,13 @@ export const EventRow = memo(function EventRow({ event }: { event: VehicleEvent 
           <PlateLink plate={event.plate} size="sm" className="shrink-0" />
           {watch && <ShieldAlert size={13} className="shrink-0 text-critical" aria-hidden />}
         </div>
-        <p className="mt-0.5 truncate text-2xs text-ink-faint">
+        <p className="mt-1 truncate text-2xs text-ink-faint">
           {event.cameraName ?? event.cameraId.toUpperCase()} · {relativeTime(event.timestamp)}
         </p>
       </div>
       <span
         className={cn(
-          'shrink-0 font-mono text-sm font-bold tabular-nums',
+          'shrink-0 font-mono text-sm font-semibold tabular-nums',
           confidenceClass(event.plateConfidence),
         )}
       >
@@ -70,9 +70,9 @@ export function LiveEventFeed({
 
   return (
     <div className={cn('flex h-full min-h-0 flex-col', className)}>
-      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-[11px] uppercase tracking-wide text-ink-faint">
-        <span className="flex items-center gap-1.5">
-          <span className={cn('h-1.5 w-1.5 rounded-full', paused ? 'bg-ink-faint' : 'bg-online animate-pulse')} aria-hidden />
+      <div className="flex items-center justify-between gap-2 border-b border-line px-5 py-3 text-[11px] uppercase tracking-wide text-ink-faint">
+        <span className="flex items-center gap-2">
+          <span className={cn('h-1.5 w-1.5 rounded-full', paused ? 'bg-ink-faint' : 'bg-online animate-pulse-dot')} aria-hidden />
           {paused ? 'Paused' : 'Live now'}
         </span>
         <button

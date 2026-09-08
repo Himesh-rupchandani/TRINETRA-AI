@@ -9,7 +9,7 @@ export function VehicleInfoPanel({ profile }: { profile: VehicleProfile }) {
   const wl = profile.watchlist;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-5 p-5">
       {wl?.active ? (
         <div className="rounded border border-critical/45 bg-critical/10 p-3.5">
           <div className="mb-2 flex items-center justify-between gap-2">

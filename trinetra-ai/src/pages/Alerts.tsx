@@ -38,7 +38,7 @@ export default function Alerts() {
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Alerts"
         icon={Bell}
@@ -51,7 +51,7 @@ export default function Alerts() {
           </>
         }
         actions={
-          <div className="flex items-center gap-1.5" role="tablist" aria-label="Alert view">
+          <div className="flex items-center gap-1 rounded-lg border border-line p-1" role="tablist" aria-label="Alert view">
             {(['ACTIVE', 'HISTORY'] as const).map((t) => (
               <button
                 key={t}
@@ -60,10 +60,10 @@ export default function Alerts() {
                 aria-selected={tab === t}
                 onClick={() => setTab(t)}
                 className={cn(
-                  'h-8 rounded-lg border px-3 text-xs font-semibold transition-colors',
+                  'h-8 rounded-md px-3.5 text-xs font-medium transition-colors',
                   tab === t
-                    ? 'border-brand/25 bg-brand/10 text-brand'
-                    : 'border-transparent text-ink-muted hover:bg-surface-2 hover:text-ink',
+                    ? 'bg-surface-3 text-ink'
+                    : 'text-ink-muted hover:text-ink',
                 )}
               >
                 {t === 'ACTIVE' ? `Needs attention (${active.length})` : `Closed alerts (${history.length})`}
@@ -73,23 +73,24 @@ export default function Alerts() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-3 border-b border-line bg-surface-1 px-4 py-3 sm:px-5">
-        <div className="min-w-[200px] flex-1">
+      <div className="px-5 pt-5 sm:px-6 xl:px-8">
+        <div className="panel flex flex-wrap items-end gap-x-5 gap-y-4 p-5">
+        <div className="min-w-[240px] flex-1">
           <label className="label" htmlFor="alert-search">
             Search alerts
           </label>
           <div className="relative">
-            <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
             <input
               id="alert-search"
-              className="input pl-7"
+              className="input pl-10"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by number plate, camera or place"
             />
           </div>
         </div>
-        <div className="w-[120px]">
+        <div className="w-[170px]">
           <label className="label" htmlFor="alert-sev">
             Priority
           </label>
@@ -115,12 +116,13 @@ export default function Alerts() {
               setSeverity('ALL');
             }}
           >
-            <X size={12} aria-hidden /> Clear
+            <X size={13} aria-hidden /> Clear
           </button>
         )}
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5" role="tabpanel">
+      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8" role="tabpanel">
         {list.length === 0 ? (
           <div className="panel">
             <EmptyState
@@ -137,10 +139,10 @@ export default function Alerts() {
             {(['NEW', 'ACKNOWLEDGED'] as const).map((status) =>
               grouped[status].length ? (
                 <section key={status}>
-                  <h2 className="mb-3 text-xs font-semibold text-ink-muted">
+                  <h2 className="eyebrow mb-4">
                     {status === 'NEW' ? 'Needs your attention' : 'Already seen'} ({grouped[status].length})
                   </h2>
-                  <div className="grid gap-3 xl:grid-cols-2 xl:gap-4">
+                  <div className="grid gap-5 xl:grid-cols-2">
                     {grouped[status].map((a) => (
                       <AlertCard
                         key={a.id}
@@ -156,7 +158,7 @@ export default function Alerts() {
             )}
           </div>
         ) : (
-          <div className="grid gap-3 xl:grid-cols-2 xl:gap-4">
+          <div className="grid gap-5 xl:grid-cols-2">
             {list.map((a) => (
               <AlertCard
                 key={a.id}

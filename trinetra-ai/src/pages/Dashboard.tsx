@@ -4,14 +4,10 @@ import {
   Activity,
   ArrowRight,
   Bell,
-  Car,
   Cctv,
   Map as MapIcon,
   ScanLine,
-  ShieldAlert,
-  Signal,
 } from 'lucide-react';
-import { KpiCard } from '@/components/dashboard/KpiCard';
 import { CameraActivityChart, DetectionTrend } from '@/components/dashboard/Charts';
 import { LiveEventFeed } from '@/components/events/LiveEventFeed';
 import { AlertCard } from '@/components/alerts/AlertCard';
@@ -19,22 +15,60 @@ import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { CameraCard } from '@/components/camera/CameraCard';
 import { Panel, AsyncBoundary, EmptyState } from '@/components/common/Panel';
-import { IconTile } from '@/components/common/IconTile';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { ServiceStatusChip, StatusChip } from '@/components/common/Chips';
 import { useCameras } from '@/hooks/useCameras';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
-import { formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
+import { cn, formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
 import { demoFlow } from '@/data/demoFlow';
 import { config } from '@/lib/config';
 
+/** One quiet stat in the network overview strip. */
+function Stat({
+  label,
+  value,
+  sub,
+  to,
+  tone,
+  loading,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  to: string;
+  tone?: 'critical';
+  loading?: boolean;
+}) {
+  return (
+    <Link
+      to={to}
+      className="group flex h-full min-w-0 flex-col gap-2.5 bg-surface-1 px-5 py-5 transition-colors hover:bg-surface-2/60 sm:px-6"
+    >
+      <p className="text-xs font-medium text-ink-muted">{label}</p>
+      {loading ? (
+        <div className="skeleton h-8 w-16" />
+      ) : (
+        <p
+          className={cn(
+            'font-mono text-[1.75rem] font-semibold leading-none tracking-tight tabular-nums',
+            tone === 'critical' && value !== 0 ? 'text-critical' : 'text-ink',
+          )}
+        >
+          {value}
+        </p>
+      )}
+      {sub && <p className="text-2xs leading-snug text-ink-faint">{sub}</p>}
+    </Link>
+  );
+}
+
 /**
  * COMMAND CENTER
- * Camera network (left) · live event feed (centre) · active alerts (right),
- * with GIS, trend and system health below. Everything is one click from an
- * investigation.
+ * Hierarchy: network overview → primary action (vehicle trace) + attention →
+ * live operations (cameras, detections) → geography & trend → detailed log.
  */
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -46,7 +80,7 @@ export default function Dashboard() {
 
   const recentEvents = useMemo(() => recent.data ?? [], [recent.data]);
   const watchCameras = useMemo(
-    () => [...cameras].sort((a, b) => (b.eventCount24h ?? 0) - (a.eventCount24h ?? 0)).slice(0, 12),
+    () => [...cameras].sort((a, b) => (b.eventCount24h ?? 0) - (a.eventCount24h ?? 0)).slice(0, 8),
     [cameras],
   );
   const detectionPoints = useMemo(
@@ -55,160 +89,140 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
-      {/* Hero: platform identity + registration number as the fastest path in */}
-      <section className="panel relative flex flex-col gap-5 overflow-hidden p-5 sm:p-6">
-        <div className="command-grid pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-brand to-brand-strong shadow-[0_0_18px_rgb(77_141_255/0.4)]"
-            aria-hidden
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M12 3 3 7.5v4.2c0 5 3.8 8.6 9 9.3 5.2-.7 9-4.3 9-9.3V7.5L12 3Z" />
-              <circle cx="12" cy="11" r="2.6" />
-            </svg>
-          </span>
-          <div className="min-w-0">
-            <p className="flex items-baseline gap-2">
-              <span className="text-xl font-black tracking-[0.1em] text-ink">{config.productName}</span>
-              <span className="text-2xs font-semibold uppercase tracking-[0.16em] text-ink-faint">
-                by {config.appName}
-              </span>
-            </p>
-            <p className="text-xs leading-snug text-ink-muted">
-              AI-powered real-time surveillance intelligence — live camera monitoring, vehicle detection
-              &amp; automatic number-plate recognition for law enforcement.
-            </p>
-          </div>
-          <span className="chip ml-auto hidden border-online/40 bg-online/10 text-online md:inline-flex">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-online" aria-hidden />
-            {formatNumber(stats.online)}/{formatNumber(stats.total)} cameras working
-          </span>
-        </div>
+    <div className="animate-page-in flex flex-col gap-6 p-5 sm:p-6 xl:p-8">
+      <PageHeader
+        title="Command Center"
+        subtitle={
+          <>
+            {config.productName} — AI-powered surveillance intelligence by {config.appName}. Live
+            camera monitoring, vehicle detection and number-plate recognition in one operations
+            picture.
+          </>
+        }
+        actions={
+          <button type="button" className="btn-ghost" onClick={() => navigate('/system')}>
+            <Activity size={14} aria-hidden /> System Status
+          </button>
+        }
+      />
 
-        <div className="relative flex flex-col gap-5 border-t border-line pt-5 lg:flex-row lg:items-stretch">
-          <div className="flex flex-col justify-center lg:w-[280px] lg:shrink-0">
-            <div className="flex items-center gap-3">
-              <IconTile tone="blue" size="lg">
-                <Car size={20} aria-hidden />
-              </IconTile>
-              <h2 className="text-lg font-bold text-ink">Find a Vehicle</h2>
-            </div>
-            <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
-              Search any vehicle by number plate to see all camera sightings, routes, and alerts.
-            </p>
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col">
+      {/* Network overview — one calm strip, hairline-divided at every width */}
+      <section
+        className="panel grid grid-cols-2 gap-px overflow-hidden bg-line sm:grid-cols-3 xl:grid-cols-6"
+        aria-label="Key performance indicators"
+      >
+        <Stat
+          label="Cameras in system"
+          value={formatNumber(kpis.data?.totalCameras ?? stats.total)}
+          sub="Total installed"
+          to="/registry"
+          loading={kpis.loading && camsLoading}
+        />
+        <Stat
+          label="Cameras working"
+          value={formatNumber(kpis.data?.camerasOnline ?? stats.online)}
+          sub={`${stats.degraded} degraded · ${stats.offline} offline`}
+          to="/cameras"
+          loading={kpis.loading && camsLoading}
+        />
+        <Stat
+          label="Alerts to action"
+          value={formatNumber(activeAlerts.length)}
+          sub="Active, pending review"
+          to="/alerts"
+          tone={activeAlerts.length ? 'critical' : undefined}
+        />
+        <Stat
+          label="Vehicles seen"
+          value={formatNumber(kpis.data?.vehicleDetections24h)}
+          sub="Last 24 hours"
+          to="/events"
+          loading={kpis.loading}
+        />
+        <Stat
+          label="Plates read"
+          value={formatNumber(kpis.data?.anprReads24h)}
+          sub="Automatic recognition"
+          to="/events"
+          loading={kpis.loading}
+        />
+        <Stat
+          label="Wanted vehicles found"
+          value={formatNumber(kpis.data?.watchlistMatches24h)}
+          sub="Last 24 hours"
+          to="/watchlist"
+          loading={kpis.loading}
+        />
+      </section>
+
+      {/* Primary action + what needs attention */}
+      <section className="grid gap-5 xl:grid-cols-12">
+        <Panel className="xl:col-span-8" bodyClassName="p-5 sm:p-6">
+          <h2 className="text-base font-semibold text-ink">Find a vehicle</h2>
+          <p className="mt-1.5 max-w-lg text-sm leading-relaxed text-ink-muted">
+            Enter a registration number to see every camera sighting, the route between cameras,
+            and any watchlist matches.
+          </p>
+          <div className="mt-5">
             <TraceSearchBar onTrace={(p) => navigate(`/vehicles/${p}`)} />
-            <nav
-              className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-              aria-label="Common tasks"
-            >
+          </div>
+
+          <div className="mt-6 border-t border-line pt-5">
+            <p className="eyebrow">Guided demo</p>
+            <nav className="mt-3 grid gap-2.5 sm:grid-cols-2" aria-label="Common tasks">
               {demoFlow.map((task) => (
                 <Link
                   key={task.step}
                   to={task.to}
-                  className="group flex flex-col gap-2 rounded-xl border border-line bg-surface-2/60 p-3.5 transition-colors hover:border-brand/40 hover:bg-surface-2"
+                  className="group flex items-center gap-3.5 rounded-lg border border-line px-4 py-3 transition-colors hover:border-line-strong hover:bg-surface-2/60"
                 >
-                  <span className="flex items-start justify-between gap-2">
-                    <span className="text-xs font-bold text-ink-faint/70">{task.step}</span>
-                    <IconTile tone={task.tone} size="md">
-                      <task.icon size={17} aria-hidden />
-                    </IconTile>
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line font-mono text-[11px] font-semibold text-ink-faint">
+                    {task.step}
                   </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-ink group-hover:text-brand">
-                      {task.label}
-                    </span>
-                    <span className="mt-1 block text-2xs leading-snug text-ink-faint">{task.hint}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-ink">{task.label}</span>
+                    <span className="block truncate text-2xs text-ink-faint">{task.hint}</span>
                   </span>
                   <ArrowRight
                     size={14}
-                    className="mt-auto text-ink-faint/60 transition-colors group-hover:text-brand"
+                    className="shrink-0 text-ink-faint/60 transition-colors group-hover:text-brand"
                     aria-hidden
                   />
                 </Link>
               ))}
             </nav>
           </div>
-        </div>
-      </section>
+        </Panel>
 
-      {/* KPI strip */}
-      <section
-        className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4"
-        aria-label="Key performance indicators"
-      >
-        <KpiCard
-          label="Cameras in System"
-          value={formatNumber(kpis.data?.totalCameras ?? stats.total)}
-          sub="Total cameras installed"
-          tile="blue"
-          icon={Cctv}
-          to="/registry"
-          cta="View all cameras"
-          loading={kpis.loading && camsLoading}
-        />
-        <KpiCard
-          label="Cameras Working"
-          value={formatNumber(kpis.data?.camerasOnline ?? stats.online)}
-          sub={`${stats.degraded} with problems · ${stats.offline} offline`}
-          tile="green"
-          icon={Signal}
-          to="/cameras"
-          cta="View status"
-          loading={kpis.loading && camsLoading}
-        />
-        <KpiCard
-          label="Alerts to Action"
-          value={formatNumber(activeAlerts.length)}
-          sub="Active alerts pending"
-          tone={activeAlerts.length ? 'critical' : 'neutral'}
-          tile="orange"
-          icon={Bell}
-          to="/alerts"
-          cta="View alerts"
-        />
-        <KpiCard
-          label="Vehicles Seen"
-          value={formatNumber(kpis.data?.vehicleDetections24h)}
-          sub="In last 24 hours"
-          tile="purple"
-          icon={Car}
-          to="/events"
-          cta="View vehicles"
-          loading={kpis.loading}
-        />
-        <KpiCard
-          label="Number Plates Read"
-          value={formatNumber(kpis.data?.anprReads24h)}
-          sub="Read automatically"
-          tile="sky"
-          icon={ScanLine}
-          to="/events"
-          cta="View logs"
-          loading={kpis.loading}
-        />
-        <KpiCard
-          label="Wanted Vehicles Found"
-          value={formatNumber(kpis.data?.watchlistMatches24h)}
-          sub="In last 24 hours"
-          tone="critical"
-          tile="red"
-          icon={ShieldAlert}
-          to="/watchlist"
-          cta="View wanted list"
-          loading={kpis.loading}
-        />
-      </section>
-
-      {/* Main three-column operations row */}
-      <section className="grid gap-3 sm:gap-4 xl:grid-cols-12">
         <Panel
-          title="Live Cameras"
+          title="Needs attention"
+          icon={Bell}
+          className="xl:col-span-4"
+          bodyClassName="overflow-y-auto"
+          actions={
+            <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
+              All alerts <ArrowRight size={13} aria-hidden />
+            </button>
+          }
+        >
+          {activeAlerts.length === 0 ? (
+            <EmptyState title="No active alerts" detail="Nothing needs your attention right now." />
+          ) : (
+            <div className="space-y-3 p-4">
+              {activeAlerts.slice(0, 3).map((a) => (
+                <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />
+              ))}
+            </div>
+          )}
+        </Panel>
+      </section>
+
+      {/* Live operations */}
+      <section className="grid gap-5 xl:grid-cols-12">
+        <Panel
+          title="Live cameras"
           icon={Cctv}
-          className="max-h-[720px] xl:col-span-5"
+          className="max-h-[640px] xl:col-span-5"
           bodyClassName="overflow-y-auto"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/cameras')}>
@@ -223,7 +237,7 @@ export default function Dashboard() {
             isEmpty={!cameras.length}
             loadingLabel="Loading camera registry"
           >
-            <div className="flex flex-col gap-2.5 p-3">
+            <div className="flex flex-col gap-2.5 p-4">
               {watchCameras.map((c) => (
                 <CameraCard key={c.id} camera={c} variant="list" />
               ))}
@@ -232,13 +246,13 @@ export default function Dashboard() {
         </Panel>
 
         <Panel
-          title="Recent Detections"
+          title="Recent detections"
           icon={Activity}
-          className="min-h-[340px] xl:col-span-3"
+          className="min-h-[360px] xl:col-span-4"
           bodyClassName="flex flex-col min-h-0"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/events')}>
-              View all <ArrowRight size={13} aria-hidden />
+              Vehicle log <ArrowRight size={13} aria-hidden />
             </button>
           }
         >
@@ -246,34 +260,39 @@ export default function Dashboard() {
         </Panel>
 
         <Panel
-          title="Recent Alerts"
-          icon={Bell}
-          className="min-h-[340px] xl:col-span-4"
-          bodyClassName="overflow-y-auto"
+          title="Service health"
+          icon={Activity}
+          className="xl:col-span-3"
           actions={
-            <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
-              View all <ArrowRight size={13} aria-hidden />
+            <button type="button" className="link-btn" onClick={() => navigate('/system')}>
+              Details <ArrowRight size={13} aria-hidden />
             </button>
           }
         >
-          {activeAlerts.length === 0 ? (
-            <EmptyState title="No active alerts" detail="Nothing needs your attention right now." />
-          ) : (
-            <div className="space-y-3 p-3">
-              {activeAlerts.slice(0, 4).map((a) => (
-                <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />
+          <AsyncBoundary loading={health.loading} error={health.error} onRetry={health.refresh}>
+            <ul className="divide-y divide-line/60">
+              {(health.data?.services ?? []).map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-ink">{s.name}</p>
+                    <p className="mt-0.5 text-2xs text-ink-faint">
+                      {s.uptimePct.toFixed(2)}% · hb {formatTime(s.lastHeartbeat)}
+                    </p>
+                  </div>
+                  <ServiceStatusChip status={s.status} />
+                </li>
               ))}
-            </div>
-          )}
+            </ul>
+          </AsyncBoundary>
         </Panel>
       </section>
 
-      {/* Bottom row: GIS · trend · health */}
-      <section className="grid gap-3 sm:gap-4 xl:grid-cols-12">
+      {/* Geography + trend */}
+      <section className="grid gap-5 xl:grid-cols-12">
         <Panel
           title="Where vehicles are being seen"
           icon={MapIcon}
-          className="min-h-[320px] xl:col-span-5"
+          className="min-h-[340px] xl:col-span-7"
           bodyClassName="relative"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/gis')}>
@@ -290,48 +309,21 @@ export default function Dashboard() {
           />
         </Panel>
 
-        <div className="grid gap-3 sm:gap-4 xl:col-span-4">
-          <Panel title="Vehicles seen each hour" icon={Activity} className="min-h-[160px]" bodyClassName="p-2.5">
-            <div className="h-[130px]">
+        <div className="grid gap-5 xl:col-span-5">
+          <Panel title="Vehicles seen each hour" icon={Activity} className="min-h-[180px]" bodyClassName="p-4">
+            <div className="h-[140px]">
               <DetectionTrend events={recentEvents} />
             </div>
           </Panel>
-          <Panel title="Busiest cameras" icon={Cctv} className="min-h-[160px]" bodyClassName="p-2.5">
-            <div className="h-[150px]">
+          <Panel title="Busiest cameras" icon={Cctv} className="min-h-[180px]" bodyClassName="p-4">
+            <div className="h-[160px]">
               <CameraActivityChart events={recentEvents} />
             </div>
           </Panel>
         </div>
-
-        <Panel
-          title="Is everything working?"
-          icon={Activity}
-          className="xl:col-span-3"
-          actions={
-            <button type="button" className="link-btn" onClick={() => navigate('/system')}>
-              Details <ArrowRight size={13} aria-hidden />
-            </button>
-          }
-        >
-          <AsyncBoundary loading={health.loading} error={health.error} onRetry={health.refresh}>
-            <ul className="divide-y divide-line/60">
-              {(health.data?.services ?? []).map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs text-ink">{s.name}</p>
-                    <p className="text-2xs text-ink-faint">
-                      {s.uptimePct.toFixed(2)}% · hb {formatTime(s.lastHeartbeat)}
-                    </p>
-                  </div>
-                  <ServiceStatusChip status={s.status} />
-                </li>
-              ))}
-            </ul>
-          </AsyncBoundary>
-        </Panel>
       </section>
 
-      {/* Recent detections table */}
+      {/* Detailed log */}
       <Panel
         title="Latest vehicles seen"
         icon={ScanLine}
@@ -372,7 +364,7 @@ export default function Dashboard() {
                     </td>
                     <td>
                       {e.watchlistMatch ? (
-                        <span className="chip border-critical/45 bg-critical/10 text-critical">Watchlist</span>
+                        <span className="chip border-critical/30 bg-critical/10 text-critical">Watchlist</span>
                       ) : (
                         <StatusChip status="ONLINE" showDot={false} />
                       )}

@@ -13,7 +13,6 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { IconTile, type TileTone } from '@/components/common/IconTile';
 import { cn } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useOfficer } from '@/features/officer/OfficerProvider';
@@ -24,31 +23,35 @@ interface NavItem {
   /** One line explaining what the page is for, shown under the label. */
   hint: string;
   icon: typeof LayoutDashboard;
-  tone: TileTone;
   badge?: 'alerts';
   end?: boolean;
 }
 
 const NAV: { section: string; items: NavItem[] }[] = [
   {
-    section: 'Main',
+    section: 'Operations',
     items: [
-      { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, tone: 'blue', end: true },
-      { to: '/vehicles', label: 'Find a Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
-      { to: '/alerts', label: 'Alerts', hint: 'Active alerts', icon: Bell, tone: 'red', badge: 'alerts' },
-      { to: '/cameras', label: 'Live Cameras', hint: 'Watch live feeds', icon: Cctv, tone: 'green' },
-      { to: '/gis', label: 'Map', hint: 'Cameras & vehicles', icon: Map, tone: 'orange' },
-      { to: '/video-analysis', label: 'Video Analysis', hint: 'Compare multiple videos', icon: ScanSearch, tone: 'purple' },
-      { to: '/events', label: 'Vehicle Log', hint: 'Vehicle history', icon: ListTree, tone: 'green' },
-      { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound, tone: 'blue' },
+      { to: '/', label: 'Command Center', hint: 'Network overview', icon: LayoutDashboard, end: true },
+      { to: '/cameras', label: 'Live Cameras', hint: 'Watch live feeds', icon: Cctv },
+      { to: '/vehicles', label: 'Find a Vehicle', hint: 'Search by number plate', icon: Car },
+      { to: '/gis', label: 'Map', hint: 'Cameras & vehicle routes', icon: Map },
+      { to: '/video-analysis', label: 'Video Analysis', hint: 'Compare multiple videos', icon: ScanSearch },
     ],
   },
   {
-    section: 'Records',
+    section: 'Intelligence',
     items: [
-      { to: '/watchlist', label: 'Wanted List', hint: 'Vehicles being watched', icon: ShieldCheck, tone: 'purple' },
-      { to: '/registry', label: 'Camera List', hint: 'All cameras', icon: ScrollText, tone: 'blue' },
-      { to: '/system', label: 'System Status', hint: 'System health', icon: Activity, tone: 'amber' },
+      { to: '/alerts', label: 'Alerts', hint: 'Active alerts', icon: Bell, badge: 'alerts' },
+      { to: '/events', label: 'Vehicle Log', hint: 'Detection history', icon: ListTree },
+      { to: '/watchlist', label: 'Wanted List', hint: 'Vehicles being watched', icon: ShieldCheck },
+    ],
+  },
+  {
+    section: 'Administration',
+    items: [
+      { to: '/registry', label: 'Camera List', hint: 'All cameras', icon: ScrollText },
+      { to: '/system', label: 'System Status', hint: 'Service health', icon: Activity },
+      { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound },
     ],
   },
 ];
@@ -70,40 +73,37 @@ export function Sidebar({
     <>
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/60 lg:hidden"
           onClick={onClose}
           aria-hidden
         />
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-line bg-surface-1 transition-[width,transform] duration-200',
-          collapsed ? 'w-[72px]' : 'w-[240px]',
+          'fixed inset-y-0 left-0 z-40 flex w-[264px] flex-col border-r border-line bg-surface-0 transition-[width,transform] duration-200',
+          collapsed && 'w-[76px]',
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
         aria-label="Primary navigation"
       >
-        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-3.5">
+        {/* Brand block — SENTINEL is the platform, TRINETRA AI the team behind it */}
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-5">
           <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-brand to-brand-strong shadow-[0_0_14px_rgb(77_141_255/0.35)]"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line-strong bg-surface-2"
             aria-hidden
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] text-brand" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M12 3 3 7.5v4.2c0 5 3.8 8.6 9 9.3 5.2-.7 9-4.3 9-9.3V7.5L12 3Z" />
-              <circle cx="12" cy="11" r="2.6" />
-              <circle cx="12" cy="11" r="0.5" fill="currentColor" stroke="none" />
+              <circle cx="12" cy="11" r="2.5" />
             </svg>
           </span>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="flex items-baseline gap-1.5 truncate">
-                <span className="text-[15px] font-black leading-none tracking-[0.08em] text-ink">SENTINEL</span>
-                <span className="rounded border border-brand/35 bg-brand/10 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-brand">
-                  AI
-                </span>
+              <p className="truncate text-[15px] font-semibold leading-tight tracking-[0.14em] text-ink">
+                SENTINEL
               </p>
-              <p className="mt-0.5 truncate text-2xs leading-tight text-ink-faint">
-                by <span className="font-semibold text-ink-muted">TRINETRA AI</span> · Command Center
+              <p className="mt-0.5 truncate text-[11px] leading-tight text-ink-faint">
+                by TRINETRA AI
               </p>
             </div>
           )}
@@ -117,13 +117,11 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-6">
           {NAV.map((group) => (
-            <div key={group.section} className="mb-4">
+            <div key={group.section} className="mb-7 last:mb-0">
               {!collapsed && (
-                <p className="px-2 pb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-ink-faint/80">
-                  {group.section}
-                </p>
+                <p className="eyebrow px-3 pb-2.5">{group.section}</p>
               )}
               <ul className="space-y-1">
                 {group.items.map((item) => {
@@ -138,29 +136,41 @@ export function Sidebar({
                         title={collapsed ? `${item.label} — ${item.hint}` : undefined}
                         className={({ isActive }) =>
                           cn(
-                            'group relative flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors',
+                            'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
                             isActive
-                              ? 'bg-brand/10 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-brand before:content-[""]'
-                              : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                              ? 'bg-surface-2 text-ink'
+                              : 'text-ink-muted hover:bg-surface-1 hover:text-ink',
                           )
                         }
                       >
                         {({ isActive }) => (
                           <>
-                            <IconTile tone={item.tone} size="md" active={isActive}>
-                              <Icon size={17} />
-                            </IconTile>
+                            <span
+                              aria-hidden
+                              className={cn(
+                                'absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-brand transition-opacity',
+                                isActive ? 'opacity-100' : 'opacity-0',
+                              )}
+                            />
+                            <Icon
+                              size={17}
+                              className={cn(
+                                'shrink-0 transition-colors',
+                                isActive ? 'text-brand' : 'text-ink-faint group-hover:text-ink-muted',
+                              )}
+                              aria-hidden
+                            />
                             {!collapsed && (
                               <span className="min-w-0 flex-1">
                                 <span
                                   className={cn(
-                                    'block truncate text-[13px] font-semibold leading-tight',
-                                    isActive ? 'text-brand' : 'text-ink',
+                                    'block truncate text-sm font-medium leading-tight',
+                                    isActive ? 'text-ink' : 'text-ink-muted group-hover:text-ink',
                                   )}
                                 >
                                   {item.label}
                                 </span>
-                                <span className="block truncate text-2xs font-normal text-ink-faint">
+                                <span className="mt-0.5 block truncate text-[11px] font-normal leading-tight text-ink-faint">
                                   {item.hint}
                                 </span>
                               </span>
@@ -168,8 +178,8 @@ export function Sidebar({
                             {badgeCount > 0 && (
                               <span
                                 className={cn(
-                                  'ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-critical px-1 font-mono text-2xs font-bold text-white',
-                                  collapsed && 'absolute right-0.5 top-0.5 ml-0 h-4 min-w-4',
+                                  'ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-critical/15 px-1.5 font-mono text-[11px] font-semibold text-critical',
+                                  collapsed && 'absolute right-1 top-1 ml-0 h-4 min-w-4',
                                 )}
                                 aria-label={`${badgeCount} active alerts`}
                               >
@@ -187,40 +197,48 @@ export function Sidebar({
           ))}
         </nav>
 
-        {!collapsed && (
-          <div className="px-3 pb-4">
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                navigate('/profile');
-              }}
-              className="flex w-full items-center gap-2.5 rounded-xl border border-line bg-surface-2/70 p-3 text-left transition-colors hover:bg-surface-2"
-              aria-label="Open officer profile"
-            >
+        {/* Operator card */}
+        <div className="border-t border-line p-3">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              navigate('/profile');
+            }}
+            className="flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition-colors hover:bg-surface-1"
+            aria-label="Open officer profile"
+          >
+            <span className="relative shrink-0">
               {officer ? (
                 <img
                   src={officer.photoUrl}
                   alt=""
-                  className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-line"
+                  className="h-9 w-9 rounded-full object-cover"
                   aria-hidden
                 />
               ) : (
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-surface-2 text-ink-muted" aria-hidden>
                   <UserRound size={16} />
                 </span>
               )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-ink">{officer?.name ?? 'System Operator'}</p>
-                <p className="truncate text-2xs text-ink-faint">{officer?.designation ?? 'Control Center'}</p>
-              </div>
-              <span className="chip border-online/30 bg-online/10 text-online">
-                <span className="h-1.5 w-1.5 rounded-full bg-online" aria-hidden />
-                Online
+              <span
+                className="absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full border-2 border-surface-0 bg-online"
+                title="On duty"
+                aria-hidden
+              />
+            </span>
+            {!collapsed && (
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-semibold text-ink">
+                  {officer?.name ?? 'System Operator'}
+                </span>
+                <span className="block truncate text-[11px] text-ink-faint">
+                  {officer?.designation ?? 'Control Center'}
+                </span>
               </span>
-            </button>
-          </div>
-        )}
+            )}
+          </button>
+        </div>
       </aside>
     </>
   );

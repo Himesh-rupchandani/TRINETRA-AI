@@ -17,7 +17,7 @@ export function cameraIcon(status: CameraStatus, selected = false): L.DivIcon {
     popupAnchor: [0, -size / 2],
     html: `<div style="position:relative;width:${size}px;height:${size}px;">
       <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};
-        border:2px solid #ffffff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>
+        border:2px solid rgb(255 255 255 / 0.85);box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>
       ${selected ? `<div style="position:absolute;inset:-6px;border-radius:50%;border:2px solid ${color}"></div>` : ''}
     </div>`,
   });
@@ -37,14 +37,14 @@ export function routeIcon(
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
     html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${fill};
-      border:2px solid ${active ? '#ffffff' : 'rgba(255,255,255,.75)'};display:grid;place-items:center;
+      border:2px solid ${active ? '#ffffff' : 'rgba(255,255,255,.7)'};display:grid;place-items:center;
       box-shadow:0 2px 6px rgba(0,0,0,.55);font:700 ${size * 0.46}px/1 ui-monospace,monospace;color:#0b0f14;">
       ${sequence}</div>`,
   });
 }
 
 export function eventIcon(watchlist = false): L.DivIcon {
-  const color = watchlist ? severityHex.CRITICAL : '#38bdf8';
+  const color = watchlist ? severityHex.CRITICAL : '#46ccb8';
   return L.divIcon({
     className: 'trinetra-marker',
     iconSize: [12, 12],

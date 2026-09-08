@@ -76,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               className={cn(
-                'panel animate-slide-in flex items-start gap-2 border-l-2 p-2.5 shadow-lg',
+                'panel animate-slide-in flex items-start gap-3 border-l-2 p-4 shadow-cardHover',
                 TONE[t.kind],
               )}
             >

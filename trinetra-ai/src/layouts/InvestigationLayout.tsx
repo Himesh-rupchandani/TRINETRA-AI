@@ -27,8 +27,8 @@ export function InvestigationLayout({
   className?: string;
 }) {
   return (
-    <div className={cn('flex h-full min-h-0 flex-col', className)}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 border-b border-line bg-surface-1 px-4 py-3 sm:px-5">
+    <div className={cn('animate-page-in flex h-full min-h-0 flex-col', className)}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 sm:px-6">
         <Link to={backTo} className="btn-ghost btn-xs shrink-0">
           <ChevronLeft size={12} aria-hidden />
           <span className="hidden sm:inline">{backLabel}</span>
@@ -36,10 +36,10 @@ export function InvestigationLayout({
         </Link>
         {title && <div className="min-w-0">{title}</div>}
         {status}
-        {meta && <div className="hidden items-center gap-3 md:flex">{meta}</div>}
-        {actions && <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>}
+        {meta && <div className="hidden items-center gap-4 md:flex">{meta}</div>}
+        {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">{children ?? <Outlet />}</div>
+      <div className="min-h-0 flex-1 overflow-auto border-t border-line">{children ?? <Outlet />}</div>
     </div>
   );
 }

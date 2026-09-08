@@ -109,7 +109,7 @@ export default function Registry() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Camera List"
         icon={ScrollText}
@@ -122,23 +122,24 @@ export default function Registry() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-3 border-b border-line bg-surface-1 px-4 py-3 sm:px-5">
-        <div className="min-w-[220px] flex-1">
+      <div className="px-5 pt-5 sm:px-6 xl:px-8">
+      <div className="panel flex flex-wrap items-end gap-x-5 gap-y-4 p-5">
+        <div className="min-w-[240px] flex-1">
           <label className="label" htmlFor="reg-search">
             Search cameras
           </label>
           <div className="relative">
-            <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
             <input
               id="reg-search"
-              className="input pl-7"
+              className="input pl-10"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by camera number, place or department"
             />
           </div>
         </div>
-        <div className="w-[120px]">
+        <div className="w-[150px]">
           <label className="label" htmlFor="reg-status">
             Status
           </label>
@@ -168,14 +169,15 @@ export default function Registry() {
             ))}
           </select>
         </div>
-        <div className="ml-auto flex items-center gap-2 self-center text-2xs">
-          <span className="chip border-online/45 bg-online/10 text-online">{stats.online} working</span>
-          <span className="chip border-degraded/45 bg-degraded/10 text-degraded">{stats.degraded} poor quality</span>
-          <span className="chip border-offline/45 bg-offline/10 text-offline">{stats.offline} not working</span>
+        <div className="ml-auto flex items-center gap-2.5 self-center">
+          <span className="chip border-online/30 bg-online/10 text-online">{stats.online} working</span>
+          <span className="chip border-degraded/30 bg-degraded/10 text-degraded">{stats.degraded} poor quality</span>
+          <span className="chip border-offline/30 bg-offline/10 text-offline">{stats.offline} not working</span>
         </div>
       </div>
+      </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
         <Panel>
           <AsyncBoundary
             loading={loading}

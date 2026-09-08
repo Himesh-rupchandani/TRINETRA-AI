@@ -29,7 +29,7 @@ export function MovementTimeline({
   }
 
   return (
-    <ol className={cn('relative p-2.5', className)} aria-label="Chronological movement timeline">
+    <ol className={cn('relative p-4', className)} aria-label="Chronological movement timeline">
       {points.map((p, i) => {
         const active = p.sequence === activeSequence;
         const last = i === points.length - 1;

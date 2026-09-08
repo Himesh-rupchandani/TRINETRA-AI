@@ -1,7 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  // Light Mode only: Night/Dark Mode was removed, so there is no darkMode
-  // variant ('class'/'media') registered here anymore.
+  // Dark command-center theme only — enforced pre-render in main.tsx.
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
@@ -10,7 +9,7 @@ export default {
         mono: ['JetBrains Mono', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       colors: {
-        // Surface scale — control room neutrals
+        // Surface scale — neutral graphite (no blue cast)
         surface: {
           0: 'rgb(var(--surface-0) / <alpha-value>)',
           1: 'rgb(var(--surface-1) / <alpha-value>)',
@@ -26,20 +25,21 @@ export default {
         },
         brand: {
           DEFAULT: 'rgb(var(--brand) / <alpha-value>)',
-          // Filled-control variant — dark-enough azure that white labels pass AA.
+          // Filled-control variant — deep teal, white labels pass AA.
           strong: 'rgb(var(--brand-strong) / <alpha-value>)',
           soft: 'rgb(var(--brand-soft) / <alpha-value>)',
         },
-        // Severity / status semantic tokens — tuned for dark surfaces
-        critical: '#f43f5e',
+        // Severity / status semantic tokens — desaturated, dark-surface tuned.
+        // Color carries meaning only; nothing glows.
+        critical: '#fb7185',
         high: '#fb923c',
-        medium: '#eab308',
-        low: '#38bdf8',
-        info: '#94a3b8',
-        online: '#22c55e',
-        offline: '#ef4444',
-        degraded: '#f59e0b',
-        processing: '#3b82f6',
+        medium: '#e3b341',
+        low: '#7dd3fc',
+        info: '#a1a1aa',
+        online: '#4ade80',
+        offline: '#f87171',
+        degraded: '#fbbf24',
+        processing: '#a1a1aa',
       },
       fontSize: {
         // Legibility pass: everything is a step larger than a classic dense
@@ -53,14 +53,14 @@ export default {
         xl: ['1.3125rem', { lineHeight: '1.85rem' }],
       },
       boxShadow: {
-        panel: '0 1px 2px rgb(0 0 0 / 0.45), 0 1px 8px rgb(0 0 0 / 0.35)',
-        cardHover: '0 6px 20px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(var(--line) / 0.9)',
+        // Flat system: panels are defined by hairlines, not shadows.
+        panel: '0 0 0 0.5px rgb(255 255 255 / 0.02)',
+        cardHover: '0 12px 32px rgb(0 0 0 / 0.4)',
       },
       keyframes: {
-        'pulse-ring': {
-          '0%': { boxShadow: '0 0 0 0 rgb(244 63 94 / 0.45)' },
-          '70%': { boxShadow: '0 0 0 8px rgb(244 63 94 / 0)' },
-          '100%': { boxShadow: '0 0 0 0 rgb(244 63 94 / 0)' },
+        'pulse-dot': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.45' },
         },
         'slide-in': {
           from: { opacity: '0', transform: 'translateY(-6px)' },
@@ -68,8 +68,8 @@ export default {
         },
       },
       animation: {
-        'pulse-ring': 'pulse-ring 2s infinite',
-        'slide-in': 'slide-in 160ms ease-out',
+        'pulse-dot': 'pulse-dot 2.4s ease-in-out infinite',
+        'slide-in': 'slide-in 180ms ease-out',
       },
     },
   },

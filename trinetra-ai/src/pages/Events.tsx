@@ -6,6 +6,7 @@ import { Panel, AsyncBoundary } from '@/components/common/Panel';
 import { Pagination, PlateLink, ConfidenceBar, CameraLink } from '@/components/common/Links';
 import { SeverityChip } from '@/components/common/Chips';
 import { Modal } from '@/components/common/Modal';
+import { Switch } from '@/components/common/Switch';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
 import { useEventSearch } from '@/hooks/useEvents';
 import { useCameras } from '@/hooks/useCameras';
@@ -87,7 +88,7 @@ export default function Events() {
     plate || cameraId !== 'ALL' || eventType !== 'ALL' || severity !== 'ALL' || dateFrom || dateTo || timeFrom || timeTo || watchlistOnly;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Vehicle Log"
         icon={ListTree}
@@ -100,7 +101,8 @@ export default function Events() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-2 border-b border-line bg-surface-1 px-3 py-2 sm:grid-cols-4 xl:grid-cols-8">
+      <div className="border-b border-line px-5 py-5 sm:px-6 xl:px-8">
+        <div className="grid grid-cols-2 gap-x-5 gap-y-4 lg:grid-cols-4">
         <div className="col-span-2 sm:col-span-1">
           <label className="label" htmlFor="f-plate">
             Number plate
@@ -185,25 +187,23 @@ export default function Events() {
           <input id="f-tto" type="time" className="input" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} />
         </div>
 
-        <div className="col-span-2 flex items-center gap-3 sm:col-span-4 xl:col-span-8">
-          <label className="flex cursor-pointer items-center gap-1.5 text-2xs text-ink-muted">
-            <input
-              type="checkbox"
-              className="h-3 w-3 accent-current"
-              checked={watchlistOnly}
-              onChange={(e) => setWatchlistOnly(e.target.checked)}
-            />
-            Only wanted vehicles
-          </label>
+        <div className="col-span-2 flex items-center gap-6 sm:col-span-4">
+          <Switch
+            checked={watchlistOnly}
+            onChange={setWatchlistOnly}
+            label="Only wanted vehicles"
+            className="min-w-[240px]"
+          />
           {active && (
-            <button type="button" className="btn-ghost btn-xs" onClick={clear}>
-              <X size={11} aria-hidden /> Clear filters
+            <button type="button" className="btn-ghost" onClick={clear}>
+              <X size={13} aria-hidden /> Clear filters
             </button>
           )}
         </div>
       </div>
+      </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
         <Panel bodyClassName="flex flex-col">
           <AsyncBoundary
             loading={loading}

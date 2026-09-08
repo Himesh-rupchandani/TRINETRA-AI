@@ -65,7 +65,7 @@ export default function VehicleInvestigation() {
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="p-6">
         <div className="panel">
           <LoadingState label={`Reconstructing movement history for ${plate}`} rows={6} />
         </div>
@@ -75,7 +75,7 @@ export default function VehicleInvestigation() {
 
   if (error) {
     return (
-      <div className="p-4">
+      <div className="p-6">
         <div className="panel">
           <ErrorState message={error} onRetry={() => trace(plate)} />
         </div>
@@ -159,7 +159,7 @@ export default function VehicleInvestigation() {
         </>
       }
     >
-      <div className="grid gap-3 p-4 sm:gap-4 sm:p-5">
+      <div className="grid gap-5 p-5 sm:p-6 xl:p-8">
         {/* LEFT — GIS */}
         <Panel
           title="Route on the map"
@@ -195,7 +195,7 @@ export default function VehicleInvestigation() {
         </Panel>
 
         {/* RIGHT — vehicle + watchlist + alerts */}
-        <div className="flex flex-col gap-3 sm:gap-4 xl:col-span-4">
+        <div className="flex flex-col gap-5 xl:col-span-4">
           <Panel title="Vehicle details" icon={Car}>
             {profile ? (
               <VehicleInfoPanel profile={profile} />
@@ -212,7 +212,7 @@ export default function VehicleInvestigation() {
             {vehicleAlerts.length === 0 ? (
               <EmptyState title="No alerts raised" detail="This vehicle has not triggered a watchlist alert." />
             ) : (
-              <div className="space-y-3 p-3">
+              <div className="space-y-4 p-4">
                 {vehicleAlerts.map((a) => (
                   <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />
                 ))}

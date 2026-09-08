@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { MapLegend } from '@/components/gis/MapLegend';
 import { Panel, EmptyState } from '@/components/common/Panel';
+import { SwitchCompact } from '@/components/common/Switch';
 import { StatusChip } from '@/components/common/Chips';
 import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { useCameras } from '@/hooks/useCameras';
@@ -56,7 +57,7 @@ export default function GIS() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Map"
         icon={MapIcon}
@@ -109,26 +110,17 @@ export default function GIS() {
         }
       />
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-4 sm:gap-4 sm:p-5">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 p-5 sm:p-6 xl:p-8">
         <Panel
           className="min-h-[420px] xl:col-span-9"
           bodyClassName="relative"
           title="Map of the city"
           icon={Layers}
           actions={
-            <div className="flex flex-wrap items-center gap-2.5 text-2xs text-ink-muted">
-              <label className="flex cursor-pointer items-center gap-1">
-                <input type="checkbox" className="h-3 w-3" checked={showCameras} onChange={(e) => setShowCameras(e.target.checked)} />
-                Cameras
-              </label>
-              <label className="flex cursor-pointer items-center gap-1">
-                <input type="checkbox" className="h-3 w-3" checked={showDetections} onChange={(e) => setShowDetections(e.target.checked)} />
-                Vehicle sightings
-              </label>
-              <label className="flex cursor-pointer items-center gap-1">
-                <input type="checkbox" className="h-3 w-3" checked={showCoverage} onChange={(e) => setShowCoverage(e.target.checked)} />
-                Camera range
-              </label>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <SwitchCompact checked={showCameras} onChange={setShowCameras} label="Cameras" />
+              <SwitchCompact checked={showDetections} onChange={setShowDetections} label="Vehicle sightings" />
+              <SwitchCompact checked={showCoverage} onChange={setShowCoverage} label="Camera range" />
             </div>
           }
         >
@@ -149,7 +141,7 @@ export default function GIS() {
           <MapLegend showRoute={points.length > 0} />
         </Panel>
 
-        <div className="flex min-h-0 flex-col gap-3 sm:gap-4 xl:col-span-3">
+        <div className="flex min-h-0 flex-col gap-5 xl:col-span-3">
           {points.length > 0 ? (
             <Panel
               title={`Route — ${result?.plate}`}

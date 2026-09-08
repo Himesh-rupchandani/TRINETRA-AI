@@ -7,6 +7,7 @@ import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
 import { config } from '@/lib/config';
 import { StatusChip } from '@/components/common/Chips';
+import { SwitchCompact } from '@/components/common/Switch';
 
 /**
  * Live camera player (WebRTC / WHEP).
@@ -366,8 +367,8 @@ export function CameraPlayer({
       </div>
 
       {showVideo && (
-        <div className="border-t border-line bg-surface-1 px-3 py-2">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <div className="border-t border-line bg-surface-1 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
               {onAir ? (
                 <span className="inline-flex items-center gap-1.5 font-medium text-ink">
@@ -385,17 +386,14 @@ export function CameraPlayer({
               )}
               <span>Watching for {Math.round(stats.mediaTime)}s</span>
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-2.5">
               {ticket?.detectionUrl && !detectionFailed && (
-                <button
-                  type="button"
-                  className="btn-ghost btn-xs"
-                  onClick={() => setAiBoxes((v) => !v)}
-                  aria-pressed={aiBoxes}
+                <SwitchCompact
+                  checked={aiBoxes}
+                  onChange={(next) => setAiBoxes(next)}
+                  label="Vehicle detection"
                   title="Real-time vehicle detection (green boxes) rendered by the backend"
-                >
-                  <ScanSearch size={11} aria-hidden /> Vehicle detection: {aiBoxes ? 'On' : 'Off'}
-                </button>
+                />
               )}
               <button
                 type="button"
@@ -412,7 +410,7 @@ export function CameraPlayer({
           </div>
 
           {showTechnical && (
-            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-2 font-mono text-2xs text-ink-faint sm:grid-cols-4">
+            <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 border-t border-line pt-3 font-mono text-2xs text-ink-faint sm:grid-cols-4">
               <div>
                 <dt className="inline">Transport </dt>
                 <dd className="inline text-ink-muted">

@@ -14,6 +14,13 @@ import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { config } from '@/lib/config';
 import { useOfficer } from '@/features/officer/OfficerProvider';
 
+const CONNECTION_LABEL: Record<string, string> = {
+  LIVE: 'Live feed',
+  SIMULATED: 'Demo feed',
+  CONNECTING: 'Connecting',
+  OFFLINE: 'Offline',
+};
+
 const CONNECTION_TONE: Record<string, string> = {
   LIVE: 'text-online',
   SIMULATED: 'text-critical',
@@ -60,13 +67,13 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface-1/85 px-3.5 backdrop-blur-md sm:gap-3 sm:px-5">
-      <button type="button" className="btn-ghost h-9 w-9 px-0 lg:hidden" onClick={onMenu} aria-label="Open navigation">
-        <Menu size={16} aria-hidden />
+    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-surface-0/85 px-4 backdrop-blur-md sm:px-6">
+      <button type="button" className="btn-ghost h-10 w-10 px-0 lg:hidden" onClick={onMenu} aria-label="Open navigation">
+        <Menu size={17} aria-hidden />
       </button>
       <button
         type="button"
-        className="btn-ghost hidden h-9 w-9 px-0 lg:inline-flex"
+        className="btn-ghost hidden h-10 w-10 px-0 lg:inline-flex"
         onClick={onToggleCollapse}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
@@ -74,98 +81,100 @@ export function Header({
       </button>
 
       <div className="min-w-0 lg:hidden">
-        <p className="truncate text-sm font-black leading-tight tracking-[0.08em] text-ink">{config.productName}</p>
-        <p className="hidden truncate text-2xs leading-tight text-ink-faint sm:block">{config.appName} · Control Room</p>
+        <p className="truncate text-sm font-semibold leading-tight tracking-[0.12em] text-ink">
+          {config.productName}
+        </p>
+        <p className="hidden truncate text-[11px] leading-tight text-ink-faint sm:block">
+          by {config.appName}
+        </p>
       </div>
 
       {/* Global plate search — the hero entry point, reachable from every screen */}
-      <form onSubmit={submitQuick} className="hidden max-w-md flex-1 md:block" role="search">
-        <label htmlFor="global-plate-search" className="sr-only">
-          Trace registration number
-        </label>
-        <div className="relative">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
-          <input
-            id="global-plate-search"
-            value={quick}
-            onChange={(e) => setQuick(e.target.value.toUpperCase())}
-            placeholder="Search number plate, camera, or location…"
-            className="input h-10 pl-9 font-mono uppercase"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-      </form>
+      <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex">
+        <form onSubmit={submitQuick} className="w-full max-w-xl" role="search">
+          <label htmlFor="global-plate-search" className="sr-only">
+            Trace registration number
+          </label>
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+            <input
+              id="global-plate-search"
+              value={quick}
+              onChange={(e) => setQuick(e.target.value.toUpperCase())}
+              placeholder="Search a number plate, e.g. GJ01AB1234"
+              className="input h-10 pl-10 font-mono uppercase"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+        </form>
+      </div>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {/* Operations clock — IST wallclock, standard in control rooms */}
         <span
-          className="hidden items-center gap-1.5 rounded-md border border-line bg-surface-2/70 px-2 py-1 font-mono text-2xs tabular-nums text-ink-muted md:inline-flex"
+          className="hidden items-center gap-2 rounded-lg border border-line px-3 py-1.5 font-mono text-xs tabular-nums text-ink-muted lg:inline-flex"
           title="Operations clock — Indian Standard Time"
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden />
-          {clock} <span className="font-semibold text-ink-faint">IST</span>
+          {clock} <span className="text-[10px] font-semibold text-ink-faint">IST</span>
         </span>
 
         {config.useMocks && (
-          <span className="chip hidden border-brand/25 bg-brand/10 font-semibold text-brand xl:inline-flex">
-            Demo Data
+          <span className="chip hidden border-line bg-surface-2 text-ink-muted xl:inline-flex">
+            Demo data
           </span>
         )}
 
         <span
           className={cn(
-            'hidden items-center gap-1.5 text-2xs font-bold uppercase tracking-wide sm:inline-flex',
+            'hidden items-center gap-2 text-2xs font-medium uppercase tracking-wide sm:inline-flex',
             CONNECTION_TONE[connection],
           )}
           title={`Realtime channel: ${connection}`}
         >
-          <span className={cn('h-2 w-2 rounded-full bg-current', connection === 'LIVE' && 'animate-pulse')} aria-hidden />
-          {connection === 'SIMULATED'
-            ? 'Demo Feed'
-            : connection === 'LIVE'
-              ? 'Live Feed'
-              : connection === 'CONNECTING'
-                ? 'Connecting'
-                : 'Offline'}
+          <span
+            className={cn(
+              'h-1.5 w-1.5 rounded-full bg-current',
+              connection === 'LIVE' && 'animate-pulse-dot',
+            )}
+            aria-hidden
+          />
+          {CONNECTION_LABEL[connection]}
         </span>
 
         <button
           type="button"
           onClick={() => navigate('/alerts')}
-          className="relative grid h-9 w-9 place-items-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          className="relative grid h-10 w-10 place-items-center rounded-lg text-ink-muted transition-colors hover:bg-surface-1 hover:text-ink"
           aria-label={`${counts.ACTIVE} alerts need your attention — open Alerts`}
         >
-          <Bell size={16} className={counts.ACTIVE > 0 ? 'animate-pulse text-critical' : ''} aria-hidden />
+          <Bell size={17} aria-hidden />
           {counts.ACTIVE > 0 && (
-            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-critical px-1 font-mono text-[10px] font-bold text-white">
-              {counts.ACTIVE}
-            </span>
+            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-critical ring-2 ring-surface-0" aria-hidden />
           )}
         </button>
 
         <button
           type="button"
           onClick={() => navigate('/profile')}
-          className="hidden items-center gap-2.5 border-l border-line pl-3 text-left xl:flex"
+          className="hidden items-center gap-3 rounded-lg py-1 pl-4 pr-1 text-left transition-colors hover:bg-surface-1 xl:flex"
           aria-label="Open officer profile"
         >
+          <span className="min-w-0">
+            <span className="block max-w-[160px] truncate text-xs font-semibold text-ink">
+              {officer?.name ?? 'System Operator'}
+            </span>
+            <span className="block text-[11px] text-ink-faint">
+              {officer?.designation ?? 'Control Center'}
+            </span>
+          </span>
           {officer ? (
-            <img
-              src={officer.photoUrl}
-              alt=""
-              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-line"
-              aria-hidden
-            />
+            <img src={officer.photoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" aria-hidden />
           ) : (
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
-              <UserRound size={15} />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-muted" aria-hidden>
+              <UserRound size={14} />
             </span>
           )}
-          <div className="leading-tight">
-            <p className="max-w-[160px] truncate text-xs font-semibold text-ink">{officer?.name ?? 'System Operator'}</p>
-            <p className="text-2xs text-ink-faint">{officer?.designation ?? 'Control Center'}</p>
-          </div>
         </button>
       </div>
     </header>

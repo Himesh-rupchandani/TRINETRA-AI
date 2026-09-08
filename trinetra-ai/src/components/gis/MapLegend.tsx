@@ -6,7 +6,7 @@ export function MapLegend({ showRoute = false }: { showRoute?: boolean }) {
     { color: cameraStatusHex.ONLINE, label: 'Camera working', icon: Cctv },
     { color: cameraStatusHex.DEGRADED, label: 'Poor quality', icon: Wifi },
     { color: cameraStatusHex.OFFLINE, label: 'Not working', icon: Radio },
-    { color: '#38bdf8', label: 'Vehicle was seen here', icon: CircleDot },
+    { color: '#46ccb8', label: 'Vehicle was seen here', icon: CircleDot },
     ...(showRoute ? [{ color: '#f97316', label: 'Route, in order', icon: CameraIcon }] : []),
   ];
 

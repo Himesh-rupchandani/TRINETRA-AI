@@ -19,7 +19,7 @@ export function MainLayout() {
       <div
         className={cn(
           'flex min-w-0 flex-1 flex-col transition-[padding] duration-200',
-          effectiveCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[240px]',
+          effectiveCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[264px]',
         )}
       >
         <Header
@@ -29,7 +29,9 @@ export function MainLayout() {
         />
         <AlertBanner />
         <main id="main" className="min-h-0 flex-1">
-          <Outlet />
+          <div className="mx-auto h-full w-full max-w-[1760px]">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

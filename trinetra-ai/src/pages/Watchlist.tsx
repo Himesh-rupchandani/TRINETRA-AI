@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ShieldCheck, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Panel, AsyncBoundary } from '@/components/common/Panel';
+import { Switch } from '@/components/common/Switch';
 import { SeverityChip } from '@/components/common/Chips';
 import { PlateLink } from '@/components/common/Links';
 import { useAsync } from '@/hooks/useAsync';
@@ -23,7 +24,7 @@ export default function Watchlist() {
   }, [data, query, onlyActive]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Wanted List"
         icon={ShieldCheck}
@@ -31,29 +32,33 @@ export default function Watchlist() {
         subtitle={`${(data ?? []).filter((w) => w.active).length} vehicles are being watched. If a camera sees one, you get an alert straight away.`}
       />
 
-      <div className="flex flex-wrap items-end gap-3 border-b border-line bg-surface-1 px-4 py-3 sm:px-5">
+      <div className="px-5 pt-5 sm:px-6 xl:px-8">
+      <div className="panel flex flex-wrap items-center gap-x-8 gap-y-4 p-5">
         <div className="min-w-[240px] flex-1">
           <label className="label" htmlFor="wl-search">
             Search
           </label>
           <div className="relative">
-            <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+            <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
             <input
               id="wl-search"
-              className="input pl-7"
+              className="input pl-10"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Plate, category, case reference…"
             />
           </div>
         </div>
-        <label className="flex h-8 cursor-pointer items-center gap-1.5 text-2xs text-ink-muted">
-          <input type="checkbox" className="h-3 w-3" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
-          Active records only
-        </label>
+        <Switch
+          checked={onlyActive}
+          onChange={setOnlyActive}
+          label="Active records only"
+          className="pb-1"
+        />
+      </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
         <Panel>
           <AsyncBoundary
             loading={loading}

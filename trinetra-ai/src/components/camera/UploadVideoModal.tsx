@@ -128,7 +128,7 @@ export function UploadVideoModal({
           />
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-xl border border-dashed border-line-strong bg-surface-2/50 px-4 py-5 text-left transition-colors hover:bg-surface-2"
+            className="flex w-full items-center gap-4 rounded-lg border border-dashed border-line-strong bg-surface-2/40 px-5 py-6 text-left transition-colors hover:bg-surface-2"
             onClick={() => inputRef.current?.click()}
           >
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand">

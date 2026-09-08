@@ -37,14 +37,14 @@ export function TraceSearchBar({
 
   return (
     <form onSubmit={submit} className={cn('w-full', className)} role="search" aria-label="Find a vehicle">
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1">
           <label htmlFor={inputId} className="sr-only">
             Number plate
           </label>
           <Search
-            size={big ? 17 : 15}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+            size={big ? 16 : 15}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-faint"
             aria-hidden
           />
           <input
@@ -55,14 +55,14 @@ export function TraceSearchBar({
             autoComplete="off"
             spellCheck={false}
             className={cn(
-              'input plate pl-10 uppercase tracking-widest',
-              big ? 'h-12 text-lg' : 'h-10 text-sm',
+              'input plate pl-11 uppercase tracking-[0.12em]',
+              big ? 'h-12 text-base' : 'h-10 text-sm',
             )}
           />
         </div>
         <button
           type="submit"
-          className={cn('btn-solid shrink-0', big ? 'h-12 px-6 text-sm' : 'h-10 px-5 text-sm')}
+          className={cn('btn-solid shrink-0', big ? 'h-12 px-7' : 'h-10 px-6')}
           disabled={loading}
         >
           {loading ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Search size={15} aria-hidden />}
@@ -71,8 +71,8 @@ export function TraceSearchBar({
       </div>
 
       {showSuggestions && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-ink-faint">Try these demo plates:</span>
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+          <span className="text-xs text-ink-faint">Try a demo plate:</span>
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
@@ -82,7 +82,7 @@ export function TraceSearchBar({
                 onTrace(s);
               }}
               className={cn(
-                'chip border-line bg-surface-2 font-mono text-ink-muted hover:border-brand/50 hover:text-brand',
+                'chip border-line bg-surface-2 font-mono text-ink-muted hover:border-brand/40 hover:text-brand',
                 s === config.demo.primaryPlate && 'border-brand/40 text-brand',
               )}
             >

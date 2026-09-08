@@ -110,7 +110,7 @@ export function AddVideosPanel({
 
   return (
     <Panel title="Add videos" icon={FileVideo}>
-      <div className="grid gap-5 p-4 lg:grid-cols-2">
+      <div className="grid gap-6 p-5 lg:grid-cols-2">
         {/* --- Local upload --- */}
         <div>
           <p className="label">Option A — Local video files</p>
@@ -124,7 +124,7 @@ export function AddVideosPanel({
           />
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-xl border border-dashed border-line-strong bg-surface-2/50 px-4 py-5 text-left transition-colors hover:bg-surface-2"
+            className="flex w-full items-center gap-4 rounded-lg border border-dashed border-line-strong bg-surface-2/40 px-5 py-6 text-left transition-colors hover:bg-surface-2"
             onClick={() => inputRef.current?.click()}
             disabled={uploading || busy}
           >
@@ -199,7 +199,7 @@ export function AddVideosPanel({
         {/* --- Google Drive --- */}
         <div>
           <p className="label">Option B — Google Drive link</p>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <input
               className="input flex-1"
               placeholder="https://drive.google.com/file/d/FILE_ID/view?usp=sharing"
@@ -222,7 +222,7 @@ export function AddVideosPanel({
             </button>
           </div>
 
-          <div className="mt-3 flex gap-2">
+          <div className="mt-4 flex gap-3">
             <input
               className="input font-mono uppercase"
               placeholder="Camera id (optional)"

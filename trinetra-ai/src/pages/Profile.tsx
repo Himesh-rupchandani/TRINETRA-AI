@@ -24,7 +24,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Officer Profile"
         icon={UserRound}
@@ -38,7 +38,7 @@ export default function Profile() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
         <AsyncBoundary
           loading={loading}
           error={error}
@@ -81,7 +81,7 @@ export default function Profile() {
           )}
 
           {p && !showOthers && (
-            <div className="flex flex-col gap-3 sm:gap-4">
+            <div className="flex flex-col gap-5">
               {/* Officer identity — click to return to the officer selection list */}
               <section className="panel overflow-hidden">
                 <button
@@ -116,7 +116,7 @@ export default function Profile() {
               </section>
 
               {/* Officer statistics */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-5">
+              <div className="grid grid-cols-2 gap-5 lg:grid-cols-3 xl:grid-cols-5">
                 <KpiCard label="Total Vehicles Caught" value={formatNumber(p.vehiclesCaught)} tile="blue" icon={Car} />
                 <KpiCard label="Total Challans Given" value={formatNumber(p.totalChallans)} tile="orange" icon={FileText} />
                 <KpiCard label="Total Challan Amount" value={<>₹{formatNumber(p.totalChallanAmount)}</>} tile="amber" icon={Receipt} />

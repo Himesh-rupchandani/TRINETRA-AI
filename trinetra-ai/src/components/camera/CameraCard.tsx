@@ -31,11 +31,11 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
       <Link
         to={`/cameras/${camera.id}`}
         className={cn(
-          'flex items-center gap-3 rounded-xl border border-line bg-surface-1 p-2.5 transition-colors hover:border-line-strong',
-          selected && 'border-brand/50 ring-1 ring-brand/20',
+          'flex items-center gap-3.5 rounded-lg border border-line p-3 transition-colors hover:border-line-strong hover:bg-surface-2/50',
+          selected && 'border-brand/40 ring-1 ring-brand/20',
         )}
       >
-        <span className="relative grid h-12 w-[76px] shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-surface-2 text-ink-faint">
+        <span className="relative grid h-12 w-[76px] shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-surface-2 text-ink-faint">
           <Video size={16} aria-hidden />
           {preview && (
             <img
@@ -48,8 +48,8 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-xs font-bold text-ink">{camera.name}</p>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-2xs text-ink-faint">
+          <p className="truncate font-mono text-xs font-semibold text-ink">{camera.name}</p>
+          <p className="mt-1 flex items-center gap-1 truncate text-2xs text-ink-faint">
             <MapPin size={10} className="shrink-0" aria-hidden />
             {camera.location}
           </p>
@@ -62,8 +62,8 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
   return (
     <article
       className={cn(
-        'panel group flex flex-col overflow-hidden transition-shadow hover:shadow-cardHover',
-        selected && 'border-brand/60 ring-1 ring-brand/30',
+        'panel group flex flex-col overflow-hidden transition-colors hover:border-line-strong',
+        selected && 'border-brand/40 ring-1 ring-brand/20',
       )}
     >
       {!compact && (
@@ -81,18 +81,18 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
             />
           )}
           {preview && (
-            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-amber-300">
+            <span className="absolute bottom-2 right-2 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-semibold tracking-wider text-white/85">
               DEMO
             </span>
           )}
         </div>
       )}
 
-      <div className="flex items-start justify-between gap-2.5 px-4 py-3">
+      <div className="flex items-start justify-between gap-3 px-5 py-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <Video size={14} className="shrink-0 text-ink-faint" aria-hidden />
-            <h3 className="truncate font-mono text-sm font-bold text-ink">{camera.name}</h3>
+            <h3 className="truncate font-mono text-sm font-semibold text-ink">{camera.name}</h3>
           </div>
           <p className="mt-1 flex items-center gap-1 truncate text-2xs text-ink-muted">
             <MapPin size={10} className="shrink-0" aria-hidden />
@@ -103,7 +103,7 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
       </div>
 
       {!compact && (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 pb-3 text-2xs">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-5 pb-4 text-2xs">
           <dt className="text-ink-faint">Department</dt>
           <dd className="truncate text-right text-ink-muted">{camera.department ?? '—'}</dd>
           <dt className="text-ink-faint">Video format</dt>
@@ -119,7 +119,7 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
         </dl>
       )}
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2.5 gap-y-2 border-t border-line/70 px-4 py-3">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line px-5 py-3.5">
         <span
           className="flex items-center gap-1.5 whitespace-nowrap text-2xs text-ink-faint"
           title="Vehicles seen by this camera in the last 24 hours"

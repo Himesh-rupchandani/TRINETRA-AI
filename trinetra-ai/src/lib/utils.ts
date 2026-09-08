@@ -94,11 +94,11 @@ export function isValidPlate(input: string): boolean {
 /* --------------------------- semantic colours --------------------------- */
 
 export const severityClass: Record<Severity, string> = {
-  CRITICAL: 'bg-critical/15 text-critical border-critical/45',
-  HIGH: 'bg-high/15 text-high border-high/45',
-  MEDIUM: 'bg-medium/15 text-medium border-medium/45',
-  LOW: 'bg-low/15 text-low border-low/45',
-  INFO: 'bg-info/15 text-info border-info/45',
+  CRITICAL: 'bg-critical/10 text-critical border-critical/30',
+  HIGH: 'bg-high/10 text-high border-high/30',
+  MEDIUM: 'bg-medium/10 text-medium border-medium/30',
+  LOW: 'bg-low/10 text-low border-low/30',
+  INFO: 'bg-info/10 text-info border-info/25',
 };
 
 export const severityBar: Record<Severity, string> = {
@@ -110,17 +110,17 @@ export const severityBar: Record<Severity, string> = {
 };
 
 export const severityHex: Record<Severity, string> = {
-  CRITICAL: '#f43f5e',
+  CRITICAL: '#fb7185',
   HIGH: '#fb923c',
-  MEDIUM: '#eab308',
-  LOW: '#38bdf8',
-  INFO: '#94a3b8',
+  MEDIUM: '#e3b341',
+  LOW: '#7dd3fc',
+  INFO: '#a1a1aa',
 };
 
 export const cameraStatusClass: Record<CameraStatus, string> = {
-  ONLINE: 'bg-online/15 text-online border-online/45',
-  OFFLINE: 'bg-offline/15 text-offline border-offline/45',
-  DEGRADED: 'bg-degraded/15 text-degraded border-degraded/45',
+  ONLINE: 'bg-online/10 text-online border-online/30',
+  OFFLINE: 'bg-offline/10 text-offline border-offline/30',
+  DEGRADED: 'bg-degraded/10 text-degraded border-degraded/30',
 };
 
 export const cameraStatusDot: Record<CameraStatus, string> = {
@@ -130,21 +130,21 @@ export const cameraStatusDot: Record<CameraStatus, string> = {
 };
 
 export const cameraStatusHex: Record<CameraStatus, string> = {
-  ONLINE: '#22c55e',
-  OFFLINE: '#ef4444',
-  DEGRADED: '#f59e0b',
+  ONLINE: '#4ade80',
+  OFFLINE: '#f87171',
+  DEGRADED: '#fbbf24',
 };
 
 export const alertStatusClass: Record<AlertStatus, string> = {
-  NEW: 'bg-processing text-white border-processing',
-  ACKNOWLEDGED: 'bg-processing/12 text-processing border-processing/30',
-  RESOLVED: 'bg-online/12 text-online border-online/35',
+  NEW: 'bg-ink/10 text-ink border-ink/25',
+  ACKNOWLEDGED: 'bg-brand/10 text-brand border-brand/25',
+  RESOLVED: 'bg-online/10 text-online border-online/25',
 };
 
 export const serviceStatusClass: Record<ServiceStatus, string> = {
-  HEALTHY: 'bg-online/15 text-online border-online/45',
-  DEGRADED: 'bg-degraded/15 text-degraded border-degraded/45',
-  OFFLINE: 'bg-offline/15 text-offline border-offline/45',
+  HEALTHY: 'bg-online/10 text-online border-online/30',
+  DEGRADED: 'bg-degraded/10 text-degraded border-degraded/30',
+  OFFLINE: 'bg-offline/10 text-offline border-offline/30',
 };
 
 export function confidenceClass(c: number): string {

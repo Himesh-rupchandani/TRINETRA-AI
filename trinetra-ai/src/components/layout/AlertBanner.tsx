@@ -20,12 +20,12 @@ export function AlertBanner() {
     <div
       role="alert"
       aria-live="assertive"
-      className="animate-slide-in border-b border-critical/50 bg-critical/15"
+      className="animate-slide-in border-b border-critical/30 bg-critical/10"
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
-        <span className={cn('h-6 w-1 shrink-0 rounded-full', severityBar[a.severity])} aria-hidden />
-        <Siren size={15} className="shrink-0 animate-pulse text-critical" aria-hidden />
-        <span className="text-2xs font-bold uppercase tracking-widest text-critical">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-2.5 sm:px-6">
+        <span className={cn('h-6 w-0.5 shrink-0 rounded-full', severityBar[a.severity])} aria-hidden />
+        <Siren size={14} className="shrink-0 text-critical" aria-hidden />
+        <span className="text-2xs font-semibold uppercase tracking-widest text-critical">
           {a.severity} · {a.category}
         </span>
         <span className="plate text-sm text-ink">{a.plate}</span>
@@ -34,7 +34,7 @@ export function AlertBanner() {
           {a.confidence != null && ` · ${a.confidence.toFixed(1)}% match`}
         </span>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
             className="btn-danger btn-xs"

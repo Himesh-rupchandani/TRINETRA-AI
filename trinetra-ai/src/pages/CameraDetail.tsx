@@ -81,9 +81,9 @@ export default function CameraDetail() {
     >
       <AsyncBoundary loading={loading || !camera} error={error} onRetry={refresh} loadingLabel="Loading camera">
         {camera && (
-          <div className="grid gap-3 p-4 sm:gap-4 sm:p-5">
+          <div className="grid gap-5 p-5 sm:p-6 xl:p-8">
             {/* MAIN — player + recent AI events */}
-            <div className="flex flex-col gap-3 sm:gap-4 xl:col-span-8">
+            <div className="flex flex-col gap-5 xl:col-span-8">
               <CameraPlayer camera={camera} autoRequest />
 
               {camera.streamType === 'FILE' && <UploadedVideoPanel cameraId={camera.id} />}
@@ -178,9 +178,9 @@ export default function CameraDetail() {
             </div>
 
             {/* SIDE — metadata, location, evidence */}
-            <div className="flex flex-col gap-3 sm:gap-4 xl:col-span-4">
+            <div className="flex flex-col gap-5 xl:col-span-4">
               <Panel title="Camera details" icon={Activity}>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 p-4">
+                <dl className="grid grid-cols-2 gap-x-5 gap-y-3.5 p-5">
                   <KeyValue label="Camera ID">
                     <span className="font-mono">{camera.id}</span>
                   </KeyValue>

@@ -3,27 +3,29 @@
 @tailwind utilities;
 
 /* ------------------------------------------------------------------
-   TRINETRA AI · SENTINEL — Dark Command-Center design tokens
-   Deep operational navy surfaces, high-contrast ink, single azure accent.
-   Every component reads these variables, so the whole console themes here.
+   TRINETRA AI · SENTINEL — "Atlas" design system
+   Neutral graphite surfaces · hairline borders · one restrained accent.
+   Flat, calm, spacious. Color communicates meaning, never decoration.
    ------------------------------------------------------------------ */
 @layer base {
   :root {
-    /* Dark operational theme (always active — the control-room look) */
-    /* Hard opt-out of browser/OS auto-lightening (incl. fullscreen views). */
     color-scheme: dark;
-    --surface-0: 8 12 20; /* app canvas */
-    --surface-1: 13 18 29; /* panels */
-    --surface-2: 19 25 38; /* raised / hover */
-    --surface-3: 26 33 49; /* insets, wells, skeletons */
-    --line: 38 47 65;
-    --line-strong: 64 77 101;
-    --ink: 228 233 241;
-    --ink-muted: 153 166 186;
-    --ink-faint: 113 127 149;
-    --brand: 77 141 255; /* interactive accent / links */
-    --brand-strong: 37 99 235; /* filled buttons — AA with white text */
-    --brand-soft: 23 42 76;
+
+    /* Neutral graphite scale — deliberately NOT navy, NOT blue-tinted */
+    --surface-0: 10 10 12; /* app canvas */
+    --surface-1: 17 17 20; /* panels */
+    --surface-2: 24 24 28; /* raised / hover */
+    --surface-3: 31 31 36; /* insets, wells, skeletons */
+    --line: 41 41 47; /* hairlines */
+    --line-strong: 63 63 70;
+    --ink: 236 236 239;
+    --ink-muted: 160 160 170;
+    --ink-faint: 116 116 126;
+
+    /* Single restrained accent: deep teal — calm, institutional, not neon */
+    --brand: 64 200 180; /* links, focus, live accents */
+    --brand-strong: 14 116 105; /* filled controls (white text = AA) */
+    --brand-soft: 21 52 48;
   }
 
   * {
@@ -39,22 +41,18 @@
   body {
     @apply bg-surface-0 text-ink antialiased;
     font-feature-settings: 'tnum' 1, 'cv05' 1;
-    /* Command-center ambience: a single cold light source above the console. */
-    background-image:
-      radial-gradient(1100px 420px at 18% -8%, rgb(var(--brand) / 0.075), transparent 62%),
-      radial-gradient(900px 380px at 88% -12%, rgb(56 189 248 / 0.05), transparent 60%);
-    background-attachment: fixed;
+    letter-spacing: -0.006em;
   }
 
   ::selection {
-    background: rgb(var(--brand) / 0.32);
+    background: rgb(var(--brand) / 0.28);
   }
 
   /* Visible focus everywhere — accessibility requirement */
   :focus-visible {
-    outline: 2px solid rgb(var(--brand));
+    outline: 2px solid rgb(var(--brand) / 0.8);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: 4px;
   }
 
   ::-webkit-scrollbar {
@@ -62,12 +60,12 @@
     height: 10px;
   }
   ::-webkit-scrollbar-track {
-    background: rgb(var(--surface-0));
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgb(var(--line-strong) / 0.6);
-    border-radius: 6px;
-    border: 2px solid rgb(var(--surface-0));
+    background: rgb(var(--line-strong) / 0.55);
+    border-radius: 8px;
+    border: 3px solid rgb(var(--surface-0));
   }
   ::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--line-strong));
@@ -95,61 +93,69 @@
 }
 
 @layer components {
+  /* ---------- Surfaces ---------- */
   .panel {
-    @apply border border-line bg-surface-1 shadow-panel rounded-2xl;
+    @apply rounded-xl border border-line bg-surface-1;
   }
 
   .panel-header {
-    @apply flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line px-4;
+    @apply flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-5;
   }
 
   .panel-title {
     @apply text-sm font-semibold text-ink;
   }
 
+  /* Quiet uppercase label used for eyebrows, panel captions, table heads */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-faint;
+  }
+
+  /* ---------- Buttons — taller, calmer, clearly separated ---------- */
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3.5 text-xs font-semibold tracking-normal h-9 transition-colors
-           disabled:opacity-45 disabled:pointer-events-none;
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-4 text-sm font-medium h-10 transition-colors
+           disabled:opacity-40 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn border-brand-strong bg-brand-strong text-white shadow-sm hover:brightness-110;
+    @apply btn border-transparent bg-brand-strong text-white hover:bg-[color:rgb(var(--brand-strong)/0.85)];
   }
   .btn-solid {
-    @apply btn border-brand-strong bg-brand-strong text-white hover:brightness-110;
+    @apply btn border-transparent bg-brand-strong text-white hover:bg-[color:rgb(var(--brand-strong)/0.85)];
   }
   .btn-tint {
-    @apply btn border-brand/30 bg-brand/10 text-brand hover:bg-brand/15;
+    @apply btn border-brand/25 bg-brand/10 text-brand hover:bg-brand/15;
   }
   .btn-ghost {
     @apply btn border-line bg-transparent text-ink-muted hover:bg-surface-2 hover:text-ink;
   }
   .btn-danger {
-    @apply btn border-critical/35 bg-critical/10 text-critical hover:bg-critical/15;
+    @apply btn border-critical/25 bg-critical/10 text-critical hover:bg-critical/15;
   }
   .btn-xs {
-    @apply h-7 gap-1 rounded-md px-2.5 text-2xs;
+    @apply h-8 gap-1.5 rounded-md px-3 text-xs;
   }
 
+  /* ---------- Forms — roomy fields with clear vertical rhythm ---------- */
   .input {
-    @apply w-full rounded-lg border border-line bg-surface-2/60 px-3 text-sm text-ink h-9
-           placeholder:text-ink-faint focus:border-brand/70 focus:bg-surface-2 focus:outline-none
-           focus-visible:outline-none focus:ring-2 focus:ring-brand/25;
+    @apply w-full rounded-lg border border-line bg-surface-2/50 px-3.5 text-sm text-ink h-10
+           placeholder:text-ink-faint focus:border-brand/60 focus:bg-surface-2 focus:outline-none
+           focus-visible:outline-none focus:ring-2 focus:ring-brand/20;
   }
   .select {
-    @apply input cursor-pointer appearance-none pr-8;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23717f95'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
+    @apply input cursor-pointer appearance-none pr-9;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2374747e'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 8px center;
+    background-position: right 10px center;
     background-size: 14px;
   }
 
   .label {
-    @apply mb-1.5 block text-xs font-medium text-ink-faint;
+    @apply mb-2 block text-xs font-medium text-ink-muted;
   }
 
+  /* ---------- Chips — quiet pills ---------- */
   .chip {
-    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-2xs font-semibold
-           leading-4;
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-2xs font-medium leading-none;
   }
 
   .kv-label {
@@ -159,29 +165,32 @@
     @apply text-xs font-medium text-ink;
   }
 
+  /* ---------- Tables — airy rows, quiet headers ---------- */
   .data-table {
     @apply w-full border-collapse text-xs;
   }
   .data-table thead th {
-    @apply sticky top-0 z-10 whitespace-nowrap border-b border-line bg-surface-2 px-4 py-2.5 text-left text-xs font-semibold
-           text-ink-muted;
+    @apply sticky top-0 z-10 whitespace-nowrap border-b border-line bg-surface-1 px-5 py-3.5 text-left text-2xs font-semibold uppercase tracking-[0.08em] text-ink-faint;
   }
   .data-table tbody td {
-    @apply whitespace-nowrap border-b border-line/55 px-4 py-3 align-middle;
+    @apply whitespace-nowrap border-b border-line/50 px-5 py-3.5 align-middle;
+  }
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
   }
   .data-table tbody tr:hover {
-    @apply bg-surface-2/70;
+    @apply bg-surface-2/50;
   }
 
   .plate {
-    @apply font-mono font-bold tracking-wider;
+    @apply font-mono font-semibold tracking-[0.08em];
   }
 
   .link-btn {
-    @apply inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline;
+    @apply inline-flex items-center gap-1.5 text-xs font-medium text-brand hover:underline;
   }
 
-  /* Faint CRT scan texture for video surfaces */
+  /* Faint CRT scan texture for video surfaces only */
   .scanline {
     background-image: repeating-linear-gradient(
       0deg,
@@ -192,22 +201,25 @@
     );
   }
 
-  /* Blueprint grid + corner glow for command-center hero surfaces */
-  .command-grid {
-    background-image:
-      linear-gradient(rgb(var(--ink) / 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(var(--ink) / 0.045) 1px, transparent 1px);
-    background-size: 34px 34px;
-    -webkit-mask-image: radial-gradient(720px 320px at 22% 0%, black 30%, transparent 78%);
-    mask-image: radial-gradient(720px 320px at 22% 0%, black 30%, transparent 78%);
+  .skeleton {
+    @apply animate-pulse rounded-md bg-surface-3;
   }
 
-  .skeleton {
-    @apply animate-pulse rounded bg-surface-3;
+  /* Page fade — one quiet transition, no movement tricks */
+  .animate-page-in {
+    animation: page-in 220ms ease-out;
+  }
+  @keyframes page-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 
-/* ---------------- Leaflet theming (dark canvas) ---------------- */
+/* ---------------- Leaflet theming (neutral dark canvas) ---------------- */
 .leaflet-container {
   background: rgb(var(--surface-2));
   font-family: inherit;
@@ -230,9 +242,9 @@
   background: rgb(var(--surface-3)) !important;
 }
 .leaflet-popup-content-wrapper {
-  border-radius: 4px !important;
+  border-radius: 10px !important;
   border: 1px solid rgb(var(--line)) !important;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.55) !important;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.5) !important;
 }
 .leaflet-popup-content {
   margin: 0 !important;

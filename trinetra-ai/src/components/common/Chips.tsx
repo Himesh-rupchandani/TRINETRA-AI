@@ -97,9 +97,9 @@ export function Chip({
   className?: string;
 }) {
   const tones = {
-    neutral: 'border-line bg-surface-3 text-ink-muted',
-    brand: 'border-brand/45 bg-brand/10 text-brand',
-    warn: 'border-degraded/45 bg-degraded/10 text-degraded',
+    neutral: 'border-line bg-surface-2 text-ink-muted',
+    brand: 'border-brand/25 bg-brand/10 text-brand',
+    warn: 'border-degraded/25 bg-degraded/10 text-degraded',
   };
   return <span className={cn('chip', tones[tone], className)}>{children}</span>;
 }

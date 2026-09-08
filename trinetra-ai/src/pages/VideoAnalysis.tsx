@@ -112,7 +112,7 @@ export default function VideoAnalysis() {
   const shown = onlyMulti ? (results?.multi_video_vehicles ?? []) : (results?.vehicles ?? []);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Video Analysis"
         icon={ScanSearch}
@@ -144,7 +144,7 @@ export default function VideoAnalysis() {
       />
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-5">
+        <div className="mx-auto max-w-6xl space-y-5 p-5 sm:p-6 xl:p-8">
           {error && (
             <div className="panel">
               <ErrorState message={error} onRetry={() => void refreshAll()} />
@@ -160,7 +160,7 @@ export default function VideoAnalysis() {
           <VideoSourceList videos={videos} onRemove={(id) => void remove(id)} removing={removing} />
 
           {busy && (
-            <div className="panel flex items-center gap-3 px-4 py-3">
+            <div className="panel flex items-center gap-4 px-5 py-4">
               <Loader2 size={15} className="animate-spin text-brand" aria-hidden />
               <span className="text-xs text-ink">
                 Processing {status?.completedVideos ?? 0}/{status?.totalVideos ?? 0} videos —{' '}
@@ -175,7 +175,7 @@ export default function VideoAnalysis() {
           {/* --- Cross-video comparison --- */}
           {results && results.total_videos > 0 && (
             <>
-              <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <section className="grid grid-cols-2 gap-5 sm:grid-cols-4">
                 <Kpi label="Videos analysed" value={results.total_videos} />
                 <Kpi label="Vehicle sightings" value={results.total_sightings} />
                 <Kpi label="Unique plates read" value={results.unique_plates} />

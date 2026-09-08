@@ -1,10 +1,9 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Car, MapPin, Route, Search as SearchIcon, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Car, MapPin, Route, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
 import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
-import { IconTile } from '@/components/common/IconTile';
 import { SeverityChip } from '@/components/common/Chips';
 import { PlateLink } from '@/components/common/Links';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
@@ -38,7 +37,7 @@ export default function Vehicles() {
   const sightings = useMemo(() => result?.events ?? [], [result]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="Find a Vehicle"
         icon={Car}
@@ -46,38 +45,32 @@ export default function Vehicles() {
       />
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-5xl p-4 sm:p-6">
-          <section className="panel relative overflow-hidden p-5 sm:p-6">
-            <div className="command-grid pointer-events-none absolute inset-0" aria-hidden />
-            <div className="relative flex items-center gap-3">
-              <IconTile tone="blue" size="lg">
-                <SearchIcon size={20} aria-hidden />
-              </IconTile>
-              <h2 className="text-lg font-bold text-ink">Which vehicle are you looking for?</h2>
-            </div>
-            <p className="relative mt-2.5 text-sm leading-relaxed text-ink-muted">
-              Enter the number plate. We will check all 30 cameras and show you every place it
+        <div className="mx-auto max-w-5xl p-5 sm:p-6 xl:p-8">
+          <section className="panel p-6 sm:p-8">
+            <h2 className="text-base font-semibold text-ink">Which vehicle are you looking for?</h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">
+              Enter the number plate. We will check all cameras and show you every place it
               has been seen, in order, on a map.
             </p>
-            <div className="relative mt-4">
+            <div className="mt-6">
               <TraceSearchBar initialValue={initial} onTrace={onTrace} loading={loading} size="lg" />
             </div>
           </section>
 
           {loading && (
-            <div className="panel mt-4">
+            <div className="panel mt-5">
               <LoadingState label={`Checking all 30 cameras for ${initial || 'this vehicle'}…`} rows={5} />
             </div>
           )}
 
           {error && !loading && (
-            <div className="panel mt-4">
+            <div className="panel mt-5">
               <ErrorState message={error} />
             </div>
           )}
 
           {!loading && !error && searched && result && sightings.length === 0 && (
-            <div className="panel mt-4">
+            <div className="panel mt-5">
               <EmptyState
                 title={`No sightings for ${result.plate}`}
                 detail="This registration number has not been recorded by any camera in the retained window. Check the format or widen the time range in the Event Explorer."
@@ -89,7 +82,7 @@ export default function Vehicles() {
             <>
               {/* Verdict card */}
               <section
-                className={`panel mt-4 border-l-4 ${wl?.active ? 'border-l-critical' : 'border-l-online'}`}
+                className={`panel mt-5 border-l-2 ${wl?.active ? 'border-l-critical' : 'border-l-online'}`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5">
                   <div>

@@ -1,26 +1,27 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
-import { IconTile, type TileTone } from '@/components/common/IconTile';
 import { cn } from '@/lib/utils';
 
 type Tone = 'neutral' | 'online' | 'critical' | 'brand' | 'warn';
 
-const TONE_TO_TILE: Record<Tone, TileTone> = {
-  neutral: 'slate',
-  online: 'green',
-  critical: 'red',
-  brand: 'blue',
-  warn: 'amber',
+const TONE_VALUE: Record<Tone, string> = {
+  neutral: 'text-ink',
+  online: 'text-online',
+  critical: 'text-critical',
+  brand: 'text-ink',
+  warn: 'text-degraded',
 };
 
+/**
+ * Quiet stat card: label, value, context. No icon squares, no decoration —
+ * the number is the interface.
+ */
 export function KpiCard({
   label,
   value,
   sub,
   tone = 'neutral',
-  tile,
-  icon: Icon,
   to,
   cta,
   loading,
@@ -29,41 +30,34 @@ export function KpiCard({
   value: ReactNode;
   sub?: ReactNode;
   tone?: Tone;
-  tile?: TileTone;
-  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  /** Legacy props from the previous design — accepted, not rendered. */
+  tile?: unknown;
+  icon?: unknown;
   to?: string;
   cta?: string;
   loading?: boolean;
 }) {
   const body = (
-    <div className="panel relative flex h-full flex-col gap-3 overflow-hidden p-4 transition-all hover:border-line-strong hover:shadow-cardHover">
-      <div className="flex items-center justify-between gap-2.5">
-        {Icon && (
-          <IconTile tone={tile ?? TONE_TO_TILE[tone]} size="md">
-            <Icon size={18} />
-          </IconTile>
-        )}
-        <p className="min-w-0 text-right text-xs font-medium leading-snug text-ink-muted">{label}</p>
-      </div>
-
+    <div className="panel relative flex h-full flex-col gap-3 p-5 transition-colors">
+      <p className="text-xs font-medium text-ink-muted">{label}</p>
       <div>
         {loading ? (
-          <div className="skeleton h-8 w-16" />
+          <div className="skeleton h-9 w-20" />
         ) : (
           <p
             className={cn(
-              'font-mono text-[1.75rem] font-bold leading-none tabular-nums',
-              tone === 'warn' ? 'text-degraded' : 'text-ink',
+              'font-mono text-[1.875rem] font-semibold leading-none tracking-tight tabular-nums',
+              TONE_VALUE[tone],
             )}
           >
             {value}
           </p>
         )}
-        {sub && <p className="mt-1.5 text-2xs leading-snug text-ink-faint">{sub}</p>}
+        {sub && <p className="mt-2.5 text-2xs leading-snug text-ink-faint">{sub}</p>}
       </div>
 
       {to && (
-        <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-brand">
+        <span className="mt-auto inline-flex items-center gap-1.5 pt-1 text-xs font-medium text-brand">
           {cta ?? 'View'}
           <ArrowRight size={13} aria-hidden />
         </span>
@@ -72,7 +66,7 @@ export function KpiCard({
   );
 
   return to ? (
-    <Link to={to} className="block h-full focus-visible:rounded-2xl">
+    <Link to={to} className="block h-full rounded-xl focus-visible:outline-none [&:hover>div]:border-line-strong">
       {body}
     </Link>
   ) : (

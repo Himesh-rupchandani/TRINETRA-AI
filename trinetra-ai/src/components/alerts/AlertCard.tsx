@@ -3,19 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Camera, CheckCircle2, FileImage, Map, Siren } from 'lucide-react';
 import type { Alert } from '@/types';
 import { AlertStatusChip, SeverityChip } from '@/components/common/Chips';
-import { IconTile, type TileTone } from '@/components/common/IconTile';
 import { PlateLink } from '@/components/common/Links';
 import { ConfirmDialog } from '@/components/common/Modal';
 import { useToast } from '@/features/system/ToastProvider';
 import { cn, formatTime, relativeTime, severityBar } from '@/lib/utils';
-
-const SEVERITY_TONE: Record<Alert['severity'], TileTone> = {
-  CRITICAL: 'red',
-  HIGH: 'orange',
-  MEDIUM: 'amber',
-  LOW: 'sky',
-  INFO: 'slate',
-};
 
 export function AlertCard({
   alert,
@@ -63,62 +54,66 @@ export function AlertCard({
   return (
     <article
       className={cn(
-        'panel relative overflow-hidden transition-shadow hover:shadow-cardHover',
-        alert.status === 'NEW' && alert.severity === 'CRITICAL' && 'animate-pulse-ring',
+        'panel relative overflow-hidden transition-colors',
+        alert.status === 'NEW' && alert.severity === 'CRITICAL'
+          ? 'border-critical/30'
+          : 'hover:border-line-strong',
       )}
       aria-label={`${alert.severity} alert for ${alert.plate}`}
     >
-      <span className={cn('absolute inset-y-0 left-0 w-1', severityBar[alert.severity])} aria-hidden />
+      <span className={cn('absolute inset-y-0 left-0 w-[3px]', severityBar[alert.severity])} aria-hidden />
 
-      <div className="flex flex-wrap items-start justify-between gap-3 py-3 pl-4 pr-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <IconTile tone={SEVERITY_TONE[alert.severity]} size="md">
-            <Siren size={15} className={alert.status === 'NEW' ? '' : 'opacity-60'} aria-hidden />
-          </IconTile>
+      <div className="flex flex-wrap items-start justify-between gap-3 py-4 pl-5 pr-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <Siren
+            size={16}
+            className={cn('mt-0.5 shrink-0', alert.status === 'NEW' ? 'text-critical' : 'text-ink-faint')}
+            aria-hidden
+          />
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink">{alert.category}</p>
-            <p className="mt-0.5 text-2xs text-ink-faint">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink">{alert.category}</p>
+            <p className="mt-1 text-2xs text-ink-faint">
               {formatTime(alert.createdAt)} · {relativeTime(alert.createdAt)}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-2">
           <SeverityChip severity={alert.severity} />
           <AlertStatusChip status={alert.status} />
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 pb-3 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-5 gap-y-3 px-5 pb-4 sm:grid-cols-4">
         <div>
           <dt className="kv-label">Vehicle</dt>
-          <dd>
+          <dd className="mt-1">
             <PlateLink plate={alert.plate} size="sm" />
           </dd>
         </div>
         <div>
           <dt className="kv-label">Camera</dt>
-          <dd className="kv-value font-mono">{alert.cameraName ?? alert.cameraId.toUpperCase()}</dd>
+          <dd className="mt-1 kv-value font-mono">{alert.cameraName ?? alert.cameraId.toUpperCase()}</dd>
         </div>
         <div className="col-span-2 sm:col-span-1">
           <dt className="kv-label">Place</dt>
-          <dd className="kv-value truncate">{alert.location}</dd>
+          <dd className="mt-1 kv-value truncate">{alert.location}</dd>
         </div>
         <div>
           <dt className="kv-label">Plate match</dt>
-          <dd className="kv-value font-mono tabular-nums">
+          <dd className="mt-1 kv-value font-mono tabular-nums">
             {alert.confidence != null ? `${alert.confidence.toFixed(1)}%` : '—'}
           </dd>
         </div>
       </dl>
 
       {!compact && (alert.acknowledgedBy || alert.note) && (
-        <p className="border-t border-line/60 py-2 pl-4 pr-4 text-2xs text-ink-faint">
+        <p className="border-t border-line/60 py-3 pl-5 pr-5 text-2xs text-ink-faint">
           {alert.acknowledgedBy && <>Seen by {alert.acknowledgedBy}. </>}
           {alert.note}
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3.5">
         <button type="button" className="btn-tint btn-xs" onClick={() => navigate(`/vehicles/${alert.plate}`)}>
           Look up this vehicle
         </button>

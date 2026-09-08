@@ -23,7 +23,7 @@ export default function SystemHealth() {
   const degraded = services.filter((s) => s.status !== 'HEALTHY');
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="animate-page-in flex h-full flex-col">
       <PageHeader
         title="System Status"
         icon={Activity}
@@ -40,9 +40,9 @@ export default function SystemHealth() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-auto p-5 sm:p-6 xl:p-8">
         <AsyncBoundary loading={health.loading} error={health.error} onRetry={health.refresh} loadingLabel="Checking the system">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 xl:grid-cols-5">
             <KpiCard
               label="Parts working normally"
               value={`${services.length - degraded.length}/${services.length}`}
@@ -83,7 +83,7 @@ export default function SystemHealth() {
           </div>
 
           {degraded.length > 0 && (
-            <div className="panel mt-4 border-l-4 border-l-degraded p-3.5 sm:p-4" role="status">
+            <div className="panel mt-5 border-l-2 border-l-degraded p-5" role="status">
               <p className="flex items-center gap-1.5 text-2xs font-bold uppercase tracking-widest text-degraded">
                 <AlertTriangle size={12} aria-hidden /> {degraded.length} part
                 {degraded.length > 1 ? 's' : ''} of the system need{degraded.length > 1 ? '' : 's'} attention
@@ -98,7 +98,7 @@ export default function SystemHealth() {
             </div>
           )}
 
-          <div className="mt-4 grid gap-3 sm:gap-4 lg:grid-cols-2">
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
             {services.map((s) => (
               <Panel key={s.id} title={s.name} icon={Cpu} actions={<ServiceStatusChip status={s.status} />}>
                 <div className="p-4">

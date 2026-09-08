@@ -30,8 +30,8 @@ export function PlateSearchPanel({ disabled }: { disabled: boolean }) {
 
   return (
     <Panel title="Search number plate" icon={Search}>
-      <div className="p-4">
-        <form onSubmit={run} className="flex flex-wrap gap-2">
+      <div className="p-5">
+        <form onSubmit={run} className="flex flex-wrap items-center gap-3">
           <input
             className="input plate flex-1 uppercase"
             placeholder="GJ01AB1234"
