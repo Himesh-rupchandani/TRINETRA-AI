@@ -41,7 +41,7 @@ export default function GIS() {
   }, [tracePlate]);
 
   // Recent sightings for the live layer (latest page of the log).
-  const { data: recentEvents } = useEventSearch({ watchlistOnly: false }, 1, 100);
+  const { data: recentEvents, error: feedError } = useEventSearch({ watchlistOnly: false }, 1, 100);
 
   const filteredCameras = useMemo(
     () => (statusFilter === 'ALL' ? cameras : cameras.filter((c) => c.status === statusFilter)),
@@ -164,7 +164,13 @@ export default function GIS() {
               actions={<Layers size={13} className="text-ink-faint" aria-hidden />}
             />
             <CardBody className="max-h-[440px] overflow-y-auto">
-              <Boundary loading={!recentEvents} isEmpty={(recentEvents?.items.length ?? 0) === 0} emptyTitle="No sightings yet">
+              <Boundary
+                loading={!recentEvents && !feedError}
+                error={feedError}
+                isEmpty={(recentEvents?.items.length ?? 0) === 0}
+                emptyTitle="No sightings yet"
+                emptyDetail="Live camera reads will stream into this list."
+              >
                 <ul className="divide-y divide-line/70">
                   {(recentEvents?.items ?? []).slice(0, 40).map((e) => (
                     <li key={e.id}>

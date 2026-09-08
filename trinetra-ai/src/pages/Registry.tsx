@@ -21,7 +21,6 @@ const STATUS_ORDER: Record<CameraStatus, number> = { ONLINE: 0, DEGRADED: 1, OFF
  */
 export default function Registry() {
   const navigate = useNavigate();
-  const { cameras, filtered, facets, loading, error, refresh } = useCameras();
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query, 200);
   const [status, setStatus] = useState<'ALL' | CameraStatus>('ALL');
@@ -30,8 +29,18 @@ export default function Registry() {
   const [asc, setAsc] = useState(true);
   const [view, setView] = useState<'table' | 'cards'>('table');
 
+  const registryFilters = useMemo(
+    () => ({
+      query: debounced || undefined,
+      status: status === 'ALL' ? undefined : status,
+      department: department === 'ALL' ? undefined : department,
+    }),
+    [debounced, status, department],
+  );
+  const { filtered, facets, loading, error, refresh } = useCameras(registryFilters);
+
   const rows = useMemo(() => {
-    const base = debounced || status !== 'ALL' || department !== 'ALL' ? filtered : cameras;
+    const base = filtered;
     const sorted = [...base].sort((a, b) => {
       let r = 0;
       switch (sortKey) {
@@ -57,7 +66,7 @@ export default function Registry() {
       return asc ? r : -r;
     });
     return sorted;
-  }, [cameras, filtered, debounced, status, department, sortKey, asc]);
+  }, [filtered, sortKey, asc]);
 
   const exportCsv = () => {
     const header = [
