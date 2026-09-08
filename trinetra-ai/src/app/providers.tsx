@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ToastProvider } from '@/features/system/ToastProvider';
 import { LiveProvider } from '@/features/alerts/LiveProvider';
 import { OfficerProvider } from '@/features/officer/OfficerProvider';
+import { useGlobalIconFx } from '@/features/system/useIconFx';
 
 /**
  * Application-wide providers.
@@ -12,6 +13,7 @@ import { OfficerProvider } from '@/features/officer/OfficerProvider';
  * permanently Light Mode (enforced pre-render in main.tsx).
  */
 export function AppProviders({ children }: { children: ReactNode }) {
+  useGlobalIconFx();
   return (
     <ToastProvider>
       <LiveProvider>

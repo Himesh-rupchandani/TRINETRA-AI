@@ -37,7 +37,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/65 p-4"
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/65 p-4 fade-in backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -46,7 +46,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={cn('panel flex max-h-[90vh] w-full flex-col shadow-2xl outline-none', widths[size])}
+        className={cn('panel modal-pop flex max-h-[90vh] w-full flex-col shadow-2xl outline-none', widths[size])}
       >
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-4 py-3">
           <div>
