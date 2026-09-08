@@ -64,8 +64,19 @@ export function Header() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  /** Every screen except the home page gets a way back to it. */
+  /** Every screen except the home page gets a way back. */
   const showBack = location.pathname !== '/';
+
+  /**
+   * Walk back through the pages actually visited (Find Vehicle → Live
+   * Cameras → Video Analysis); a deep link with no in-app history falls
+   * back to home instead of leaving the app.
+   */
+  const goBack = () => {
+    const idx = (window.history.state as { idx?: number } | null)?.idx;
+    if (typeof idx === 'number' && idx > 0) navigate(-1);
+    else navigate('/');
+  };
 
   const submitQuick = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,9 +90,9 @@ export function Header() {
         <button
           type="button"
           className="btn-ghost group h-9 shrink-0 gap-1.5 px-2.5"
-          onClick={() => navigate('/')}
-          aria-label="Back to home page"
-          title="Back to home page"
+          onClick={goBack}
+          aria-label="Back to previous page"
+          title="Back to previous page"
         >
           <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-0.5" aria-hidden />
           <span className="hidden sm:inline">Back</span>
