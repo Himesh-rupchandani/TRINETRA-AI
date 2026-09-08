@@ -250,6 +250,26 @@
   }
 }
 
+/* Dashboard → home view transition: the old page sinks away, home rises in. */
+::view-transition-old(root) {
+  animation: trinetra-page-out 0.25s ease both;
+}
+::view-transition-new(root) {
+  animation: trinetra-page-in 0.35s ease both;
+}
+@keyframes trinetra-page-out {
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+  }
+}
+@keyframes trinetra-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
 /* ============================================================
    TRINETRA AI — Motion system
    Icon click feedback (pop + ripple), entrances, modal & nav FX.

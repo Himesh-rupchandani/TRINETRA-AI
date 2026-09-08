@@ -78,6 +78,19 @@ export function Header() {
     else navigate('/');
   };
 
+  /**
+   * Dashboard → home rides a short cross-fade/slide transition (skipped for
+   * reduced-motion users and browsers without the View Transitions API).
+   */
+  const goHome = () => {
+    if (location.pathname === '/') return;
+    const update = () => navigate('/');
+    const doc = document as Document & { startViewTransition?: (update: () => void) => void };
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduced && typeof doc.startViewTransition === 'function') doc.startViewTransition(update);
+    else update();
+  };
+
   const submitQuick = (e: React.FormEvent) => {
     e.preventDefault();
     const p = normalisePlate(quick);
@@ -101,7 +114,7 @@ export function Header() {
 
       <button
         type="button"
-        onClick={() => navigate('/')}
+        onClick={goHome}
         className="flex min-w-0 shrink-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left"
         aria-label="TRINETRA AI — go to home page"
         title="Go to home page"
@@ -154,6 +167,14 @@ export function Header() {
               to={item.to}
               end={item.end}
               title={`${item.label} — ${item.hint}`}
+              onClick={(e) => {
+                // Dashboard returns home with a transition; anything else (or a
+                // new-tab click) follows the plain link.
+                if (item.to !== '/') return;
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                goHome();
+              }}
               className={({ isActive }) =>
                 cn(
                   'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-2xs font-semibold transition-colors',
