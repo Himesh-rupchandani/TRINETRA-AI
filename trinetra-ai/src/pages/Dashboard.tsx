@@ -26,8 +26,7 @@ import { useAlerts } from '@/hooks/useAlerts';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
-import { cn, formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
-import { DEMO_PLATE } from '@/data/demoFlow';
+import { formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
 
 /**
  * COMMAND CENTER
@@ -53,113 +52,8 @@ export default function Dashboard() {
     () => recentEvents.filter((e) => e.watchlistMatch).slice(0, 25),
     [recentEvents],
   );
-  const featuredCamera = cameras.find((c) => c.status === 'ONLINE') ?? cameras[0] ?? null;
-
-  /** The 60-second demo script: trace a plate, open its camera, see the route. */
-  const DEMO_STEPS = [
-    {
-      n: 1,
-      title: 'Trace a demo plate',
-      detail: DEMO_PLATE,
-      hint: 'Every sighting, photo and alert for one vehicle.',
-      to: `/vehicles/${DEMO_PLATE}`,
-      icon: Car,
-      tone: 'sky' as const,
-      card: 'border-sky-200 bg-gradient-to-br from-sky-100/70 via-sky-50 to-white hover:border-sky-400 hover:shadow-cardHover',
-      badge: 'bg-gradient-to-br from-sky-500 to-sky-700',
-    },
-    {
-      n: 2,
-      title: 'Open its live camera',
-      detail: featuredCamera ? featuredCamera.name : 'Live wall',
-      hint: 'Watch the feed the sighting came from.',
-      to: featuredCamera ? `/cameras/${featuredCamera.id}` : '/cameras',
-      icon: Cctv,
-      tone: 'green' as const,
-      card: 'border-emerald-200 bg-gradient-to-br from-emerald-100/70 via-emerald-50 to-white hover:border-emerald-400 hover:shadow-cardHover',
-      badge: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
-    },
-    {
-      n: 3,
-      title: 'See the route on Map',
-      detail: `Route · ${DEMO_PLATE}`,
-      hint: 'Camera-to-camera movement on the map.',
-      to: `/gis?plate=${DEMO_PLATE}`,
-      icon: MapIcon,
-      tone: 'orange' as const,
-      card: 'border-orange-200 bg-gradient-to-br from-orange-100/70 via-orange-50 to-white hover:border-orange-400 hover:shadow-cardHover',
-      badge: 'bg-gradient-to-br from-orange-500 to-orange-700',
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
-
-      {/* 60-second demo guide: three clicks, one case. */}
-      <section className="panel p-5 sm:p-6" aria-label="Sixty second demo guide">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <span className="chip w-fit border-brand/25 bg-brand/10 font-bold uppercase tracking-widest text-brand">
-              60-second demo
-            </span>
-            <h2 className="mt-2 text-lg font-bold tracking-tight text-ink">
-              Try it yourself — no training needed
-            </h2>
-            <p className="mt-1 text-sm text-ink-muted">
-              Three clicks, one case: trace a plate, open its camera, see the route.
-            </p>
-          </div>
-          <p className="text-xs font-semibold text-ink-faint">Takes about a minute</p>
-        </div>
-        <ol className="mt-4 grid gap-2.5 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
-          {DEMO_STEPS.flatMap((s, i) => {
-            const Icon = s.icon;
-            const items = [
-              <li key={s.n}>
-                <Link
-                  to={s.to}
-                  className={cn(
-                    'group flex h-full items-center gap-3 rounded-xl border p-4 shadow-panel transition-all duration-150 hover:-translate-y-0.5',
-                    s.card,
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'grid h-8 w-8 shrink-0 place-items-center rounded-full font-mono text-xs font-bold text-white shadow-sm',
-                      s.badge,
-                    )}
-                  >
-                    {s.n}
-                  </span>
-                  <IconTile tone={s.tone} size="md" className="shadow-sm ring-1 ring-inset ring-black/5">
-                    <Icon size={17} aria-hidden />
-                  </IconTile>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-ink">{s.title}</span>
-                    <span className="mt-0.5 block truncate font-mono text-xs font-bold text-brand">
-                      {s.detail}
-                    </span>
-                    <span className="mt-0.5 block text-2xs leading-snug text-ink-muted">{s.hint}</span>
-                  </span>
-                  <ArrowRight
-                    size={16}
-                    className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-brand"
-                    aria-hidden
-                  />
-                </Link>
-              </li>,
-            ];
-            if (i < DEMO_STEPS.length - 1) {
-              items.push(
-                <li key={`arrow-${s.n}`} aria-hidden className="flex items-center justify-center">
-                  <ArrowRight size={18} className="rotate-90 text-ink-faint/60 md:rotate-0" />
-                </li>,
-              );
-            }
-            return items;
-          })}
-        </ol>
-      </section>
 
       {/* Who built this and what it does — plain words, no jargon. */}
       <section className="panel p-5 sm:p-6" aria-label="About the team and the project">
@@ -250,10 +144,10 @@ export default function Dashboard() {
                 <dd className="text-right text-xs font-semibold text-ink">CCTV + plate reading + alerts</dd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Try it now</dt>
+                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Vehicle search</dt>
                 <dd className="text-right text-xs">
-                  <Link className="link-btn font-mono" to={`/vehicles/${DEMO_PLATE}`}>
-                    Trace {DEMO_PLATE} <ArrowRight size={13} aria-hidden />
+                  <Link className="link-btn" to="/vehicles">
+                    Open Find Vehicle <ArrowRight size={13} aria-hidden />
                   </Link>
                 </dd>
               </div>
