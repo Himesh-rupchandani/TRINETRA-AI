@@ -4,7 +4,7 @@ import { Layers, Map as MapIcon, Route, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { MapLegend } from '@/components/gis/MapLegend';
-import { Panel, LoadingState } from '@/components/common/Panel';
+import { Panel, LoadingState, EmptyState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
 import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { useCameras } from '@/hooks/useCameras';
@@ -18,7 +18,7 @@ import type { RoutePoint } from '@/types';
 export default function GIS() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const { cameras } = useCameras();
+  const { cameras, loading: camsLoading, refresh } = useCameras();
   const { result, trace, loading, reset } = useVehicleSearch();
   const recent = useAsync(() => eventService.recent(150), []);
 
@@ -170,8 +170,19 @@ export default function GIS() {
             </Panel>
           ) : (
             <Panel title="All cameras" icon={MapIcon} className="min-h-0 flex-1" bodyClassName="overflow-y-auto">
-              {cameras.length === 0 ? (
+              {camsLoading && cameras.length === 0 ? (
                 <LoadingState label="Loading camera network" rows={6} />
+              ) : cameras.length === 0 ? (
+                <EmptyState
+                  icon={MapIcon}
+                  title="No cameras on the map"
+                  detail="The camera registry returned no cameras. Reload the network or open the camera list to investigate."
+                  action={
+                    <button type="button" className="btn-tint btn-xs mt-1" onClick={refresh}>
+                      Reload network
+                    </button>
+                  }
+                />
               ) : (
                 <ul className="divide-y divide-line/60">
                   {cameras.map((c) => (
