@@ -102,14 +102,14 @@ export function TopNav() {
           const Icon = item.icon;
           const tone = CARD_TONES[item.tone];
           return (
-            <li key={item.to} className="min-w-[215px] flex-1">
+            <li key={item.to} className="min-w-[230px] flex-1">
               <NavLink
                 to={item.to}
                 end={false}
                 title={`${item.label} — ${item.hint}`}
                 className={({ isActive }) =>
                   cn(
-                    'group flex w-full items-center gap-2.5 rounded-xl border border-t-4 p-2.5 shadow-panel transition-all duration-150',
+                    'group flex w-full items-center gap-3 rounded-xl border border-t-4 p-3.5 shadow-panel transition-all duration-150',
                     tone.bar,
                     isActive ? tone.active : tone.idle,
                   )
@@ -119,34 +119,34 @@ export function TopNav() {
                   <>
                     <span
                       className={cn(
-                        'grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white shadow-md',
+                        'grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white shadow-md',
                         tone.solid,
                       )}
                       aria-hidden
                     >
-                      <Icon size={19} />
+                      <Icon size={22} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span
                         className={cn(
-                          'block truncate text-sm font-extrabold leading-tight tracking-tight',
+                          'block truncate text-[15px] font-extrabold leading-tight tracking-tight',
                           isActive ? tone.title : 'text-ink',
                         )}
                       >
                         {item.label}
                       </span>
-                      <span className="mt-0.5 block min-h-8 overflow-hidden text-2xs leading-snug text-ink-muted [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box]">
+                      <span className="mt-1 block min-h-9 overflow-hidden text-xs leading-snug text-ink-muted [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box]">
                         {item.hint}
                       </span>
                     </span>
                     <span
                       className={cn(
-                        'grid h-8 w-8 shrink-0 place-items-center rounded-full text-white shadow transition-all duration-150 group-hover:translate-x-0.5 group-hover:scale-105 group-hover:shadow-md',
+                        'grid h-9 w-9 shrink-0 place-items-center rounded-full text-white shadow transition-all duration-150 group-hover:translate-x-0.5 group-hover:scale-105 group-hover:shadow-md',
                         tone.solid,
                       )}
                       aria-hidden
                     >
-                      <ChevronRight size={16} />
+                      <ChevronRight size={18} />
                     </span>
                   </>
                 )}
