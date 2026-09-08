@@ -1,6 +1,15 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { ArrowLeft, Bell, Search, UserRound } from 'lucide-react';
+import {
+  Activity,
+  ArrowLeft,
+  Bell,
+  LayoutDashboard,
+  ScrollText,
+  Search,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
@@ -13,6 +22,25 @@ const CONNECTION_TONE: Record<string, string> = {
   CONNECTING: 'text-degraded',
   OFFLINE: 'text-offline',
 };
+
+interface HeaderLink {
+  to: string;
+  label: string;
+  hint: string;
+  icon: typeof LayoutDashboard;
+  badge?: 'alerts';
+  end?: boolean;
+}
+
+/** Supporting sections, living directly in the top header bar. */
+const HEADER_LINKS: HeaderLink[] = [
+  { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, end: true },
+  { to: '/alerts', label: 'Alerts', hint: 'Active alerts needing action', icon: Bell, badge: 'alerts' },
+  { to: '/watchlist', label: 'Wanted List', hint: 'Vehicles being watched', icon: ShieldCheck },
+  { to: '/registry', label: 'Camera List', hint: 'All registered cameras', icon: ScrollText },
+  { to: '/system', label: 'System Status', hint: 'Health of all services', icon: Activity },
+  { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound },
+];
 
 export function Header() {
   const navigate = useNavigate();
@@ -67,8 +95,41 @@ export function Header() {
         </span>
       </button>
 
+      {/* Supporting sections — icon buttons on smaller screens, full labels on wide ones. */}
+      <nav aria-label="Secondary" className="hidden min-w-0 shrink-0 items-center gap-0.5 md:flex">
+        {HEADER_LINKS.map((item) => {
+          const Icon = item.icon;
+          const badgeCount = item.badge === 'alerts' ? counts.ACTIVE : 0;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              title={`${item.label} — ${item.hint}`}
+              className={({ isActive }) =>
+                cn(
+                  'relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-2xs font-semibold transition-colors',
+                  isActive ? 'bg-brand/10 text-brand' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                )
+              }
+            >
+              <Icon size={15} aria-hidden />
+              <span className="hidden min-[1500px]:inline">{item.label}</span>
+              {badgeCount > 0 && (
+                <span
+                  className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-critical px-1 font-mono text-[10px] font-bold text-white"
+                  aria-label={`${badgeCount} active alerts`}
+                >
+                  {badgeCount}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
+      </nav>
+
       {/* Global plate search — the hero entry point, reachable from every screen */}
-      <form onSubmit={submitQuick} className="hidden max-w-md flex-1 sm:block" role="search">
+      <form onSubmit={submitQuick} className="hidden min-w-0 max-w-sm flex-1 sm:block" role="search">
         <label htmlFor="global-plate-search" className="sr-only">
           Trace registration number
         </label>
@@ -86,9 +147,9 @@ export function Header() {
         </div>
       </form>
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-3">
+      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
         {config.useMocks && (
-          <span className="chip hidden border-brand/25 bg-brand/10 font-semibold text-brand xl:inline-flex">
+          <span className="chip hidden border-brand/25 bg-brand/10 font-semibold text-brand min-[1500px]:inline-flex">
             Demo Data
           </span>
         )}
