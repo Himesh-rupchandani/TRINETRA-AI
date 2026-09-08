@@ -16,7 +16,6 @@ import { KpiCard } from '@/components/dashboard/KpiCard';
 import { CameraActivityChart, DetectionTrend } from '@/components/dashboard/Charts';
 import { LiveEventFeed } from '@/components/events/LiveEventFeed';
 import { AlertCard } from '@/components/alerts/AlertCard';
-import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { CameraCard } from '@/components/camera/CameraCard';
 import { Panel, AsyncBoundary, EmptyState } from '@/components/common/Panel';
@@ -72,7 +71,7 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold tracking-tight text-ink">Find a Vehicle</h2>
           </div>
           <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
-            Search any vehicle by number plate to see all camera sightings, routes, and alerts.
+            Type any number plate in the search bar above to see all camera sightings, routes, and alerts.
           </p>
           <ul className="mt-3.5 space-y-2" aria-label="What you get">
             {[
@@ -89,12 +88,11 @@ export default function Dashboard() {
             ))}
           </ul>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TraceSearchBar onTrace={(p) => navigate(`/vehicles/${p}`)} />
+        <div className="flex min-w-0 flex-1 flex-col justify-center">
           <button
             type="button"
             onClick={() => navigate(featuredCamera ? `/cameras/${featuredCamera.id}` : '/cameras')}
-            className="group relative mt-4 block w-full overflow-hidden rounded-xl text-left shadow-panel ring-1 ring-black/5"
+            className="group relative block w-full overflow-hidden rounded-xl text-left shadow-panel ring-1 ring-black/5"
           >
             <img
               src="/cctv/cctv-02.jpg"
