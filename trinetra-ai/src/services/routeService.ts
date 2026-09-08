@@ -29,15 +29,16 @@ function legKey(a: LatLng, b: LatLng): string {
 }
 
 /**
- * Calibrated offline estimate. Circuity (road vs straight-line) and average
- * speeds were checked against real Gujarat routing data — e.g. Rajkot→Junagadh
- * is ~94 km straight-line vs ~103 km / ~2h by road.
+ * Calibrated offline estimate. Circuity (road vs straight-line) is checked
+ * against real Gujarat routing data — e.g. Rajkot→Junagadh is ~94 km
+ * straight-line vs ~103 km by road — and highway speed assumes a free-flow
+ * car run (~60 km/h); live routing refines the duration when online.
  */
 export function estimateRoadLeg(a: LatLng, b: LatLng): RoadLeg {
   const straight = haversineKm(a, b);
   const circuity = straight > 25 ? 1.15 : 1.35;
   const roadKm = straight * circuity;
-  const speedKmph = straight <= 3 ? 24 : straight <= 25 ? 34 : straight <= 120 ? 50 : 53;
+  const speedKmph = straight <= 3 ? 24 : straight <= 25 ? 34 : 60;
   return { roadKm, typicalMinutes: (roadKm / speedKmph) * 60, live: false };
 }
 

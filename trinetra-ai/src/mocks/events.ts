@@ -93,10 +93,10 @@ export const JOURNEY_SEEDS: JourneySeed[] = [
     model: 'Swift VXI',
     owner: 'DEMO RECORD — H. Trivedi (Paldi)',
     hops: [
-      { cam: 'CAM04', h: 6, m: 12, s: 8, conf: 96.4 },
-      { cam: 'CAM12', h: 6, m: 53, s: 41, conf: 93.1 },
-      { cam: 'CAM17', h: 11, m: 24, s: 19, conf: 97.8 },
-      { cam: 'CAM08', h: 13, m: 31, s: 2, conf: 91.6 },
+      { cam: 'CAM04', h: 0, m: 52, s: 8, conf: 96.4 },
+      { cam: 'CAM17', h: 3, m: 57, s: 41, conf: 93.1 },
+      { cam: 'CAM08', h: 5, m: 23, s: 12, conf: 97.8 },
+      { cam: 'CAM07', h: 6, m: 28, s: 44, conf: 91.6 },
     ],
   },
   {
@@ -107,11 +107,9 @@ export const JOURNEY_SEEDS: JourneySeed[] = [
     model: 'Supro',
     owner: 'DEMO RECORD — Registered to commercial fleet',
     hops: [
-      { cam: 'CAM06', h: 13, m: 48, s: 22, conf: 89.7 },
-      { cam: 'CAM11', h: 13, m: 56, s: 5, conf: 94.2 },
-      { cam: 'CAM10', h: 14, m: 7, s: 51, conf: 92.5 },
-      { cam: 'CAM08', h: 14, m: 19, s: 20, conf: 88.4 },
-      { cam: 'CAM09', h: 14, m: 31, s: 44, conf: 95.0 },
+      { cam: 'CAM09', h: 1, m: 23, s: 15, conf: 89.7 },
+      { cam: 'CAM17', h: 2, m: 48, s: 9, conf: 94.2 },
+      { cam: 'CAM30', h: 4, m: 32, s: 27, conf: 92.5 },
     ],
   },
   {
@@ -122,9 +120,10 @@ export const JOURNEY_SEEDS: JourneySeed[] = [
     model: 'LPT 1618',
     owner: 'DEMO RECORD — Goods carrier (permit revoked)',
     hops: [
-      { cam: 'CAM29', h: 12, m: 5, s: 33, conf: 90.3 },
-      { cam: 'CAM28', h: 12, m: 13, s: 47, conf: 87.9 },
-      { cam: 'CAM27', h: 12, m: 24, s: 15, conf: 91.2 },
+      { cam: 'CAM24', h: 0, m: 38, s: 40, conf: 90.3 },
+      { cam: 'CAM21', h: 2, m: 7, s: 53, conf: 87.9 },
+      { cam: 'CAM22', h: 2, m: 34, s: 41, conf: 93.6 },
+      { cam: 'CAM30', h: 5, m: 58, s: 19, conf: 91.2 },
     ],
   },
 ];

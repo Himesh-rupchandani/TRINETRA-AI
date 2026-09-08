@@ -10,7 +10,7 @@ function formatRoadKm(km: number): string {
 
 /**
  * Chronological cross-camera movement timeline:
- * CAM04 → CAM12 → CAM17 → CAM08, with observed gaps, road legs and derived speed.
+ * CAM04 → CAM17 → CAM08 → CAM07, with observed gaps, road legs and derived speed.
  */
 export function MovementTimeline({
   points,

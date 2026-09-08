@@ -5,7 +5,7 @@ Seeds the database with:
   - 30 realistic CCTV cameras across Ahmedabad/Gujarat
   - 10 watchlist entries (including GJ01AB1234 as STOLEN / CRITICAL)
   - 20+ vehicle events including the primary demo journey:
-      GJ01AB1234: CAM04 → CAM12 → CAM17 → CAM08
+      GJ01AB1234: CAM04 → CAM17 → CAM08 → CAM07
   - 5 realistic alerts
 
 Usage:
@@ -310,10 +310,10 @@ def seed_events(db):
 
     base_time = demo_base_time()
 
-    # The primary journey is a real intercity escape (Paldi Ahmedabad -> Adalaj
-    # -> Rajkot -> Junagadh, ~7h20m of driving), so it starts 6h before the
-    # other seed data and ends ~11 minutes ago. Event coordinates always match
-    # the seeded camera registry.
+    # The primary journey is a pre-dawn intercity escape (Paldi Ahmedabad ->
+    # Rajkot -> Junagadh -> Veraval, ~5h37m at ~64 km/h), so it starts 6h
+    # before the other seed data and ends ~2h ago. Event coordinates always
+    # match the seeded camera registry.
     journey_start = base_time - timedelta(hours=6)
 
     events = [
@@ -322,17 +322,17 @@ def seed_events(db):
                      plate_number="GJ01AB1234", plate_confidence=0.97, vehicle_class="car",
                      event_time=journey_start, latitude=23.0126, longitude=72.5647,
                      watchlist_match=True),
-        VehicleEvent(camera_id="CAM12", vehicle_track_id=101, plate_raw="GJ01AB1234",
-                     plate_number="GJ01AB1234", plate_confidence=0.99, vehicle_class="car",
-                     event_time=journey_start + timedelta(minutes=42), latitude=23.1662, longitude=72.5807,
-                     watchlist_match=True),
         VehicleEvent(camera_id="CAM17", vehicle_track_id=101, plate_raw="GJ-01-AB-1234",
                      plate_number="GJ01AB1234", plate_confidence=0.91, vehicle_class="car",
-                     event_time=journey_start + timedelta(minutes=313), latitude=22.2908, longitude=70.799,
+                     event_time=journey_start + timedelta(minutes=186), latitude=22.2908, longitude=70.799,
                      watchlist_match=True),
         VehicleEvent(camera_id="CAM08", vehicle_track_id=101, plate_raw="GJ 01 AB 1234",
                      plate_number="GJ01AB1234", plate_confidence=0.94, vehicle_class="car",
-                     event_time=journey_start + timedelta(minutes=439), latitude=21.53, longitude=70.462,
+                     event_time=journey_start + timedelta(minutes=272), latitude=21.53, longitude=70.462,
+                     watchlist_match=True),
+        VehicleEvent(camera_id="CAM07", vehicle_track_id=101, plate_raw="GJ01AB1234",
+                     plate_number="GJ01AB1234", plate_confidence=0.99, vehicle_class="car",
+                     event_time=journey_start + timedelta(minutes=337), latitude=20.9097, longitude=70.3666,
                      watchlist_match=True),
 
         # === MH02CD5678 Journey (WANTED) ===
@@ -439,8 +439,8 @@ def seed_alerts(db):
         Alert(camera_id="CAM08", plate_number="GJ01AB1234", alert_type="WATCHLIST_MATCH",
               severity="CRITICAL", status="ACKNOWLEDGED",
               message="WATCHLIST HIT: GJ01AB1234 on CAM08. Category: stolen vehicle. FIR #4812.",
-              timestamp=journey_start + timedelta(minutes=439),
-              acknowledged_at=journey_start + timedelta(minutes=440),
+              timestamp=journey_start + timedelta(minutes=272),
+              acknowledged_at=journey_start + timedelta(minutes=273),
               acknowledged_by="operator_raj"),
         Alert(camera_id="CAM01", plate_number="MH02CD5678", alert_type="WATCHLIST_MATCH",
               severity="CRITICAL", status="NEW",
@@ -452,10 +452,10 @@ def seed_alerts(db):
               timestamp=base_time + timedelta(minutes=25),
               resolved_at=base_time + timedelta(minutes=40),
               resolved_by="supervisor_meera"),
-        Alert(camera_id="CAM12", plate_number="GJ01AB1234", alert_type="WATCHLIST_MATCH",
+        Alert(camera_id="CAM17", plate_number="GJ01AB1234", alert_type="WATCHLIST_MATCH",
               severity="CRITICAL", status="NEW",
-              message="WATCHLIST HIT: GJ01AB1234 on CAM12. Category: stolen vehicle. FIR #4812.",
-              timestamp=journey_start + timedelta(minutes=42)),
+              message="WATCHLIST HIT: GJ01AB1234 on CAM17. Category: stolen vehicle. FIR #4812.",
+              timestamp=journey_start + timedelta(minutes=186)),
     ]
     db.add_all(alerts)
     db.commit()
@@ -521,7 +521,7 @@ def main():
 
         print("\n[OK] Demo seed complete!")
         print("=" * 50)
-        print("Demo plate: GJ01AB1234 -> CAM04 -> CAM12 -> CAM17 -> CAM08")
+        print("Demo plate: GJ01AB1234 -> CAM04 -> CAM17 -> CAM08 -> CAM07")
         print("API docs:   http://127.0.0.1:8000/docs")
         print("Health:     http://127.0.0.1:8000/health")
         print("WS stream:  ws://127.0.0.1:8000/api/v1/ws/events\n")
