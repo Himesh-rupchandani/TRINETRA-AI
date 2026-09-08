@@ -113,7 +113,7 @@ export function TopNav() {
     <nav aria-label="Primary" className="sticky top-14 z-10 shrink-0 border-b border-line bg-surface-0">
       {/* Primary workflow cards — all five fit a single screen row. */}
       <ul className="no-scrollbar mx-auto flex max-w-[1600px] gap-2.5 overflow-x-auto px-3 py-2.5 sm:px-5">
-        {PRIMARY.map((item, i) => {
+        {PRIMARY.map((item) => {
           const Icon = item.icon;
           const tone = CARD_TONES[item.tone];
           return (
@@ -121,7 +121,7 @@ export function TopNav() {
               <NavLink
                 to={item.to}
                 end={item.end}
-                title={`Step ${i + 1}: ${item.label} — ${item.hint}`}
+                title={`${item.label} — ${item.hint}`}
                 className={({ isActive }) =>
                   cn(
                     'flex w-full items-center gap-3 rounded-xl border p-3 shadow-panel transition-colors',
@@ -131,17 +131,9 @@ export function TopNav() {
               >
                 {({ isActive }) => (
                   <>
-                    <span className="relative shrink-0">
-                      <IconTile tone={item.tone} size="lg" active={isActive}>
-                        <Icon size={20} />
-                      </IconTile>
-                      <span
-                        className="absolute -left-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-ink font-mono text-[10px] font-bold text-white"
-                        aria-hidden
-                      >
-                        {i + 1}
-                      </span>
-                    </span>
+                    <IconTile tone={item.tone} size="lg" active={isActive}>
+                      <Icon size={20} />
+                    </IconTile>
                     <span className="min-w-0 flex-1">
                       <span
                         className={cn(

@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -56,54 +56,6 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
-      {/* The investigation workflow, first thing on the page: each step feeds the next. */}
-      <section className="panel p-4 sm:p-5" aria-label="Investigation workflow">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
-              Where to start
-            </p>
-            <h2 className="mt-0.5 text-base font-bold text-ink">
-              Follow the case from video to log
-            </h2>
-          </div>
-          <p className="text-2xs text-ink-faint">Each step feeds the next — start with a video, end with the full history.</p>
-        </div>
-        <ol className="mt-3.5 flex flex-col gap-2 md:flex-row md:items-stretch">
-          {demoFlow.map((task, i) => (
-            <Fragment key={task.step}>
-              {i > 0 && (
-                <li aria-hidden className="flex items-center justify-center md:px-0.5">
-                  <ArrowRight size={16} className="rotate-90 text-ink-faint/70 md:rotate-0" />
-                </li>
-              )}
-              <li className="min-w-0 flex-1">
-                <Link
-                  to={task.to}
-                  className="group flex h-full items-center gap-2.5 rounded-xl border border-line bg-surface-2/60 p-3 transition-colors hover:border-brand/40 hover:bg-surface-2"
-                >
-                  <span
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink font-mono text-[11px] font-bold text-white"
-                    aria-hidden
-                  >
-                    {task.step}
-                  </span>
-                  <IconTile tone={task.tone} size="md">
-                    <task.icon size={17} aria-hidden />
-                  </IconTile>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-ink group-hover:text-brand">
-                      {task.label}
-                    </span>
-                    <span className="block truncate text-2xs text-ink-faint">{task.hint}</span>
-                  </span>
-                </Link>
-              </li>
-            </Fragment>
-          ))}
-        </ol>
-      </section>
-
       {/* Hero: registration number is always the fastest path into the product */}
       <section className="panel flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-stretch">
         <div className="flex flex-col justify-center lg:w-[280px] lg:shrink-0">
