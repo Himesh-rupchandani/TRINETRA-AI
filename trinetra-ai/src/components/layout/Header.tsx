@@ -1,13 +1,6 @@
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import {
-  Bell,
-  Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Search,
-  UserRound,
-} from 'lucide-react';
+import { ArrowLeft, Bell, Search, UserRound } from 'lucide-react';
 import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
@@ -21,20 +14,16 @@ const CONNECTION_TONE: Record<string, string> = {
   OFFLINE: 'text-offline',
 };
 
-export function Header({
-  onMenu,
-  onToggleCollapse,
-  collapsed,
-}: {
-  onMenu: () => void;
-  onToggleCollapse: () => void;
-  collapsed: boolean;
-}) {
+export function Header() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { counts } = useAlerts();
   const { connection } = useLiveEvents();
   const { current: officer } = useOfficer();
   const [quick, setQuick] = useState('');
+
+  /** Every screen except the home page gets a way back to it. */
+  const showBack = location.pathname !== '/';
 
   const submitQuick = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,25 +33,42 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface-1 px-3.5 sm:gap-3 sm:px-5">
-      <button type="button" className="btn-ghost h-9 w-9 px-0 lg:hidden" onClick={onMenu} aria-label="Open navigation">
-        <Menu size={16} aria-hidden />
-      </button>
+      {showBack && (
+        <button
+          type="button"
+          className="btn-ghost h-9 shrink-0 gap-1.5 px-2.5"
+          onClick={() => navigate('/')}
+          aria-label="Back to home page"
+          title="Back to home page"
+        >
+          <ArrowLeft size={16} aria-hidden />
+          <span className="hidden sm:inline">Back</span>
+        </button>
+      )}
+
       <button
         type="button"
-        className="btn-ghost hidden h-9 w-9 px-0 lg:inline-flex"
-        onClick={onToggleCollapse}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={() => navigate('/')}
+        className="flex min-w-0 shrink-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left"
+        aria-label="TRINETRA AI — go to home page"
+        title="Go to home page"
       >
-        {collapsed ? <PanelLeftOpen size={16} aria-hidden /> : <PanelLeftClose size={16} aria-hidden />}
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand shadow-sm" aria-hidden>
+          <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M12 3 3 7.5v4.2c0 5 3.8 8.6 9 9.3 5.2-.7 9-4.3 9-9.3V7.5L12 3Z" />
+            <circle cx="12" cy="11" r="2.6" />
+          </svg>
+        </span>
+        <span className="hidden min-w-0 md:block">
+          <span className="block truncate text-sm font-bold leading-tight tracking-tight text-ink">
+            {config.appName}
+          </span>
+          <span className="block truncate text-2xs leading-tight text-ink-faint">{config.tagline}</span>
+        </span>
       </button>
 
-      <div className="min-w-0 lg:hidden">
-        <p className="truncate text-sm font-bold leading-tight tracking-tight text-ink">{config.appName}</p>
-        <p className="hidden truncate text-2xs leading-tight text-ink-faint sm:block">{config.tagline}</p>
-      </div>
-
       {/* Global plate search — the hero entry point, reachable from every screen */}
-      <form onSubmit={submitQuick} className="hidden max-w-md flex-1 md:block" role="search">
+      <form onSubmit={submitQuick} className="hidden max-w-md flex-1 sm:block" role="search">
         <label htmlFor="global-plate-search" className="sr-only">
           Trace registration number
         </label>

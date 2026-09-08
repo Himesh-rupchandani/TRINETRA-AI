@@ -147,6 +147,15 @@
     @apply font-mono font-bold tracking-wider;
   }
 
+  /* Horizontal top-nav scroller: swipe/scroll without a visible bar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .link-btn {
     @apply inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline;
   }

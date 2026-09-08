@@ -1,37 +1,22 @@
-import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
+import { TopNav } from '@/components/layout/TopNav';
 import { AlertBanner } from '@/components/layout/AlertBanner';
-import { useLocalStorage, useMediaQuery } from '@/hooks/useUi';
-import { cn } from '@/lib/utils';
 
-/** Standard control-room shell: persistent sidebar + header + alert banner. */
+/**
+ * Control-room shell: header on top, full module navigation bar below it,
+ * then the alert banner and the active page. No side drawer — every module
+ * stays visible in the top bar on all screen sizes.
+ */
 export function MainLayout() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useLocalStorage('trinetra.sidebarCollapsed', false);
-  const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const effectiveCollapsed = isDesktop ? collapsed : false;
-
   return (
-    <div className="flex h-full min-h-screen bg-surface-0">
-      <Sidebar open={mobileOpen} onClose={() => setMobileOpen(false)} collapsed={effectiveCollapsed} />
-      <div
-        className={cn(
-          'flex min-w-0 flex-1 flex-col transition-[padding] duration-200',
-          effectiveCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[240px]',
-        )}
-      >
-        <Header
-          onMenu={() => setMobileOpen(true)}
-          onToggleCollapse={() => setCollapsed(!collapsed)}
-          collapsed={effectiveCollapsed}
-        />
-        <AlertBanner />
-        <main id="main" className="min-h-0 flex-1">
-          <Outlet />
-        </main>
-      </div>
+    <div className="flex min-h-screen flex-col bg-surface-0">
+      <Header />
+      <TopNav />
+      <AlertBanner />
+      <main id="main" className="min-h-0 flex-1">
+        <Outlet />
+      </main>
     </div>
   );
 }
