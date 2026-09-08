@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CircleMarker,
   MapContainer,
@@ -14,7 +15,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { Maximize, Minimize, Pause, Play, RotateCcw } from 'lucide-react';
+import { Maximize, Minimize, Pause, Play, RotateCcw, X } from 'lucide-react';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
@@ -121,14 +122,34 @@ export function MapView({
   const [basemap, setBasemap] = useState<BasemapId>('street');
   const tiles = config.map.tiles[basemap];
   /**
-   * Fullscreen in two flavours. Native is preferred, but inside an iframe
-   * without fullscreen permission (or an old browser) the request is denied —
-   * so a denied request falls back to a CSS overlay that looks identical.
+   * Fullscreen in two flavours. Native is preferred (the browser's top
+   * layer hides everything else). Inside an iframe without fullscreen
+   * permission — or an old browser — the request is denied, so a denied
+   * request portals the whole map to <body>: that escapes every ancestor
+   * stacking context (sticky header, later panels), so again NOTHING else
+   * shows. Either way there is always a visible way out (pill + Esc).
    */
   const [fsMode, setFsMode] = useState<'native' | 'fake' | null>(null);
+  const [fsPortalEl, setFsPortalEl] = useState<HTMLDivElement | null>(null);
   const fullscreen = fsMode != null;
   const rootRef = useRef<HTMLDivElement>(null);
   const playback = useRoutePlayback(route, onPlaybackStop);
+
+  const enterFake = () => {
+    const el = document.createElement('div');
+    el.className = 'fixed inset-0 z-[9999] bg-white';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Fullscreen map');
+    document.body.appendChild(el);
+    setFsPortalEl(el);
+    setFsMode('fake');
+  };
+
+  const exitFake = () => {
+    fsPortalEl?.remove();
+    setFsPortalEl(null);
+    setFsMode(null);
+  };
 
   useEffect(() => {
     const onFs = () => {
@@ -139,11 +160,23 @@ export function MapView({
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
+  // The portal node is owned by this component: never leak it.
+  useEffect(
+    () => () => {
+      fsPortalEl?.remove();
+    },
+    [fsPortalEl],
+  );
+
   // Fake fullscreen: Escape exits it, and the page behind stops scrolling.
   useEffect(() => {
     if (fsMode !== 'fake') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFsMode(null);
+      if (e.key === 'Escape') {
+        fsPortalEl?.remove();
+        setFsPortalEl(null);
+        setFsMode(null);
+      }
     };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
@@ -152,26 +185,25 @@ export function MapView({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [fsMode]);
+  }, [fsMode, fsPortalEl]);
 
   const toggleFullscreen = () => {
     if (fsMode === 'fake') {
-      setFsMode(null);
+      exitFake();
       return;
     }
     if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => setFsMode(null));
+      document.exitFullscreen().catch(() => {});
       return;
     }
     const el = rootRef.current;
-    if (!el) return;
-    if (el.requestFullscreen) {
+    if (el?.requestFullscreen) {
       el.requestFullscreen().then(
         () => {},
-        () => setFsMode('fake'),
+        () => enterFake(),
       );
     } else {
-      setFsMode('fake');
+      enterFake();
     }
   };
   const routeLine = useMemo(
@@ -185,18 +217,9 @@ export function MapView({
     return events.map((e) => [e.latitude, e.longitude] as [number, number]);
   }, [routeLine, cameras, events]);
 
-  return (
-    // `isolate` creates a fresh stacking context so Leaflet's high z-index panes
-    // (tiles/markers/controls, z-index up to 1000) are confined to the map and
-    // never paint over the panel content above or below it. `overflow-hidden`
-    // additionally guarantees the map stays boxed inside its container.
-    <div
-      ref={rootRef}
-      className={cn(
-        'isolate overflow-hidden',
-        fsMode === 'fake' ? 'fixed inset-0 z-[9999]' : (className ?? 'relative h-full w-full'),
-      )}
-    >
+  const mapInner = (
+    <>
+
       <MapContainer
         center={center}
         zoom={zoom}
@@ -382,6 +405,32 @@ export function MapView({
           </div>
         </div>
       )}
+      {fullscreen && (
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute left-1/2 top-3 z-[1001] flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/85 px-3.5 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur transition-transform hover:scale-105"
+        >
+          <X size={14} aria-hidden />
+          Exit fullscreen
+        </button>
+      )}
+    </>
+  );
+
+  // Fake fullscreen portals the whole map to <body>, escaping every ancestor
+  // stacking context, so the header, nav and page content all disappear.
+  if (fsMode === 'fake' && fsPortalEl) {
+    return createPortal(<div className="h-full w-full">{mapInner}</div>, fsPortalEl);
+  }
+
+  return (
+    // `isolate` creates a fresh stacking context so Leaflet's high z-index panes
+    // (tiles/markers/controls, z-index up to 1000) are confined to the map and
+    // never paint over the panel content above or below it. `overflow-hidden`
+    // additionally guarantees the map stays boxed inside its container.
+    <div ref={rootRef} className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
+      {mapInner}
     </div>
   );
 }
