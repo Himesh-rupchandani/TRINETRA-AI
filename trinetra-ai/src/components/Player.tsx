@@ -125,7 +125,7 @@ export function Player({
       : 'Good';
 
   return (
-    <div className={cn('overflow-hidden rounded-xl border border-line bg-surface-1 shadow-xs', className)}>
+    <div className={cn('overflow-hidden rounded-lg border border-line bg-surface-1', className)}>
       <div className="relative aspect-video w-full bg-black">
         {showPoster && !showVideo ? (
           <img

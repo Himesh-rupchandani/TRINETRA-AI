@@ -45,10 +45,10 @@ export default function CameraDetail() {
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className="p-4 sm:p-6">
         <Skeleton className="h-7 w-64" />
         <div className="mt-5 grid gap-6 xl:grid-cols-[1fr_340px]">
-          <Skeleton className="aspect-video w-full rounded-xl" />
+          <Skeleton className="aspect-video w-full rounded-lg" />
           <div className="space-y-4">
             <Skeleton className="h-40" />
             <Skeleton className="h-40" />
@@ -60,7 +60,7 @@ export default function CameraDetail() {
 
   if (error || !camera) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className="p-4 sm:p-6">
         <EmptyState
           title="Camera not found"
           detail={error ?? `No camera with ID “${cameraId}” is in the registry.`}
@@ -77,7 +77,7 @@ export default function CameraDetail() {
   const feed = history.length > 0 ? history : [];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">

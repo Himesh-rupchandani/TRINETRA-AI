@@ -8,7 +8,7 @@ import { formatDateTime } from '@/lib/uiHelpers';
 export function WantedBanner({ profile }: { profile: VehicleProfile }) {
   const w = profile.watchlist;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-critical/30 bg-critical/[0.05] px-5 py-3.5">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-critical/30 bg-critical/[0.05] px-5 py-3.5">
       <AlertTriangle size={16} className="shrink-0 text-critical" aria-hidden />
       <p className="text-[13px] font-semibold text-critical">This vehicle is on the wanted list</p>
       {w?.caseRef && (

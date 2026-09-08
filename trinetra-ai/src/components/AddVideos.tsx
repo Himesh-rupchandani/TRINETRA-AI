@@ -83,7 +83,7 @@ export function AddVideos({ onAdded }: { onAdded?: (batchId: string) => void }) 
             <Button variant="ghost" onClick={() => setMode('none')} disabled={busy}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={check} loading={checking} disabled={!url.trim()}>
+            <Button variant="secondary" onClick={check} loading={checking} disabled={!url.trim()}>
               Validate link
             </Button>
             <Button

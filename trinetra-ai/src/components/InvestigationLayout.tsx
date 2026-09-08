@@ -27,7 +27,7 @@ export function InvestigationLayout({
   className?: string;
 }) {
   return (
-    <div className={cn('p-4 sm:p-6 lg:p-8', className)}>
+    <div className={cn('p-4 sm:p-6', className)}>
       <Link
         to={backTo}
         className="inline-flex items-center gap-1 text-xs font-medium text-ink-muted transition-colors hover:text-accent"
@@ -37,7 +37,7 @@ export function InvestigationLayout({
 
       <header className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-line pb-4">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2">
-          <h2 className="text-lg font-bold text-ink">{title}</h2>
+          <h2 className="text-xl font-semibold text-ink">{title}</h2>
           {status}
           {meta && <span className="text-xs text-ink-faint">{meta}</span>}
         </div>

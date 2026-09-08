@@ -58,7 +58,7 @@ export default function Alerts() {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
         {/* Queue */}
         <div className="min-w-0">
@@ -153,7 +153,7 @@ export default function Alerts() {
                 return (
                   <div key={s} className="flex items-center gap-3">
                     <Badge
-                      tone={s === 'CRITICAL' ? 'danger' : s === 'HIGH' ? 'warn' : s === 'MEDIUM' ? 'neutral' : 'info'}
+                      tone={s === 'CRITICAL' ? 'danger' : s === 'HIGH' || s === 'MEDIUM' ? 'warn' : 'info'}
                       className="w-20 justify-center"
                     >
                       {s[0] + s.slice(1).toLowerCase()}
@@ -162,7 +162,7 @@ export default function Alerts() {
                       <div
                         className={cn(
                           'h-full rounded-full transition-[width] duration-500',
-                          s === 'CRITICAL' ? 'bg-critical' : s === 'HIGH' ? 'bg-high' : s === 'MEDIUM' ? 'bg-medium' : 'bg-low',
+                          s === 'CRITICAL' ? 'bg-critical' : s === 'HIGH' || s === 'MEDIUM' ? 'bg-warn' : 'bg-info',
                         )}
                         style={{ width: `${(n / total) * 100}%` }}
                       />

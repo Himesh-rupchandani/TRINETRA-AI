@@ -112,7 +112,7 @@ export function SettingsGroup({
   className?: string;
 }) {
   return (
-    <section className={cn('rounded-xl border border-line bg-surface-1 shadow-xs', className)}>
+    <section className={cn('rounded-lg border border-line bg-surface-1', className)}>
       <div className="border-b border-line px-5 py-3.5">
         <h3 className="text-sm font-semibold text-ink">{title}</h3>
         {description && <p className="mt-0.5 text-xs text-ink-faint">{description}</p>}

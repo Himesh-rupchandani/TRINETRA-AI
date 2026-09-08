@@ -97,7 +97,7 @@ export default function VehicleInvestigation() {
 
   if (loading || (!searched && plate)) {
     return (
-      <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-6xl p-4 sm:p-6">
         <LoadingRows label={`Pulling the record for ${plate}`} rows={6} />
       </div>
     );
@@ -105,7 +105,7 @@ export default function VehicleInvestigation() {
 
   if (error || !result) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className="p-4 sm:p-6">
         <EmptyState
           title={error ? 'Could not load this vehicle' : 'No record for this plate'}
           detail={error ?? `${plate} has never been recognised by a camera in this network.`}
@@ -131,7 +131,7 @@ export default function VehicleInvestigation() {
     <InvestigationLayout
       backTo="/vehicles"
       backLabel="Find a Vehicle"
-      title={<span className="plate text-xl">{result.plate}</span>}
+      title={<span className="plate text-[22px] leading-tight">{result.plate}</span>}
       status={
         result.profile?.watchlist ? (
           <Badge tone="danger">Wanted{result.profile.watchlist.caseRef ? ` · ${result.profile.watchlist.caseRef}` : ''}</Badge>
@@ -140,11 +140,12 @@ export default function VehicleInvestigation() {
         )
       }
       meta={
-        events.length > 0 && (
-          <span>
-            {events.length} sightings · {firstSeen ? `${formatDateTime(firstSeen.timestamp)} → ${formatDateTime(lastSeen!.timestamp)}` : ''}
-          </span>
-        )
+        <span>
+          {events.length > 0
+            ? `${events.length} sightings · ${formatDateTime(firstSeen!.timestamp)} → ${formatDateTime(lastSeen!.timestamp)}`
+            : 'no sightings on record'}
+          {result.profile?.watchlist?.addedBy && ` · Case officer ${result.profile.watchlist.addedBy}`}
+        </span>
       }
       actions={
         <Button variant="ghost" onClick={() => window.print()}>

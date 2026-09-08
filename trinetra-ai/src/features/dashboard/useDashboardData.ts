@@ -44,7 +44,7 @@ export function useDashboardData({
   attention: Alert[];
   cameraWall: Camera[];
   volume24h: HourlyVolume[];
-  deptBars: { dept: string; count: number }[];
+  deptRows: { dept: string; count: number }[];
   watchlistToday: WatchSighting[];
 } {
   return useMemo(() => {
@@ -78,10 +78,10 @@ export function useDashboardData({
       const d = c.department ?? 'Unassigned';
       byDept.set(d, (byDept.get(d) ?? 0) + 1);
     }
-    const deptBars = [...byDept.entries()]
+    const deptRows = [...byDept.entries()]
       .map(([dept, count]) => ({ dept, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
+      .slice(0, 8);
 
     // Wanted plates seen recently (open alerts + live wanted matches).
     const wanted = new Map<string, WatchSighting>();
@@ -104,6 +104,6 @@ export function useDashboardData({
       )
       .slice(0, 6);
 
-    return { attention, cameraWall, volume24h, deptBars, watchlistToday };
+    return { attention, cameraWall, volume24h, deptRows, watchlistToday };
   }, [alerts, cameras, liveEvents]);
 }

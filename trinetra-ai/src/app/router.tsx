@@ -24,7 +24,7 @@ const page = (el: React.ReactNode) => (
   <Suspense
     fallback={
       <div className="p-6 lg:p-8">
-        <div className="rounded-xl border border-line bg-surface-1 shadow-xs">
+        <div className="rounded-lg border border-line bg-surface-1">
           <LoadingRows label="Loading module" rows={5} />
         </div>
       </div>

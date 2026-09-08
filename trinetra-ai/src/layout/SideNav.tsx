@@ -27,13 +27,18 @@ interface NavItem {
 
 const NAV: { section: string; items: NavItem[] }[] = [
   {
-    section: 'Operations',
+    section: 'Live monitoring',
     items: [
       { to: '/', label: 'Command Center', icon: LayoutDashboard, end: true },
       { to: '/cameras', label: 'Live Cameras', icon: Cctv },
+    ],
+  },
+  {
+    section: 'Investigation',
+    items: [
       { to: '/vehicles', label: 'Find a Vehicle', icon: Car },
-      { to: '/gis', label: 'City Map', icon: Map },
       { to: '/video-analysis', label: 'Video Analysis', icon: ScanSearch },
+      { to: '/gis', label: 'City Map', icon: Map },
     ],
   },
   {
@@ -45,7 +50,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     ],
   },
   {
-    section: 'Administration',
+    section: 'System',
     items: [
       { to: '/registry', label: 'Camera Registry', icon: ScrollText },
       { to: '/system', label: 'System Status', icon: Activity },
@@ -54,12 +59,12 @@ const NAV: { section: string; items: NavItem[] }[] = [
   },
 ];
 
-/** Product mark — flat green seal, no gradients, no glow. */
+/** Product mark — flat institutional seal, no gradients, no glow. */
 export function BrandMark({ size = 'md' }: { size?: 'md' | 'lg' }) {
-  const box = size === 'lg' ? 'h-10 w-10 rounded-[10px]' : 'h-9 w-9 rounded-lg';
+  const box = size === 'lg' ? 'h-9 w-9 rounded-lg' : 'h-8 w-8 rounded-lg';
   return (
     <span className={cn('grid shrink-0 place-items-center bg-accent text-white', box)} aria-hidden>
-      <svg viewBox="0 0 24 24" className={size === 'lg' ? 'h-5 w-5' : 'h-[18px] w-[18px]'} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg viewBox="0 0 24 24" className={size === 'lg' ? 'h-[18px] w-[18px]' : 'h-4 w-4'} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 3 3 7.5v4.2c0 5 3.8 8.6 9 9.3 5.2-.7 9-4.3 9-9.3V7.5L12 3Z" />
         <circle cx="12" cy="11" r="2.5" />
       </svg>
@@ -67,7 +72,11 @@ export function BrandMark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   );
 }
 
-/** Primary navigation — white rail, quiet rows, accent edge on the active item. */
+/**
+ * Primary navigation — white rail, quiet rows, accent edge on the active
+ * item. Full labels on desktop, icon-only rail at ≤1200px, off-canvas
+ * drawer at ≤768px.
+ */
 export function SideNav({
   open,
   onClose,
@@ -84,23 +93,23 @@ export function SideNav({
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-30 bg-ink/40 lg:hidden" onClick={onClose} aria-hidden />
+        <div className="fixed inset-0 z-30 bg-ink/40 md:hidden" onClick={onClose} aria-hidden />
       )}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-line bg-surface-1 transition-[width,transform] duration-200',
-          collapsed && 'w-[68px]',
-          open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-line bg-surface-1 transition-transform duration-200',
+          collapsed && 'w-[64px]',
+          open ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
         aria-label="Primary navigation"
       >
-        {/* Brand */}
+        {/* Brand lockup — small, natural */}
         <div className={cn('flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4', collapsed && 'justify-center px-0')}>
           <BrandMark />
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-[15px] font-bold leading-tight tracking-[0.12em] text-ink">SENTINEL</p>
-              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              <p className="truncate text-[14px] font-semibold leading-tight tracking-[0.12em] text-ink">SENTINEL</p>
+              <p className="truncate text-[10px] font-medium uppercase tracking-[0.14em] text-ink-faint">
                 TRINETRA AI
               </p>
             </div>
@@ -108,7 +117,7 @@ export function SideNav({
           {!collapsed && (
             <button
               type="button"
-              className="ml-auto rounded-md p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink lg:hidden"
+              className="ml-auto rounded-md p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink md:hidden"
               onClick={onClose}
               aria-label="Close navigation"
             >
@@ -117,16 +126,17 @@ export function SideNav({
           )}
         </div>
 
-        {/* Nav */}
+        {/* Nav — one icon per item, generous spacing */}
         <nav className="flex-1 overflow-y-auto px-2.5 py-5">
           {NAV.map((group) => (
             <div key={group.section} className="mb-6 last:mb-0">
               {!collapsed && (
-                <p className="px-2.5 pb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
+                <p className="px-2.5 pb-2 text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-faint">
                   {group.section}
                 </p>
               )}
-              <ul className="space-y-0.5">
+              {collapsed && <div className="mb-4 mx-auto h-px w-6 bg-line last:mb-4" aria-hidden />}
+              <ul className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const badgeCount = item.badge === 'alerts' ? counts.ACTIVE : 0;
@@ -139,7 +149,7 @@ export function SideNav({
                         title={collapsed ? item.label : undefined}
                         className={({ isActive }) =>
                           cn(
-                            'group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium',
+                            'group relative flex h-10 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium',
                             'transition-colors duration-150 active:scale-[0.99]',
                             collapsed && 'justify-center px-0',
                             isActive
@@ -161,7 +171,7 @@ export function SideNav({
                             {!collapsed && <span className="truncate">{item.label}</span>}
                             {!collapsed && badgeCount > 0 && (
                               <span
-                                className="mono ml-auto rounded-full bg-critical/10 px-1.5 text-[11px] font-semibold leading-[18px] text-critical"
+                                className="mono ml-auto rounded-md bg-critical/10 px-1.5 text-[11px] font-semibold leading-[18px] text-critical"
                                 aria-label={`${badgeCount} active alerts`}
                               >
                                 {badgeCount}
@@ -184,7 +194,15 @@ export function SideNav({
           ))}
         </nav>
 
-        {/* Officer */}
+        {/* Team credit — small, footer position */}
+        {!collapsed && (
+          <p className="px-5 pb-2 text-[10px] leading-relaxed text-ink-faint">
+            SENTINEL platform
+            <span className="block">by TRINETRA AI</span>
+          </p>
+        )}
+
+        {/* Officer context — signed-in operator, not auth */}
         <div className={cn('border-t border-line p-2.5', collapsed && 'px-1.5')}>
           <button
             type="button"
@@ -202,7 +220,7 @@ export function SideNav({
               {officer ? (
                 <img src={officer.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover" aria-hidden />
               ) : (
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-surface-3 text-ink-muted" aria-hidden>
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-surface-2 text-ink-muted" aria-hidden>
                   <UserRound size={14} />
                 </span>
               )}

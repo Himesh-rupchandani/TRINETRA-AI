@@ -99,11 +99,11 @@ export default function VideoAnalysis() {
   const vehicles = useMemo(() => results?.vehicles ?? [], [results]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       {/* Header */}
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
         <div>
-          <h2 className="text-lg font-bold text-ink">Video Analysis</h2>
+          <h2 className="text-xl font-semibold text-ink">Video Analysis</h2>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
             Run the plate-recognition engine over recorded footage — uploaded files or a shared
             Drive folder. Every vehicle found is added to the same evidence base as live cameras.

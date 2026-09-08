@@ -115,10 +115,10 @@ export default function Registry() {
   const filterActive = debounced || status !== 'ALL' || department !== 'ALL';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-ink">Camera Registry</h2>
+          <h2 className="text-xl font-semibold text-ink">Camera Registry</h2>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
             The authoritative record of every installation — identity, placement, capture format
             and service state. Export any view as CSV for audit or planning.
@@ -149,7 +149,7 @@ export default function Registry() {
       </header>
 
       {/* Filters */}
-      <div className="mt-5 flex flex-wrap items-center gap-2.5 rounded-xl border border-line bg-surface-1 p-3.5 shadow-xs">
+      <div className="mt-5 flex flex-wrap items-center gap-2.5 rounded-lg border border-line bg-surface-1 p-3.5">
         <label htmlFor="reg-search" className="sr-only">Search the registry</label>
         <input
           id="reg-search"
@@ -193,7 +193,7 @@ export default function Registry() {
         className="mt-5"
       >
         {view === 'table' ? (
-          <div className="overflow-x-auto rounded-xl border border-line bg-surface-1 shadow-xs">
+          <div className="overflow-x-auto rounded-lg border border-line bg-surface-1">
             <table className="tbl">
               <thead>
                 <tr>

@@ -26,7 +26,7 @@ export default function Vehicles() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto max-w-3xl p-4 sm:p-6">
       <header className="text-center">
         <h2 className="text-xl font-bold text-ink">Find a Vehicle</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
@@ -106,7 +106,7 @@ export default function Vehicles() {
       )}
 
       {searched && !result && !loading && !error && (
-        <div className="mt-8 rounded-xl border border-line bg-surface-1 px-6 py-10 text-center shadow-xs">
+        <div className="mt-8 rounded-lg border border-line bg-surface-1 px-6 py-10 text-center">
           <p className="text-sm font-semibold text-ink">No record found</p>
           <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-ink-faint">
             {q} has never been recognised by a camera in this network. Check the number and try

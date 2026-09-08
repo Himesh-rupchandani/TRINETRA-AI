@@ -67,7 +67,7 @@ export default function GIS() {
   );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       <div className="grid min-h-0 gap-5 xl:grid-cols-[1fr_330px]">
         {/* Map panel */}
         <Card className="overflow-hidden">
@@ -102,7 +102,7 @@ export default function GIS() {
                 className="h-full w-full"
               />
               {/* Status legend — part of the map chrome */}
-              <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex items-center gap-3 rounded-lg border border-line bg-surface-1/95 px-3 py-2 shadow-xs">
+              <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex items-center gap-3 rounded-lg border border-line bg-surface-1/95 px-3 py-2">
                 {(['ONLINE', 'DEGRADED', 'OFFLINE'] as const).map((s) => (
                   <button
                     key={s}

@@ -49,10 +49,10 @@ export default function Watchlist() {
   const inactive = (data ?? []).filter((w) => !w.active).length;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-ink">Wanted List</h2>
+          <h2 className="text-xl font-semibold text-ink">Wanted List</h2>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
             Every plate here is cross-checked against all camera reads in realtime. A confirmed
             match raises an alert to the command center within seconds.

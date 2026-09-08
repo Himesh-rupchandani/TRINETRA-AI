@@ -40,9 +40,9 @@ export default function Cameras() {
   const hasFilters = status !== 'ALL' || department !== 'ALL' || zone !== 'ALL' || codec !== 'ALL' || activity !== 'ANY' || debouncedQuery !== '';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       {/* Filter bar */}
-      <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-1 p-4 shadow-xs xl:flex-row xl:items-center">
+      <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface-1 p-4 xl:flex-row xl:items-center">
         <label htmlFor="camera-search" className="sr-only">
           Search cameras by name, location or department
         </label>

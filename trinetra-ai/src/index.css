@@ -3,43 +3,54 @@
 @tailwind utilities;
 
 /* ==================================================================
-   SENTINEL — Government Operations Design System (v2, built from zero)
+   SENTINEL — design tokens (v3 · Government Operations, built from zero)
    ------------------------------------------------------------------
-   Research-informed principles (shadcn/ui ~110k★, Tailwind CSS ~97k★,
-   React ~240k★, Vite ~75k★): neutral surfaces, one accent used
-   sparingly, hairline structure, typography-led hierarchy, restrained
-   purposeful motion. Identity typeface: Public Sans (designed for the
-   US federal design system) + IBM Plex Mono for machine data.
+   Research basis (stars fetched 2026-09-08): shadcn/ui 123,359 ·
+   Tailwind 97,488 · Vite 82,758 · Grafana 76,668 · Next.js 142,216 ·
+   Ant Design 99,433 · Storybook 91,042 · Excalidraw 131,403 ·
+   TanStack Query 50,284.
+   Principles applied: warm-neutral surfaces, hairline structure, ONE
+   deep teal-green accent used sparingly, typography-led hierarchy,
+   flat panels (shadows only on floating layers), dense operator
+   tables, 4px spacing rhythm, motion = transform/opacity ≤ 200 ms.
+   Type: Inter (UI) + JetBrains Mono (machine data, tabular-nums).
    ================================================================== */
 
 @layer base {
   :root {
     color-scheme: light;
 
-    /* Surfaces — cool paper grays, no color cast */
-    --surface-0: 246 247 248; /* canvas */
-    --surface-1: 255 255 255; /* card */
-    --surface-2: 244 246 247; /* hover / subtle fill */
-    --surface-3: 236 238 240; /* inset / skeleton */
+    /* Warm-neutral surfaces */
+    --surface-0: 247 247 245; /* canvas   #F7F7F5 */
+    --surface-1: 255 255 255; /* card     #FFFFFF */
+    --surface-2: 241 241 238; /* sunken   #F1F1EE */
+    --surface-3: 236 236 232; /* inset    */
 
-    --line: 228 231 234; /* hairline */
-    --line-strong: 208 213 218;
+    --line: 228 228 224; /* hairline        #E4E4E0 */
+    --line-strong: 207 207 201; /* strong hairline #CFCFC9 */
 
-    /* Ink — near-black slate ramp */
-    --ink: 23 28 36;
-    --ink-muted: 90 98 108;
-    --ink-faint: 116 124 134;
+    /* Ink */
+    --ink: 28 28 26; /* #1C1C1A */
+    --ink-muted: 92 92 87; /* #5C5C57 */
+    --ink-faint: 138 138 131; /* #8A8A83 */
 
-    /* Accent — institutional green (certification / official seal) */
-    --accent: 21 128 61; /* links, active, focus */
-    --accent-strong: 21 103 53; /* filled controls, hover */
-    --accent-weak: 237 247 240; /* tinted fills */
+    /* Accent — deep teal-green. One primary action per view. */
+    --accent: 15 118 110; /* #0F766E */
+    --accent-strong: 17 94 86; /* #115E56 */
+    --accent-weak: 231 241 240; /* #E7F1F0 */
 
-    /* Semantic status (text-grade contrast on white) */
-    --status-online: 22 163 74;
-    --status-offline: 220 38 38;
-    --status-warn: 180 83 9;
-    --status-info: 100 116 139;
+    /* Status (text-grade on white — verified ≥ 4.5:1 body / ≥ 3:1 UI) */
+    --status-online: 46 125 50; /* #2E7D32 */
+    --status-offline: 179 38 30; /* #B3261E */
+    --status-warn: 154 103 0; /* #9A6700 */
+    --status-info: 92 92 87; /* #5C5C57 */
+    --status-processing: 31 95 168; /* #1F5FA8 — used sparingly */
+
+    /* Severity */
+    --sev-critical: 179 38 30; /* #B3261E */
+    --sev-high: 154 103 0; /* #9A6700 */
+    --sev-medium: 154 103 0;
+    --sev-low: 92 92 87; /* #5C5C57 */
   }
 
   * {
@@ -53,17 +64,18 @@
   }
 
   body {
-    @apply bg-surface-0 text-ink;
-    font-feature-settings: 'tnum' 1, 'ss01' 1;
+    @apply bg-surface-0 text-sm text-ink;
+    line-height: 1.55;
+    font-feature-settings: 'tnum' 1;
     -webkit-font-smoothing: antialiased;
   }
 
   ::selection {
-    background: rgb(var(--accent) / 0.18);
+    background: rgb(var(--accent) / 0.16);
   }
 
   :focus-visible {
-    outline: 2px solid rgb(var(--accent) / 0.7);
+    outline: 2px solid rgb(var(--accent) / 0.4);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -104,29 +116,32 @@
 }
 
 @layer components {
-  /* ---------- Form controls ---------- */
+  /* ---------- Form controls (flat; borders carry structure) ---------- */
   .field {
-    @apply h-10 w-full rounded-lg border border-line-strong/70 bg-surface-1 px-3.5 text-sm text-ink shadow-xs
-           transition-[box-shadow,border-color] placeholder:text-ink-faint
+    @apply h-10 w-full rounded-lg border border-line-strong/70 bg-surface-1 px-3.5 text-sm text-ink
+           transition-colors placeholder:text-ink-faint
            focus:border-accent/60 focus:outline-none focus:ring-4 focus:ring-accent/10;
   }
   .select {
     @apply field cursor-pointer appearance-none pr-9;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23747c86'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%238a8a83'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
     background-size: 14px;
   }
   .field-label {
-    @apply mb-1.5 block text-[13px] font-medium text-ink-muted;
+    @apply mb-1.5 block text-xs font-medium text-ink-muted;
   }
 
-  /* ---------- Data table ---------- */
+  /* ---------- Data table — dense operator surface, sticky header ---------- */
   .tbl {
-    @apply w-full border-collapse text-[13px];
+    @apply w-full text-[13px];
+    border-collapse: separate;
+    border-spacing: 0;
   }
   .tbl thead th {
-    @apply whitespace-nowrap border-b border-line bg-surface-2/60 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint;
+    @apply sticky top-0 z-[1] whitespace-nowrap bg-surface-2 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted;
+    box-shadow: inset 0 -1px 0 rgb(var(--line));
   }
   .tbl thead th:first-child {
     @apply pl-5;
@@ -135,7 +150,7 @@
     @apply pr-5;
   }
   .tbl tbody td {
-    @apply whitespace-nowrap border-b border-line/70 px-4 py-3 align-middle;
+    @apply whitespace-nowrap border-b border-line px-4 py-2.5 align-middle;
   }
   .tbl tbody td:first-child {
     @apply pl-5;
@@ -164,9 +179,9 @@
     @apply font-mono font-semibold tracking-[0.1em];
   }
 
-  /* ---------- Motion ---------- */
+  /* ---------- Motion: transform + opacity only, 120–200 ms, ease-out ---------- */
   .page-in {
-    animation: page-in 200ms ease-out;
+    animation: page-in 160ms ease-out;
   }
   @keyframes page-in {
     from {
@@ -179,22 +194,23 @@
     }
   }
 
+  /* New detection / alert entrance — subtle fade + 4px translate */
   .row-in {
-    animation: row-in 260ms ease-out;
+    animation: row-in 160ms ease-out;
   }
   @keyframes row-in {
     from {
       opacity: 0;
-      transform: translateX(-6px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
-      transform: translateX(0);
+      transform: translateY(0);
     }
   }
 
   .overlay-in {
-    animation: overlay-in 150ms ease-out;
+    animation: overlay-in 140ms ease-out;
   }
   @keyframes overlay-in {
     from {
@@ -211,7 +227,7 @@
   @keyframes dialog-in {
     from {
       opacity: 0;
-      transform: scale(0.96) translateY(8px);
+      transform: scale(0.97) translateY(6px);
     }
     to {
       opacity: 1;
@@ -220,7 +236,7 @@
   }
 
   .pop-in {
-    animation: pop-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: pop-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
   }
   @keyframes pop-in {
     from {
@@ -233,11 +249,11 @@
     }
   }
 
-  /* Skeleton — shimmer sweep, calmer than pulsing blocks */
+  /* Skeleton shimmer */
   .skeleton {
     position: relative;
     overflow: hidden;
-    background: rgb(var(--surface-3));
+    background: rgb(var(--surface-2));
     border-radius: 6px;
   }
   .skeleton::after {
@@ -245,7 +261,7 @@
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.65), transparent);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
     animation: shimmer 1.6s infinite;
   }
   @keyframes shimmer {
@@ -254,9 +270,10 @@
     }
   }
 
+  /* Calm LIVE indicator pulse */
   .live-dot {
     @apply inline-block h-1.5 w-1.5 rounded-full;
-    animation: live-dot 2.2s ease-in-out infinite;
+    animation: live-dot 2.4s ease-in-out infinite;
   }
   @keyframes live-dot {
     0%,
@@ -268,7 +285,7 @@
     }
   }
 
-  /* Video scan texture (only ever on top of camera imagery) */
+  /* Video scan texture — only ever on top of camera imagery */
   .scanline {
     background-image: repeating-linear-gradient(
       0deg,
@@ -280,9 +297,9 @@
   }
 }
 
-/* ---------------- Leaflet (light canvas) ---------------- */
+/* ---------------- Leaflet (warm light canvas) ---------------- */
 .leaflet-container {
-  background: rgb(var(--surface-3));
+  background: rgb(var(--surface-2));
   font-family: inherit;
   outline: none;
 }
@@ -303,9 +320,9 @@
   background: rgb(var(--surface-2)) !important;
 }
 .leaflet-popup-content-wrapper {
-  border-radius: 10px !important;
+  border-radius: 8px !important;
   border: 1px solid rgb(var(--line)) !important;
-  box-shadow: 0 12px 32px rgb(16 24 40 / 0.14) !important;
+  box-shadow: 0 12px 32px rgb(28 28 26 / 0.14) !important;
 }
 .leaflet-popup-content {
   margin: 0 !important;

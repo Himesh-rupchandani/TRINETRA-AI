@@ -1,31 +1,32 @@
-import type { EventType, Severity } from '@/types';
+import type { Severity } from '@/types';
 
 export { formatDateTime, formatTime, relativeTime, prettyPlate } from '@/lib/utils';
 
 /**
- * Severity → presentation tokens used across the new UI.
- * One source of truth for chip tones, bars and marker colors.
+ * Severity → presentation tokens. Three visual tiers (Critical / Warning
+ * / Information) as per the design system — labels always accompany
+ * colour, never colour alone.
  */
 export const severityTone: Record<Severity, { text: string; bar: string; soft: string }> = {
-  CRITICAL: { text: 'text-critical', bar: 'bg-critical', soft: 'bg-critical/[0.06] border-critical/25' },
-  HIGH: { text: 'text-high', bar: 'bg-high', soft: 'bg-high/[0.06] border-high/25' },
-  MEDIUM: { text: 'text-medium', bar: 'bg-medium', soft: 'bg-medium/[0.08] border-medium/25' },
-  LOW: { text: 'text-low', bar: 'bg-low', soft: 'bg-low/[0.06] border-low/25' },
+  CRITICAL: { text: 'text-critical', bar: 'bg-critical', soft: 'bg-critical/[0.05] border-critical/25' },
+  HIGH: { text: 'text-warn', bar: 'bg-warn', soft: 'bg-warn/[0.06] border-warn/25' },
+  MEDIUM: { text: 'text-warn', bar: 'bg-warn', soft: 'bg-warn/[0.06] border-warn/25' },
+  LOW: { text: 'text-info', bar: 'bg-info', soft: 'bg-surface-2 border-line-strong' },
   INFO: { text: 'text-info', bar: 'bg-info', soft: 'bg-surface-2 border-line-strong' },
 };
 
 export const severityHex: Record<Severity, string> = {
-  CRITICAL: '#be123c',
-  HIGH: '#c2410c',
-  MEDIUM: '#a16207',
-  LOW: '#0369a1',
-  INFO: '#64748b',
+  CRITICAL: '#b3261e',
+  HIGH: '#9a6700',
+  MEDIUM: '#9a6700',
+  LOW: '#5c5c57',
+  INFO: '#5c5c57',
 };
 
 export const cameraStatusHex: Record<string, string> = {
-  ONLINE: '#16a34a',
-  OFFLINE: '#dc2626',
-  DEGRADED: '#b45309',
+  ONLINE: '#2e7d32',
+  OFFLINE: '#b3261e',
+  DEGRADED: '#9a6700',
 };
 
 /** ANPR confidence text tone. */
@@ -33,12 +34,12 @@ export function confidenceTone(c?: number | null): string {
   if (c == null) return 'text-ink-faint';
   const n = c <= 1 ? c * 100 : c;
   if (n >= 92) return 'text-online';
-  if (n >= 80) return 'text-medium';
-  return 'text-high';
+  if (n >= 80) return 'text-warn';
+  return 'text-critical';
 }
 
 /** Human names for the event taxonomy (Vehicle Log, evidence, filters). */
-export const EVENT_TYPE_LABELS: Record<EventType, string> = {
+export const EVENT_TYPE_LABELS: Record<string, string> = {
   VEHICLE_DETECTION: 'Vehicle detection',
   ANPR_READ: 'Plate read',
   WATCHLIST_MATCH: 'Wanted match',

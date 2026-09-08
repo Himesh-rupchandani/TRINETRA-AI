@@ -8,9 +8,9 @@ type Size = 'xs' | 'sm' | 'md';
 const VARIANTS: Record<Variant, string> = {
   // Institutional green fill — brightens a touch on hover, sinks on press.
   primary:
-    'bg-accent text-white shadow-xs hover:bg-accent-strong hover:shadow-sm active:shadow-xs',
+    'bg-accent text-white hover:bg-accent-strong',
   secondary:
-    'border border-line-strong/80 bg-surface-1 text-ink shadow-xs hover:border-line-strong hover:bg-surface-2 active:bg-surface-3/70',
+    'border border-line-strong/80 bg-surface-1 text-ink hover:border-line-strong hover:bg-surface-2 active:bg-surface-3/70',
   ghost: 'text-ink-muted hover:bg-surface-2 hover:text-ink active:bg-surface-3/70',
   danger:
     'border border-critical/25 bg-critical/[0.06] text-critical hover:bg-critical/10 active:bg-critical/15',

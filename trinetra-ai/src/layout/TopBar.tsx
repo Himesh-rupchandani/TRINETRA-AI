@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Bell, Menu, PanelLeftClose, PanelLeftOpen, Search, UserRound } from 'lucide-react';
+import { Bell, Menu, PanelLeftClose, Search, UserRound } from 'lucide-react';
 import { cn, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
@@ -58,11 +58,11 @@ function useOpsClock() {
 export function TopBar({
   onMenu,
   onToggleCollapse,
-  collapsed,
+  showCollapseToggle,
 }: {
   onMenu: () => void;
   onToggleCollapse: () => void;
-  collapsed: boolean;
+  showCollapseToggle: boolean;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,23 +84,25 @@ export function TopBar({
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-surface-1/90 px-4 backdrop-blur-md sm:px-5">
       <button
         type="button"
-        className="grid h-9 w-9 place-items-center rounded-lg text-ink-muted transition-all duration-150 hover:bg-surface-2 hover:text-ink active:scale-95 lg:hidden"
+        className="grid h-9 w-9 place-items-center rounded-lg text-ink-muted transition-all duration-150 hover:bg-surface-2 hover:text-ink active:scale-95 md:hidden"
         onClick={onMenu}
         aria-label="Open navigation"
       >
         <Menu size={17} aria-hidden />
       </button>
-      <button
-        type="button"
-        className="hidden h-9 w-9 place-items-center rounded-lg text-ink-muted transition-all duration-150 hover:bg-surface-2 hover:text-ink active:scale-95 lg:grid"
-        onClick={onToggleCollapse}
-        aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-      >
-        {collapsed ? <PanelLeftOpen size={16} aria-hidden /> : <PanelLeftClose size={16} aria-hidden />}
-      </button>
+      {showCollapseToggle && (
+        <button
+          type="button"
+          className="hidden h-9 w-9 place-items-center rounded-lg text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink active:scale-95"
+          onClick={onToggleCollapse}
+          aria-label="Toggle navigation rail"
+        >
+          <PanelLeftClose size={16} aria-hidden />
+        </button>
+      )}
 
       {/* Page title */}
-      <h1 className="min-w-0 truncate text-[15px] font-semibold text-ink">
+      <h1 className="min-w-0 truncate text-base font-semibold text-ink">
         {pageTitle(location.pathname)}
       </h1>
 

@@ -17,9 +17,8 @@ export function Card({
   return (
     <section
       className={cn(
-        'flex flex-col rounded-xl border border-line bg-surface-1 shadow-xs',
-        interactive &&
-          'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.995]',
+        'flex flex-col rounded-lg border border-line bg-surface-1',
+        interactive && 'transition-colors duration-150 hover:border-line-strong active:bg-surface-2/60',
         className,
       )}
     >

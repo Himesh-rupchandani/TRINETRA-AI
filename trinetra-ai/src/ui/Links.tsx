@@ -37,8 +37,8 @@ export function PlateLink({
 /** ANPR confidence: tiny meter + numeric value. */
 export function ConfidenceMeter({ value, className }: { value: number; className?: string }) {
   const pct = Math.max(0, Math.min(100, value <= 1 ? value * 100 : value));
-  const bar = pct >= 92 ? 'bg-online' : pct >= 80 ? 'bg-medium' : 'bg-high';
-  const text = pct >= 92 ? 'text-online' : pct >= 80 ? 'text-medium' : 'text-high';
+  const bar = pct >= 92 ? 'bg-online' : pct >= 80 ? 'bg-warn' : 'bg-critical';
+  const text = pct >= 92 ? 'text-online' : pct >= 80 ? 'text-warn' : 'text-critical';
   return (
     <span className={cn('inline-flex items-center gap-2', className)}>
       <span className="h-1 w-12 overflow-hidden rounded-full bg-surface-3" aria-hidden>

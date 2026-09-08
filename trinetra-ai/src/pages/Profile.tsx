@@ -25,7 +25,7 @@ export default function Profile() {
     : officers;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         {/* Service record */}
         <div className="min-w-0">
@@ -37,11 +37,11 @@ export default function Profile() {
                     <img
                       src={current.photoUrl}
                       alt={`Portrait of ${current.name}`}
-                      className="h-20 w-20 rounded-xl border border-line object-cover"
+                      className="h-20 w-20 rounded-lg border border-line object-cover"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <h2 className="text-lg font-bold text-ink">{current.name}</h2>
+                        <h2 className="text-xl font-semibold text-ink">{current.name}</h2>
                         <Badge tone="accent">
                           <BadgeCheck size={11} aria-hidden /> On duty
                         </Badge>
@@ -56,7 +56,7 @@ export default function Profile() {
                   </CardBody>
                 </Card>
 
-                <div className="mt-6 grid grid-cols-2 divide-line rounded-xl border border-line bg-surface-1 shadow-xs sm:grid-cols-3 sm:divide-x">
+                <div className="mt-6 grid grid-cols-2 divide-line rounded-lg border border-line bg-surface-1 sm:grid-cols-3 sm:divide-x">
                   <Stat label="Vehicles caught" value={current.vehiclesCaught} />
                   <Stat label="Challans issued" value={current.totalChallans.toLocaleString('en-IN')} />
                   <Stat label="Challan value" value={money(current.totalChallanAmount)} />

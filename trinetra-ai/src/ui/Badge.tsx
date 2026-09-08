@@ -34,7 +34,7 @@ export function Badge({
     <span
       title={title}
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-[16px]',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-[11px] font-semibold leading-[16px]',
         TONES[tone],
         className,
       )}
@@ -71,9 +71,9 @@ export function CameraStatusBadge({ status, className }: { status: CameraStatus;
 const SEVERITY_TONE: Record<Severity, Tone> = {
   CRITICAL: 'danger',
   HIGH: 'warn',
-  MEDIUM: 'neutral',
+  MEDIUM: 'warn',
   LOW: 'info',
-  INFO: 'neutral',
+  INFO: 'info',
 };
 
 const SEVERITY_LABEL: Record<Severity, string> = {

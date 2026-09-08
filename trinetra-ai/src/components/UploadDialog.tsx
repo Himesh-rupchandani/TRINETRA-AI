@@ -97,7 +97,7 @@ export function UploadDialog({
           tabIndex={0}
           aria-label="Choose video files to upload"
           className={cn(
-            'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-all duration-150',
+            'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-6 py-10 text-center transition-all duration-150',
             dragOver ? 'border-accent bg-accent-weak/60 scale-[0.99]' : 'border-line-strong/70 hover:border-accent/50 hover:bg-surface-2/60',
           )}
           onClick={() => inputRef.current?.click()}
@@ -132,7 +132,7 @@ export function UploadDialog({
         </div>
 
         {files.length > 0 && (
-          <ul className="divide-y divide-line/70 rounded-xl border border-line" aria-label="Selected files">
+          <ul className="divide-y divide-line/70 rounded-lg border border-line" aria-label="Selected files">
             {files.map((f, i) => (
               <li key={`${f.name}-${f.size}`} className="flex items-center gap-3 px-3.5 py-2.5">
                 <FileVideo size={15} className="shrink-0 text-ink-faint" aria-hidden />
@@ -152,7 +152,7 @@ export function UploadDialog({
         )}
 
         {errors.length > 0 && (
-          <div className="rounded-xl border border-critical/25 bg-critical/[0.05] p-3.5" role="alert">
+          <div className="rounded-lg border border-critical/25 bg-critical/[0.05] p-3.5" role="alert">
             <p className="text-xs font-semibold text-critical">Some files were rejected:</p>
             <ul className="mt-1.5 space-y-1">
               {errors.map((e) => (

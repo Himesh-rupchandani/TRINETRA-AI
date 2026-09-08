@@ -8,7 +8,7 @@ export function RouteError() {
   return (
     <div className="grid min-h-screen place-items-center bg-surface-0 p-6">
       <div className="max-w-md text-center">
-        <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl border border-critical/25 bg-critical/[0.06] text-critical">
+        <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-lg border border-critical/25 bg-critical/[0.06] text-critical">
           <AlertOctagon size={20} aria-hidden />
         </span>
         <p className="mono text-xs font-semibold uppercase tracking-[0.14em] text-critical">

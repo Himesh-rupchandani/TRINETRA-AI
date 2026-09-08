@@ -64,7 +64,7 @@ function ResizeGuard() {
 }
 
 function cameraIcon(status: string, selected = false): L.DivIcon {
-  const color = cameraStatusHex[status] ?? '#64748b';
+  const color = cameraStatusHex[status] ?? '#5c5c57';
   const size = selected ? 18 : 13;
   return L.divIcon({
     className: 'trinetra-marker',
@@ -80,7 +80,7 @@ function cameraIcon(status: string, selected = false): L.DivIcon {
 }
 
 function routeIcon(sequence: number, active = false): L.DivIcon {
-  const fill = '#15803d';
+  const fill = '#0f766e';
   const size = active ? 28 : 23;
   return L.divIcon({
     className: 'trinetra-marker',
@@ -95,7 +95,7 @@ function routeIcon(sequence: number, active = false): L.DivIcon {
 }
 
 function eventIcon(watchlist = false): L.DivIcon {
-  const color = watchlist ? '#be123c' : '#15803d';
+  const color = watchlist ? '#b3261e' : '#0f766e';
   return L.divIcon({
     className: 'trinetra-marker',
     iconSize: [12, 12],
@@ -252,7 +252,7 @@ export function MapCanvas({
               radius={16}
               pathOptions={{
                 color: 'transparent',
-                fillColor: cameraStatusHex[c.status] ?? '#64748b',
+                fillColor: cameraStatusHex[c.status] ?? '#5c5c57',
                 fillOpacity: 0.08,
               }}
               interactive={false}
@@ -290,8 +290,8 @@ export function MapCanvas({
 
         {routeLine.length > 1 && (
           <>
-            <Polyline positions={routeLine} pathOptions={{ color: '#0f172a', weight: 7, opacity: 0.25 }} />
-            <Polyline positions={routeLine} pathOptions={{ color: '#15803d', weight: 3.5, opacity: 0.95 }} />
+            <Polyline positions={routeLine} pathOptions={{ color: '#1c1c1a', weight: 7, opacity: 0.25 }} />
+            <Polyline positions={routeLine} pathOptions={{ color: '#0f766e', weight: 3.5, opacity: 0.95 }} />
           </>
         )}
 

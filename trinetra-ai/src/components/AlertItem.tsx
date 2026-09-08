@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, CheckCircle2, Map, Siren } from 'lucide-react';
+import { CheckCircle2, Siren } from 'lucide-react';
 import type { Alert } from '@/types';
 import { AlertStateBadge, SeverityBadge } from '@/ui/Badge';
 import { Button } from '@/ui/Button';
@@ -59,8 +59,8 @@ export function AlertItem({
   return (
     <article
       className={cn(
-        'relative rounded-xl border border-line bg-surface-1 shadow-xs transition-all duration-200',
-        'hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-[0.995]',
+        'relative rounded-lg border border-line bg-surface-1 transition-all duration-200',
+        'hover:border-line-strong active:bg-surface-2/60',
         alert.status === 'NEW' && alert.severity === 'CRITICAL' && 'border-critical/30',
       )}
       aria-label={`${alert.severity} alert for ${alert.plate}`}
@@ -116,15 +116,9 @@ export function AlertItem({
         <Button variant="secondary" size="xs" onClick={() => navigate(`/vehicles/${alert.plate}`)}>
           Investigate
         </Button>
-        <Button variant="ghost" size="xs" onClick={() => navigate(`/cameras/${alert.cameraId}`)}>
-          <Camera size={11} aria-hidden /> Camera
-        </Button>
-        <Button variant="ghost" size="xs" onClick={() => navigate(`/gis?plate=${alert.plate}&focus=${alert.cameraId}`)}>
-          <Map size={11} aria-hidden /> Map
-        </Button>
         <span className="ml-auto flex items-center gap-2">
           {alert.status === 'NEW' && (
-            <Button variant="primary" size="xs" onClick={ack} disabled={busy}>
+            <Button variant="secondary" size="xs" onClick={ack} disabled={busy}>
               <CheckCircle2 size={11} aria-hidden /> Mark seen
             </Button>
           )}

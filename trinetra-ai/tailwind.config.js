@@ -9,8 +9,8 @@ export default {
         '4.5': '1.125rem',
       },
       fontFamily: {
-        sans: ['"Public Sans"', 'Inter', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['"IBM Plex Mono"', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        sans: ['Inter', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       colors: {
         surface: {
@@ -31,37 +31,30 @@ export default {
           strong: 'rgb(var(--accent-strong) / <alpha-value>)',
           weak: 'rgb(var(--accent-weak) / <alpha-value>)',
         },
-        // Status — text-grade on white
+        // Status — verified contrast on white
         online: 'rgb(var(--status-online) / <alpha-value>)',
         offline: 'rgb(var(--status-offline) / <alpha-value>)',
-        warn: 'rgb(var(--status-warn) / <alpha-value>)',
+        'warn': 'rgb(var(--status-warn) / <alpha-value>)',
         'info': 'rgb(var(--status-info) / <alpha-value>)',
-        // Severity ramp (chips/text on tints)
-        critical: '#be123c',
-        high: '#c2410c',
-        medium: '#a16207',
-        low: '#0369a1',
+        processing: 'rgb(var(--status-processing) / <alpha-value>)',
+        // Severity (chips/text on tints)
+        critical: 'rgb(var(--sev-critical) / <alpha-value>)',
+        high: 'rgb(var(--sev-high) / <alpha-value>)',
+        medium: 'rgb(var(--sev-medium) / <alpha-value>)',
+        low: 'rgb(var(--sev-low) / <alpha-value>)',
       },
       fontSize: {
         '2xs': ['0.8125rem', { lineHeight: '1.15rem' }],
         xs: ['0.8125rem', { lineHeight: '1.25rem' }],
-        sm: ['0.875rem', { lineHeight: '1.35rem' }],
+        sm: ['0.875rem', { lineHeight: '1.45rem' }],
         base: ['0.9375rem', { lineHeight: '1.5rem' }],
       },
+      // Shadows are reserved for floating layers only (menus, modals,
+      // popovers, toasts). Panels are flat; borders carry structure.
       boxShadow: {
-        xs: '0 1px 2px 0 rgb(16 24 40 / 0.05)',
-        sm: '0 1px 3px rgb(16 24 40 / 0.08), 0 1px 2px rgb(16 24 40 / 0.04)',
-        md: '0 6px 16px -4px rgb(16 24 40 / 0.10), 0 2px 6px -2px rgb(16 24 40 / 0.05)',
-        lg: '0 16px 40px -12px rgb(16 24 40 / 0.18)',
-      },
-      keyframes: {
-        'pulse-dot': {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.35' },
-        },
-      },
-      animation: {
-        'pulse-dot': 'pulse-dot 2.2s ease-in-out infinite',
+        sm: '0 1px 3px rgb(28 28 26 / 0.08), 0 1px 2px rgb(28 28 26 / 0.04)',
+        md: '0 6px 16px -4px rgb(28 28 26 / 0.12), 0 2px 6px -2px rgb(28 28 26 / 0.06)',
+        lg: '0 16px 40px -12px rgb(28 28 26 / 0.20)',
       },
     },
   },

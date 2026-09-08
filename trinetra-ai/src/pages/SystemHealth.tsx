@@ -99,10 +99,10 @@ export default function SystemHealth() {
   }, [health]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-ink">System Status</h2>
+          <h2 className="text-xl font-semibold text-ink">System Status</h2>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
             Live state of the ingest, recognition and dispatch services behind SENTINEL. This page
             refreshes itself every 15 seconds.
@@ -114,7 +114,7 @@ export default function SystemHealth() {
       </header>
 
       {/* Ingest band */}
-      <div className="mt-5 grid grid-cols-2 divide-line rounded-xl border border-line bg-surface-1 shadow-xs sm:grid-cols-3 sm:divide-x lg:grid-cols-6">
+      <div className="mt-5 grid grid-cols-2 divide-line rounded-lg border border-line bg-surface-1 sm:grid-cols-3 sm:divide-x lg:grid-cols-6">
         <Stat label="Cameras online" value={kpis ? kpis.camerasOnline : '—'} sub={kpis ? `${kpis.camerasDegraded} degraded · ${kpis.camerasOffline} offline` : undefined} />
         <Stat label="Ingest rate" value={health ? `${health.ingestFps.toFixed(1)}` : '—'} sub="frames per second" />
         <Stat label="Events" value={health ? health.eventsPerMinute.toFixed(0) : '—'} sub="per minute" />

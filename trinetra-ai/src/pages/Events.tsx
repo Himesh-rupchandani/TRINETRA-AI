@@ -90,7 +90,7 @@ export default function Events() {
     query || eventType !== 'ALL' || severity !== 'ALL' || cameraId || watchlistOnly || dateFrom || dateTo;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6">
       {/* Filter strip */}
       <Card>
         <CardBody className="p-4">

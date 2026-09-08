@@ -27,7 +27,7 @@ export function Evidence({
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
-      <figure className="overflow-hidden rounded-xl border border-line bg-surface-1 shadow-xs">
+      <figure className="overflow-hidden rounded-lg border border-line bg-surface-1">
         <div className="relative aspect-video bg-black">
           {evd?.frameUrl ? (
             <img
@@ -38,37 +38,49 @@ export function Evidence({
               decoding="async"
               className="h-full w-full object-cover"
             />
-          ) : (
+          ) : synthetic ? (
+            /* Demo mode only: labelled synthetic reconstruction with the
+               detection geometry drawn on top. */
             <>
-              {/* No archived frame — show the class reference image with the
-                  detection geometry drawn on top, clearly labelled. */}
               <div className="absolute inset-0 grid place-items-center bg-surface-2 text-2xs text-ink-faint">
                 <span className="flex items-center gap-1.5">
-                  <ScanLine size={12} aria-hidden /> CCTV frame · image not archived
+                  <ScanLine size={12} aria-hidden /> CCTV frame · synthetic reconstruction
                 </span>
               </div>
               <img
                 src={vehicleStill(ev.vehicleClass)}
-                alt={`Reference view of ${ev.plate}`}
+                alt={`Reconstructed view of ${ev.plate}`}
                 onError={hideBrokenImage}
                 loading="lazy"
                 decoding="async"
                 className="absolute inset-0 h-full w-full object-cover"
               />
               <div
-                className="pointer-events-none absolute left-1/2 top-1/2 h-[54%] w-[46%] -translate-x-1/2 -translate-y-[53%] border-2 border-emerald-400/90"
+                className="pointer-events-none absolute left-1/2 top-1/2 h-[54%] w-[46%] -translate-x-1/2 -translate-y-[53%] border-2 border-accent/90"
                 aria-hidden
               />
-              <div className="pointer-events-none absolute left-1/2 top-[24%] -translate-x-1/2 whitespace-nowrap bg-emerald-400 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-900" aria-hidden>
+              <div className="pointer-events-none absolute left-1/2 top-[24%] -translate-x-1/2 whitespace-nowrap bg-accent px-1.5 py-0.5 font-mono text-[10px] font-bold text-white" aria-hidden>
                 {prettyVehicleClass(ev.vehicleClass)} · TRACK {trackId(ev.id)}
               </div>
+              <span className="absolute right-2.5 top-2.5 rounded bg-black/65 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/75">
+                Demo · synthetic
+              </span>
             </>
+          ) : (
+            /* Live event without archived frame: honest empty state. */
+            <div className="absolute inset-0 grid place-items-center bg-surface-2">
+              <div className="text-center">
+                <ScanLine size={16} className="mx-auto mb-1.5 text-ink-faint" aria-hidden />
+                <p className="text-xs font-medium text-ink-muted">Frame not archived</p>
+                <p className="mono mt-0.5 text-[10.5px] text-ink-faint">evidence ref {evd?.ref ?? ev.evidenceRef ?? 'on file'}</p>
+              </div>
+            </div>
           )}
           <span className="mono absolute left-2.5 top-2.5 rounded bg-black/65 px-2 py-0.5 text-[10px] tabular-nums text-white/90">
             {formatDateTime(ev.timestamp)}
           </span>
           {synthetic && (
-            <span className="absolute right-2.5 top-2.5 rounded bg-black/65 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-200">
+            <span className="absolute right-2.5 top-2.5 rounded bg-black/65 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/75">
               Demo · synthetic
             </span>
           )}
@@ -82,7 +94,7 @@ export function Evidence({
       </figure>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="overflow-hidden rounded-xl border border-line bg-surface-1 shadow-xs">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface-1">
           <div className="grid aspect-video place-items-center bg-surface-3">
             {evd?.plateCropUrl ? (
               <img

@@ -52,7 +52,7 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'dialog-in flex max-h-[92vh] w-full flex-col rounded-xl border border-line bg-surface-1 shadow-lg outline-none',
+          'dialog-in flex max-h-[92vh] w-full flex-col rounded-lg border border-line bg-surface-1 shadow-lg outline-none',
           widths[size],
         )}
       >
