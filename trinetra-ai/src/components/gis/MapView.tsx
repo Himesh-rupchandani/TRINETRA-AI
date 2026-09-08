@@ -202,7 +202,7 @@ export function MapView({
           </>
         )}
 
-        {route.map((p) => (
+        {route.map((p, i) => (
           <Marker
             key={`${p.eventId}-${p.sequence}`}
             position={[p.latitude, p.longitude]}
@@ -212,7 +212,7 @@ export function MapView({
             title={`Sighting ${p.sequence} — ${p.cameraName}`}
           >
             <Popup>
-              <RoutePopup point={p} plate={routePlate} />
+              <RoutePopup point={p} prev={i > 0 ? route[i - 1] : undefined} plate={routePlate} />
             </Popup>
           </Marker>
         ))}
