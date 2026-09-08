@@ -138,7 +138,7 @@ export function CameraPlayer({
       : 'Good';
 
   return (
-    <div className={cn('relative overflow-hidden rounded border border-line bg-black', className)}>
+    <div className={cn('relative isolate overflow-hidden rounded border border-line bg-black', className)}>
       <div className="relative aspect-video w-full">
         {showPoster ? (
           <img
