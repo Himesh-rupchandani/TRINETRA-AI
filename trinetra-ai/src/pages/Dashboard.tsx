@@ -54,6 +54,7 @@ export default function Dashboard() {
     () => recentEvents.filter((e) => e.watchlistMatch).slice(0, 25),
     [recentEvents],
   );
+  const featuredCamera = cameras.find((c) => c.status === 'ONLINE') ?? cameras[0] ?? null;
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
@@ -65,9 +66,9 @@ export default function Dashboard() {
             Start here
           </span>
           <div className="mt-3 flex items-center gap-3">
-            <IconTile tone="blue" size="xl" className="float-soft shadow-md ring-1 ring-inset ring-black/5">
-              <Car size={22} aria-hidden />
-            </IconTile>
+            <span className="float-soft grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md" aria-hidden>
+              <Car size={24} aria-hidden />
+            </span>
             <h2 className="text-xl font-bold tracking-tight text-ink">Find a Vehicle</h2>
           </div>
           <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -77,7 +78,7 @@ export default function Dashboard() {
             {[
               { icon: Cctv, text: 'Every camera sighting' },
               { icon: MapIcon, text: 'Route from camera to camera' },
-              { icon: Bell, text: 'Matching alerts, if any' },
+              { icon: Bell, text: 'Instant wanted-list alerts' },
             ].map((f) => (
               <li key={f.text} className="flex items-center gap-2 text-xs font-medium text-ink-muted">
                 <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600">
@@ -90,6 +91,35 @@ export default function Dashboard() {
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <TraceSearchBar onTrace={(p) => navigate(`/vehicles/${p}`)} />
+          <button
+            type="button"
+            onClick={() => navigate(featuredCamera ? `/cameras/${featuredCamera.id}` : '/cameras')}
+            className="group relative mt-4 block w-full overflow-hidden rounded-xl text-left shadow-panel ring-1 ring-black/5"
+          >
+            <img
+              src="/cctv/cctv-02.jpg"
+              alt=""
+              aria-hidden
+              className="h-44 w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+            <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent" />
+            <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-critical px-2.5 py-1 text-2xs font-bold uppercase tracking-widest text-white">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden /> Live
+            </span>
+            <span className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-bold text-white">
+                  {featuredCamera ? `${featuredCamera.id.toUpperCase()} · ${featuredCamera.name}` : 'Live camera network'}
+                </span>
+                <span className="block truncate text-2xs text-slate-300">
+                  {featuredCamera ? featuredCamera.location : 'Open the live wall'}
+                </span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-xs font-bold text-white backdrop-blur-sm transition-colors group-hover:bg-white/25">
+                Open live view <ArrowRight size={14} aria-hidden />
+              </span>
+            </span>
+          </button>
         </div>
       </section>
 
