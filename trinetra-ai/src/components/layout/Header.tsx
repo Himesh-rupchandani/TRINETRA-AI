@@ -180,22 +180,22 @@ export function Header() {
         <button
           type="button"
           onClick={() => navigate('/profile')}
-          className="hidden items-center gap-2.5 border-l border-line pl-3 text-left xl:flex"
+          className="flex items-center gap-2.5 border-l border-line pl-3 text-left"
           aria-label="Open officer profile"
         >
           {officer ? (
             <img
               src={officer.photoUrl}
               alt=""
-              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-line"
+              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-line"
               aria-hidden
             />
           ) : (
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
-              <UserRound size={15} />
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
+              <UserRound size={16} />
             </span>
           )}
-          <div className="leading-tight">
+          <div className="hidden leading-tight sm:block">
             <p className="max-w-[160px] truncate text-xs font-semibold text-ink">{officer?.name ?? 'System Operator'}</p>
             <p className="text-2xs text-ink-faint">{officer?.designation ?? 'Control Center'}</p>
           </div>
