@@ -99,20 +99,29 @@ export function RoutePopup({
             <dd className="text-right font-mono">{point.gapMinutes.toFixed(0)} min</dd>
           </>
         )}
-        {leg != null && (
+        {prev?.cameraId === point.cameraId ? (
           <>
-            <dt className="text-ink-faint">Road distance</dt>
-            <dd className="text-right font-mono">
-              {leg.roadKm >= 10 ? leg.roadKm.toFixed(0) : leg.roadKm.toFixed(1)} km
-            </dd>
-            <dt className="text-ink-faint">Typical drive</dt>
-            <dd className="text-right font-mono">{formatDuration(leg.typicalMinutes)}</dd>
+            <dt className="text-ink-faint">Leg</dt>
+            <dd className="text-right font-mono">Same camera</dd>
           </>
-        )}
-        {point.speedKmph != null && (
+        ) : (
           <>
-            <dt className="text-ink-faint">Avg speed</dt>
-            <dd className="text-right font-mono">{point.speedKmph} km/h</dd>
+            {leg != null && (
+              <>
+                <dt className="text-ink-faint">Road distance</dt>
+                <dd className="text-right font-mono">
+                  {leg.roadKm >= 10 ? leg.roadKm.toFixed(0) : leg.roadKm.toFixed(1)} km
+                </dd>
+                <dt className="text-ink-faint">Typical drive</dt>
+                <dd className="text-right font-mono">{formatDuration(leg.typicalMinutes)}</dd>
+              </>
+            )}
+            {point.speedKmph != null && (point.gapMinutes ?? 0) >= 1 && (
+              <>
+                <dt className="text-ink-faint">Avg speed</dt>
+                <dd className="text-right font-mono">{point.speedKmph} km/h</dd>
+              </>
+            )}
           </>
         )}
       </dl>

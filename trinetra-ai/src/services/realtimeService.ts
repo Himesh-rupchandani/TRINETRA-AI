@@ -38,6 +38,32 @@ const CLASSES: NonNullable<VehicleEvent['vehicleClass']>[] = [
 ];
 const WATCH_PLATES = ['GJ01AB1234', 'GJ05XY4321', 'GJ27CJ7788', 'GJ12PQ8899', 'GJ16TU9090'];
 
+/**
+ * Watched plates are staked out: repeat sightings always come from the same
+ * post (their last known camera), so the live feed never teleports a vehicle
+ * across the state between ticks. Posts for new plates are picked once,
+ * then sticky.
+ */
+const STAKEOUTS: Record<string, string> = {
+  GJ01AB1234: 'cam07',
+  GJ05XY4321: 'cam30',
+  GJ12PQ8899: 'cam08',
+  GJ16TU9090: 'cam09',
+  GJ21RS3344: 'cam22',
+  GJ06KL2211: 'cam24',
+  GJ03DT5566: 'cam24',
+};
+const watchPosts = new Map<string, Camera>();
+function watchCamera(plate: string): Camera {
+  const known = watchPosts.get(plate);
+  if (known) return known;
+  const online = mockCameras.filter((c) => c.status === 'ONLINE');
+  const fixed = STAKEOUTS[plate];
+  const cam = (fixed && online.find((c) => c.id === fixed)) || rnd(online);
+  watchPosts.set(plate, cam);
+  return cam;
+}
+
 const rnd = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const randomPlate = () =>
   `${rnd(RTO)}${rnd([...LETTERS])}${rnd([...LETTERS])}${Math.floor(1000 + Math.random() * 9000)}`;
@@ -45,9 +71,9 @@ const randomPlate = () =>
 let seq = 0;
 
 function makeEvent(): { event: VehicleEvent; alert?: Alert } {
-  const cam = rnd(mockCameras.filter((c) => c.status === 'ONLINE'));
   const isWatch = Math.random() > 0.82;
   const plate = isWatch ? rnd(WATCH_PLATES) : randomPlate();
+  const cam = isWatch ? watchCamera(plate) : rnd(mockCameras.filter((c) => c.status === 'ONLINE'));
   const wl = isWatch ? watchlistByPlate(plate) : undefined;
   const confidence = Number((82 + Math.random() * 17).toFixed(1));
   const now = new Date().toISOString();
