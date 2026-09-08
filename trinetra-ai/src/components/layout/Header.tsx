@@ -82,11 +82,11 @@ export function Header() {
         aria-label="TRINETRA AI — go to home page"
         title="Go to home page"
       >
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand to-blue-700 shadow" aria-hidden>
-          <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line bg-white shadow-sm" aria-hidden>
+          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2.5 12C5 7.6 8.2 5.2 12 5.2s7 2.4 9.5 6.8c-2.5 4.4-5.7 6.8-9.5 6.8s-7-2.4-9.5-6.8Z" />
-            <circle cx="12" cy="12" r="2.9" />
-            <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="12" r="2.9" stroke="#1D4ED8" />
+            <circle cx="12" cy="12" r="1" fill="#2563EB" stroke="none" />
           </svg>
         </span>
         <span className="hidden min-w-0 md:block">
