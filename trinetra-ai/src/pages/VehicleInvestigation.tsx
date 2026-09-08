@@ -165,7 +165,7 @@ export default function VehicleInvestigation() {
           title="Route on the map"
           icon={MapIcon}
           className="min-h-[420px] xl:col-span-5"
-          bodyClassName="relative"
+          bodyClassName="relative isolate"
           actions={
             <span className="chip border-high/45 bg-high/10 text-high">
               {points.map((p) => p.cameraName).join(' → ') || 'No route'}

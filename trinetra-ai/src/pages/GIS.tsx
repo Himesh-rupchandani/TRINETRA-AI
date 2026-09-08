@@ -112,7 +112,7 @@ export default function GIS() {
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-4 sm:gap-4 sm:p-5">
         <Panel
           className="min-h-[420px] xl:col-span-9"
-          bodyClassName="relative"
+          bodyClassName="relative isolate"
           title="Map of the city"
           icon={Layers}
           actions={

@@ -193,7 +193,7 @@ export default function Dashboard() {
           title="Where vehicles are being seen"
           icon={MapIcon}
           className="min-h-[320px] xl:col-span-5"
-          bodyClassName="relative"
+          bodyClassName="relative isolate"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/gis')}>
               Full map <ArrowRight size={13} aria-hidden />
