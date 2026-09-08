@@ -1,13 +1,17 @@
 import { useNavigate } from 'react-router-dom';
-import { Cctv, Play, Video } from 'lucide-react';
+import { Bell, Cctv, Play, Video } from 'lucide-react';
+import { useCameras } from '@/hooks/useCameras';
+import { useAlerts } from '@/hooks/useAlerts';
 
 /**
  * Wide hero card between the title bar and the menu bar (home page only):
- * night-city CCTV backdrop, headline, two workflow entry buttons and the
- * TRINETRA quote panel on the right.
+ * night-city CCTV backdrop, headline, two workflow entry buttons, live
+ * network stats and the TRINETRA quote panel on the right.
  */
 export function HeroBanner() {
   const navigate = useNavigate();
+  const { stats } = useCameras();
+  const { active } = useAlerts();
 
   return (
     <section aria-label="TRINETRA AI overview" className="relative shrink-0 overflow-hidden bg-slate-950 text-white">
@@ -51,6 +55,18 @@ export function HeroBanner() {
             >
               <Video size={15} aria-hidden /> Analyse a Video
             </button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {stats.total > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-2xs font-semibold text-white backdrop-blur-sm">
+                <Cctv size={13} className="text-emerald-300" aria-hidden />
+                {stats.online}/{stats.total} cameras online
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-2xs font-semibold text-white backdrop-blur-sm">
+              <Bell size={13} className={active.length ? 'text-rose-300' : 'text-slate-300'} aria-hidden />
+              {active.length} active alert{active.length === 1 ? '' : 's'}
+            </span>
           </div>
         </div>
 

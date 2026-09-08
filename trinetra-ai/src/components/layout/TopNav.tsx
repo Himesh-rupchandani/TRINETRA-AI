@@ -98,7 +98,7 @@ export function TopNav() {
                 title={`${item.label} — ${item.hint}`}
                 className={({ isActive }) =>
                   cn(
-                    'group flex w-full items-center gap-3 rounded-xl border p-3 shadow-panel transition-all duration-150',
+                    'group flex w-full items-center gap-2.5 rounded-xl border p-2.5 shadow-panel transition-all duration-150',
                     isActive ? tone.active : tone.idle,
                   )
                 }
@@ -116,7 +116,7 @@ export function TopNav() {
                     <span className="min-w-0 flex-1">
                       <span
                         className={cn(
-                          'block truncate text-sm font-bold leading-tight',
+                          'block truncate text-[13px] font-bold leading-tight',
                           isActive ? tone.title : 'text-ink',
                         )}
                       >
