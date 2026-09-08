@@ -110,28 +110,30 @@ export function Header() {
         </span>
       </button>
 
-      {/* Global plate search on the left — the hero entry point, reachable from every screen */}
-      <form onSubmit={submitQuick} className="hidden min-w-0 max-w-sm flex-1 sm:block" role="search">
-        <label htmlFor="global-plate-search" className="sr-only">
-          Trace registration number
-        </label>
-        <div className="relative">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
-          <input
-            id="global-plate-search"
-            ref={searchRef}
-            value={quick}
-            onChange={(e) => setQuick(e.target.value.toUpperCase())}
-            placeholder="Search number plate, camera, or location…"
-            className="input h-10 pl-9 pr-16 font-mono uppercase"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint lg:inline-block">
-            Ctrl K
-          </kbd>
-        </div>
-      </form>
+      {/* Global plate search — inner pages only; home already has the big hero search. */}
+      {showBack && (
+        <form onSubmit={submitQuick} className="hidden min-w-0 max-w-sm flex-1 sm:block" role="search">
+          <label htmlFor="global-plate-search" className="sr-only">
+            Trace registration number
+          </label>
+          <div className="relative">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
+            <input
+              id="global-plate-search"
+              ref={searchRef}
+              value={quick}
+              onChange={(e) => setQuick(e.target.value.toUpperCase())}
+              placeholder="Search number plate, camera, or location…"
+              className="input h-10 pl-9 pr-16 font-mono uppercase"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint lg:inline-block">
+              Ctrl K
+            </kbd>
+          </div>
+        </form>
+      )}
 
       {/* Supporting sections on the right — icon buttons on smaller screens, full labels on wide ones. */}
       <nav aria-label="Secondary" className="ml-auto hidden min-w-0 shrink-0 items-center gap-0.5 md:flex">
