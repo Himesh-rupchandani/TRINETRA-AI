@@ -7,7 +7,6 @@ import {
   Car,
   Cctv,
   Map as MapIcon,
-  Play,
   ScanLine,
   ShieldAlert,
   Signal,
@@ -27,7 +26,7 @@ import { useAlerts } from '@/hooks/useAlerts';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
-import { formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
+import { cn, formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
 import { DEMO_PLATE } from '@/data/demoFlow';
 
 /**
@@ -56,83 +55,110 @@ export default function Dashboard() {
   );
   const featuredCamera = cameras.find((c) => c.status === 'ONLINE') ?? cameras[0] ?? null;
 
+  /** The 60-second demo script: trace a plate, open its camera, see the route. */
+  const DEMO_STEPS = [
+    {
+      n: 1,
+      title: 'Trace a demo plate',
+      detail: DEMO_PLATE,
+      hint: 'Every sighting, photo and alert for one vehicle.',
+      to: `/vehicles/${DEMO_PLATE}`,
+      icon: Car,
+      tone: 'sky' as const,
+      card: 'border-sky-200 bg-gradient-to-br from-sky-100/70 via-sky-50 to-white hover:border-sky-400 hover:shadow-cardHover',
+      badge: 'bg-gradient-to-br from-sky-500 to-sky-700',
+    },
+    {
+      n: 2,
+      title: 'Open its live camera',
+      detail: featuredCamera ? featuredCamera.name : 'Live wall',
+      hint: 'Watch the feed the sighting came from.',
+      to: featuredCamera ? `/cameras/${featuredCamera.id}` : '/cameras',
+      icon: Cctv,
+      tone: 'green' as const,
+      card: 'border-emerald-200 bg-gradient-to-br from-emerald-100/70 via-emerald-50 to-white hover:border-emerald-400 hover:shadow-cardHover',
+      badge: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
+    },
+    {
+      n: 3,
+      title: 'See the route on Map',
+      detail: `Route · ${DEMO_PLATE}`,
+      hint: 'Camera-to-camera movement on the map.',
+      to: `/gis?plate=${DEMO_PLATE}`,
+      icon: MapIcon,
+      tone: 'orange' as const,
+      card: 'border-orange-200 bg-gradient-to-br from-orange-100/70 via-orange-50 to-white hover:border-orange-400 hover:shadow-cardHover',
+      badge: 'bg-gradient-to-br from-orange-500 to-orange-700',
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
 
-      {/* Hero: registration number is always the fastest path into the product */}
-      <section className="panel flex flex-col gap-5 bg-gradient-to-br from-white via-white to-sky-50 p-5 sm:p-6 lg:flex-row lg:items-stretch">
-        <div className="flex flex-col justify-center lg:w-[290px] lg:shrink-0">
-          <span className="chip w-fit border-brand/25 bg-brand/10 font-bold uppercase tracking-widest text-brand">
-            Start here
-          </span>
-          <div className="mt-3 flex items-center gap-3">
-            <span className="float-soft grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md" aria-hidden>
-              <Car size={24} aria-hidden />
+      {/* 60-second demo guide: three clicks, one case. */}
+      <section className="panel p-5 sm:p-6" aria-label="Sixty second demo guide">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <span className="chip w-fit border-brand/25 bg-brand/10 font-bold uppercase tracking-widest text-brand">
+              60-second demo
             </span>
-            <h2 className="text-xl font-bold tracking-tight text-ink">Find a Vehicle</h2>
+            <h2 className="mt-2 text-lg font-bold tracking-tight text-ink">
+              Try it yourself — no training needed
+            </h2>
+            <p className="mt-1 text-sm text-ink-muted">
+              Three clicks, one case: trace a plate, open its camera, see the route.
+            </p>
           </div>
-          <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
-            Type any number plate in the search bar above to see all camera sightings, routes, and alerts.
-          </p>
-          <ul className="mt-3.5 space-y-2" aria-label="What you get">
-            {[
-              { icon: Cctv, text: 'Every camera sighting' },
-              { icon: MapIcon, text: 'Route from camera to camera' },
-              { icon: Bell, text: 'Instant wanted-list alerts' },
-            ].map((f) => (
-              <li key={f.text} className="flex items-center gap-2 text-xs font-medium text-ink-muted">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600">
-                  <f.icon size={13} aria-hidden />
-                </span>
-                {f.text}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            onClick={() => navigate('/vehicles')}
-            className="btn-primary mt-4 w-fit"
-          >
-            Go to Find Vehicle <ArrowRight size={14} aria-hidden />
-          </button>
+          <p className="text-xs font-semibold text-ink-faint">Takes about a minute</p>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col justify-center">
-          <button
-            type="button"
-            onClick={() => navigate(featuredCamera ? `/cameras/${featuredCamera.id}` : '/cameras')}
-            className="group relative block w-full overflow-hidden rounded-xl text-left shadow-panel ring-1 ring-black/5"
-          >
-            <img
-              src="/cctv/cctv-02.jpg"
-              alt=""
-              aria-hidden
-              className="h-52 w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            />
-            <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent" />
-            <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-critical px-2.5 py-1 text-2xs font-bold uppercase tracking-widest text-white">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden /> Live
-            </span>
-            <span
-              aria-hidden
-              className="absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/20 shadow-lg backdrop-blur-sm transition-all duration-200 group-hover:scale-110 group-hover:bg-white/30"
-            >
-              <Play size={22} className="ml-0.5 text-white" fill="currentColor" />
-            </span>
-            <span className="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-bold text-white">
-                  {featuredCamera ? (featuredCamera.name || featuredCamera.id.toUpperCase()) : 'Live camera network'}
-                </span>
-                <span className="block truncate text-2xs text-slate-300">
-                  {featuredCamera ? featuredCamera.location : 'Open the live wall'}
-                </span>
-              </span>
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-xs font-bold text-white backdrop-blur-sm transition-colors group-hover:bg-white/25">
-                Open live view <ArrowRight size={14} aria-hidden />
-              </span>
-            </span>
-          </button>
-        </div>
+        <ol className="mt-4 grid gap-2.5 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
+          {DEMO_STEPS.flatMap((s, i) => {
+            const Icon = s.icon;
+            const items = [
+              <li key={s.n}>
+                <Link
+                  to={s.to}
+                  className={cn(
+                    'group flex h-full items-center gap-3 rounded-xl border p-4 shadow-panel transition-all duration-150 hover:-translate-y-0.5',
+                    s.card,
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'grid h-8 w-8 shrink-0 place-items-center rounded-full font-mono text-xs font-bold text-white shadow-sm',
+                      s.badge,
+                    )}
+                  >
+                    {s.n}
+                  </span>
+                  <IconTile tone={s.tone} size="md" className="shadow-sm ring-1 ring-inset ring-black/5">
+                    <Icon size={17} aria-hidden />
+                  </IconTile>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-ink">{s.title}</span>
+                    <span className="mt-0.5 block truncate font-mono text-xs font-bold text-brand">
+                      {s.detail}
+                    </span>
+                    <span className="mt-0.5 block text-2xs leading-snug text-ink-muted">{s.hint}</span>
+                  </span>
+                  <ArrowRight
+                    size={16}
+                    className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-brand"
+                    aria-hidden
+                  />
+                </Link>
+              </li>,
+            ];
+            if (i < DEMO_STEPS.length - 1) {
+              items.push(
+                <li key={`arrow-${s.n}`} aria-hidden className="flex items-center justify-center">
+                  <ArrowRight size={18} className="rotate-90 text-ink-faint/60 md:rotate-0" />
+                </li>,
+              );
+            }
+            return items;
+          })}
+        </ol>
       </section>
 
       {/* Who built this and what it does — plain words, no jargon. */}
