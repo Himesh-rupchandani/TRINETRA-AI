@@ -19,7 +19,6 @@ import { AlertCard } from '@/components/alerts/AlertCard';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { CameraCard } from '@/components/camera/CameraCard';
 import { Panel, AsyncBoundary, EmptyState } from '@/components/common/Panel';
-import { IconTile } from '@/components/common/IconTile';
 import { ServiceStatusChip, StatusChip } from '@/components/common/Chips';
 import { useCameras } from '@/hooks/useCameras';
 import { useAlerts } from '@/hooks/useAlerts';
@@ -306,18 +305,18 @@ export default function Dashboard() {
       </Panel>
 
       {/* Who built this and what it does — plain words, no jargon. */}
-      <section className="panel p-5 sm:p-6" aria-label="About the team and the project">
-        <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
-          <div>
+      <section className="panel overflow-hidden" aria-label="About the team and the project">
+        <div className="grid lg:grid-cols-2">
+          <div className="bg-gradient-to-br from-blue-100/60 via-blue-50/40 to-white p-5 sm:p-6">
             <div className="flex items-center gap-3">
-              <IconTile tone="blue" size="lg">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md" aria-hidden>
                 <Cctv size={20} aria-hidden />
-              </IconTile>
+              </span>
               <div>
-                <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
+                <p className="chip w-fit border-blue-200 bg-blue-500/10 font-bold uppercase tracking-widest text-blue-700">
                   About the project
                 </p>
-                <h2 className="text-base font-bold text-ink">One screen for every camera in the city</h2>
+                <h2 className="mt-1.5 text-lg font-extrabold tracking-tight text-ink">One screen for every camera in the city</h2>
               </div>
             </div>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">
@@ -328,53 +327,68 @@ export default function Dashboard() {
               any camera, the control room knows within seconds, with the photo, the
               camera location, and the route it took.
             </p>
-            <ul className="mt-4 space-y-2.5">
-              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
-                <IconTile tone="green" size="sm" className="mt-0.5">
-                  <Cctv size={14} aria-hidden />
-                </IconTile>
-                <span>
-                  <button type="button" className="link-btn" onClick={() => navigate('/cameras')}>
-                    Live Cameras
-                  </button>{' '}
-                  — open any feed straight from the bar above.
-                </span>
+            <ul className="mt-4 space-y-2">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => navigate('/cameras')}
+                  className="group flex w-full items-center gap-3 rounded-xl border border-line bg-white/80 p-2.5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm" aria-hidden>
+                    <Cctv size={16} aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-ink">Live Cameras</span>
+                    <span className="block truncate text-2xs text-ink-muted">Open any feed straight from the bar above.</span>
+                  </span>
+                  <ArrowRight size={15} className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-emerald-600" aria-hidden />
+                </button>
               </li>
-              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
-                <IconTile tone="sky" size="sm" className="mt-0.5">
-                  <Car size={14} aria-hidden />
-                </IconTile>
-                <span>
-                  <button type="button" className="link-btn" onClick={() => navigate('/vehicles')}>
-                    Find a Vehicle
-                  </button>{' '}
-                  — trace a number plate across every sighting.
-                </span>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => navigate('/vehicles')}
+                  className="group flex w-full items-center gap-3 rounded-xl border border-line bg-white/80 p-2.5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-sky-500 to-sky-700 text-white shadow-sm" aria-hidden>
+                    <Car size={16} aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-ink">Find a Vehicle</span>
+                    <span className="block truncate text-2xs text-ink-muted">Trace a number plate across every sighting.</span>
+                  </span>
+                  <ArrowRight size={15} className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-sky-600" aria-hidden />
+                </button>
               </li>
-              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
-                <IconTile tone="red" size="sm" className="mt-0.5">
-                  <Bell size={14} aria-hidden />
-                </IconTile>
-                <span>
-                  <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
-                    Alerts
-                  </button>{' '}
-                  — wanted-list matches flagged the moment they happen.
-                </span>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => navigate('/alerts')}
+                  className="group flex w-full items-center gap-3 rounded-xl border border-line bg-white/80 p-2.5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-rose-300 hover:shadow"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-rose-500 to-rose-700 text-white shadow-sm" aria-hidden>
+                    <Bell size={16} aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-ink">Alerts</span>
+                    <span className="block truncate text-2xs text-ink-muted">Wanted-list matches flagged the moment they happen.</span>
+                  </span>
+                  <ArrowRight size={15} className="shrink-0 text-ink-faint/60 transition-all duration-150 group-hover:translate-x-1 group-hover:text-rose-600" aria-hidden />
+                </button>
               </li>
             </ul>
           </div>
 
-          <div className="lg:border-l lg:border-line lg:pl-8">
+          <div className="border-t border-line bg-gradient-to-bl from-violet-100/60 via-violet-50/40 to-white p-5 sm:p-6 lg:border-l lg:border-t-0">
             <div className="flex items-center gap-3">
-              <IconTile tone="purple" size="lg">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md" aria-hidden>
                 <Users size={20} aria-hidden />
-              </IconTile>
+              </span>
               <div>
-                <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
+                <p className="chip w-fit border-violet-200 bg-violet-500/10 font-bold uppercase tracking-widest text-violet-700">
                   About our team
                 </p>
-                <h2 className="text-base font-bold text-ink">Built by students, for the officers on duty</h2>
+                <h2 className="mt-1.5 text-lg font-extrabold tracking-tight text-ink">Built by students, for the officers on duty</h2>
               </div>
             </div>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">
@@ -384,16 +398,16 @@ export default function Dashboard() {
               runs on real camera events — detection, tracking and plate reading feed
               straight into the log, the map and the alerts you see here.
             </p>
-            <dl className="mt-4 space-y-2.5 rounded-xl border border-line bg-surface-2/60 p-3.5">
-              <div className="flex items-center justify-between gap-3">
+            <dl className="mt-4 divide-y divide-line/70 rounded-xl border border-line bg-white/80 px-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3 py-3">
                 <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Built for</dt>
-                <dd className="text-right text-xs font-semibold text-ink">Gujarat Police Hackathon</dd>
+                <dd className="text-right text-xs font-bold text-ink">Gujarat Police Hackathon</dd>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 py-3">
                 <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">What it does</dt>
-                <dd className="text-right text-xs font-semibold text-ink">CCTV + plate reading + alerts</dd>
+                <dd className="text-right text-xs font-bold text-ink">CCTV + plate reading + alerts</dd>
               </div>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 py-3">
                 <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Vehicle search</dt>
                 <dd className="text-right text-xs">
                   <Link className="link-btn" to="/vehicles">
