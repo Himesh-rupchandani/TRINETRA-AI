@@ -29,6 +29,19 @@ interface TopNavItem {
 }
 
 /**
+ * Supporting sections — slim links sitting at the very top of the bar,
+ * right under the header.
+ */
+const SECONDARY: TopNavItem[] = [
+  { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, tone: 'blue', end: true },
+  { to: '/alerts', label: 'Alerts', hint: 'Active alerts needing action', icon: Bell, tone: 'red', badge: 'alerts' },
+  { to: '/watchlist', label: 'Wanted List', hint: 'Vehicles being watched', icon: ShieldCheck, tone: 'purple' },
+  { to: '/registry', label: 'Camera List', hint: 'All registered cameras', icon: ScrollText, tone: 'blue' },
+  { to: '/system', label: 'System Status', hint: 'Health of all services', icon: Activity, tone: 'amber' },
+  { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound, tone: 'blue' },
+];
+
+/**
  * The core workflow, in exact investigation order. These five cards are
  * the primary navigation of the whole application:
  * Video Analysis → Live Cameras → Find Vehicle → Map → Vehicle Log.
@@ -39,19 +52,6 @@ const PRIMARY: TopNavItem[] = [
   { to: '/vehicles', label: 'Find Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
   { to: '/gis', label: 'Map', hint: 'Cameras & vehicles on the map', icon: Map, tone: 'orange' },
   { to: '/events', label: 'Vehicle Log', hint: 'Full vehicle history', icon: ListTree, tone: 'purple' },
-];
-
-/**
- * Supporting sections. Deliberately smaller than the workflow cards above
- * so the eye goes to the investigation flow first.
- */
-const SECONDARY: TopNavItem[] = [
-  { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, tone: 'blue', end: true },
-  { to: '/alerts', label: 'Alerts', hint: 'Active alerts needing action', icon: Bell, tone: 'red', badge: 'alerts' },
-  { to: '/watchlist', label: 'Wanted List', hint: 'Vehicles being watched', icon: ShieldCheck, tone: 'purple' },
-  { to: '/registry', label: 'Camera List', hint: 'All registered cameras', icon: ScrollText, tone: 'blue' },
-  { to: '/system', label: 'System Status', hint: 'Health of all services', icon: Activity, tone: 'amber' },
-  { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound, tone: 'blue' },
 ];
 
 /**
@@ -114,6 +114,43 @@ export function TopNav() {
 
   return (
     <nav aria-label="Primary" className="sticky top-14 z-10 shrink-0 border-b border-line bg-surface-0">
+      {/* Secondary sections — slim links at the top of the bar. */}
+      <ul
+        aria-label="Secondary"
+        className="no-scrollbar flex items-center gap-1 overflow-x-auto border-b border-line bg-surface-1 px-3 py-1.5 sm:px-5"
+      >
+        {SECONDARY.map((item) => {
+          const Icon = item.icon;
+          const badgeCount = item.badge === 'alerts' ? counts.ACTIVE : 0;
+          return (
+            <li key={item.to} className="shrink-0">
+              <NavLink
+                to={item.to}
+                end={item.end}
+                title={`${item.label} — ${item.hint}`}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-2xs font-semibold transition-colors',
+                    isActive ? 'bg-brand/10 text-brand' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                  )
+                }
+              >
+                <Icon size={14} aria-hidden />
+                {item.label}
+                {badgeCount > 0 && (
+                  <span
+                    className="grid h-4 min-w-4 place-items-center rounded-full bg-critical px-1 font-mono text-[10px] font-bold text-white"
+                    aria-label={`${badgeCount} active alerts`}
+                  >
+                    {badgeCount}
+                  </span>
+                )}
+              </NavLink>
+            </li>
+          );
+        })}
+      </ul>
+
       {/* Primary workflow cards — all five fit a single screen row. */}
       <ul className="no-scrollbar mx-auto flex max-w-[1600px] gap-2.5 overflow-x-auto px-3 py-2.5 sm:px-5">
         {PRIMARY.map((item) => {
@@ -165,43 +202,6 @@ export function TopNav() {
                       <ChevronRight size={16} />
                     </span>
                   </>
-                )}
-              </NavLink>
-            </li>
-          );
-        })}
-      </ul>
-
-      {/* Secondary sections — compact links, clearly below the workflow */}
-      <ul
-        aria-label="Secondary"
-        className="no-scrollbar flex items-center gap-1 overflow-x-auto border-t border-line bg-surface-1 px-3 py-1.5 sm:px-5"
-      >
-        {SECONDARY.map((item) => {
-          const Icon = item.icon;
-          const badgeCount = item.badge === 'alerts' ? counts.ACTIVE : 0;
-          return (
-            <li key={item.to} className="shrink-0">
-              <NavLink
-                to={item.to}
-                end={item.end}
-                title={`${item.label} — ${item.hint}`}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1.5 text-2xs font-semibold transition-colors',
-                    isActive ? 'bg-brand/10 text-brand' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-                  )
-                }
-              >
-                <Icon size={14} aria-hidden />
-                {item.label}
-                {badgeCount > 0 && (
-                  <span
-                    className="grid h-4 min-w-4 place-items-center rounded-full bg-critical px-1 font-mono text-[10px] font-bold text-white"
-                    aria-label={`${badgeCount} active alerts`}
-                  >
-                    {badgeCount}
-                  </span>
                 )}
               </NavLink>
             </li>
