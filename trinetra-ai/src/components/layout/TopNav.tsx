@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { Car, Cctv, ChevronRight, ListTree, Map, Video } from 'lucide-react';
-import { IconTile, type TileTone } from '@/components/common/IconTile';
+import type { TileTone } from '@/components/common/IconTile';
 import { cn } from '@/lib/utils';
 
 interface TopNavItem {
@@ -16,8 +16,8 @@ interface TopNavItem {
  * The core workflow, in exact investigation order. These five cards are
  * the primary navigation of the whole application:
  * Video Analysis → Live Cameras → Find Vehicle → Map → Vehicle Log.
- * (Supporting sections — Dashboard, Alerts, Wanted List, Camera List,
- * System Status, Profile — live in the header bar above.)
+ * (Supporting sections — Dashboard, Wanted List, Camera List,
+ * System Status — live in the header bar above.)
  */
 const PRIMARY: TopNavItem[] = [
   { to: '/video-analysis', label: 'Video Analysis', hint: 'Upload and analyse CCTV or video files', icon: Video, tone: 'blue' },
@@ -28,56 +28,67 @@ const PRIMARY: TopNavItem[] = [
 ];
 
 /**
- * Per-card colour: soft gradient body, glossy matching arrow button,
- * coloured title when active. Idle cards lift on hover.
+ * Per-card colour: soft gradient body, solid top accent bar, glossy
+ * gradient icon tile + arrow button, coloured title when active.
  */
-const CARD_TONES: Record<TileTone, { idle: string; active: string; arrow: string; title: string }> = {
+const CARD_TONES: Record<
+  TileTone,
+  { idle: string; active: string; bar: string; solid: string; title: string }
+> = {
   blue: {
     idle: 'border-blue-200 bg-gradient-to-br from-blue-100/80 via-blue-50 to-white hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-cardHover',
     active: 'border-blue-500 bg-gradient-to-br from-blue-200/70 via-blue-100 to-blue-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-blue-500 to-blue-700',
+    bar: 'border-t-blue-500',
+    solid: 'bg-gradient-to-br from-blue-500 to-blue-700',
     title: 'text-blue-700',
   },
   sky: {
     idle: 'border-sky-200 bg-gradient-to-br from-sky-100/80 via-sky-50 to-white hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-cardHover',
     active: 'border-sky-500 bg-gradient-to-br from-sky-200/70 via-sky-100 to-sky-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-sky-500 to-sky-700',
+    bar: 'border-t-sky-500',
+    solid: 'bg-gradient-to-br from-sky-500 to-sky-700',
     title: 'text-sky-700',
   },
   green: {
     idle: 'border-emerald-200 bg-gradient-to-br from-emerald-100/80 via-emerald-50 to-white hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-cardHover',
     active: 'border-emerald-500 bg-gradient-to-br from-emerald-200/70 via-emerald-100 to-emerald-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
+    bar: 'border-t-emerald-500',
+    solid: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
     title: 'text-emerald-700',
   },
   orange: {
     idle: 'border-orange-200 bg-gradient-to-br from-orange-100/80 via-orange-50 to-white hover:-translate-y-0.5 hover:border-orange-400 hover:shadow-cardHover',
     active: 'border-orange-500 bg-gradient-to-br from-orange-200/70 via-orange-100 to-orange-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-orange-500 to-orange-700',
+    bar: 'border-t-orange-500',
+    solid: 'bg-gradient-to-br from-orange-500 to-orange-700',
     title: 'text-orange-700',
   },
   amber: {
     idle: 'border-amber-200 bg-gradient-to-br from-amber-100/80 via-amber-50 to-white hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-cardHover',
     active: 'border-amber-500 bg-gradient-to-br from-amber-200/70 via-amber-100 to-amber-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-amber-500 to-amber-700',
+    bar: 'border-t-amber-500',
+    solid: 'bg-gradient-to-br from-amber-500 to-amber-700',
     title: 'text-amber-700',
   },
   purple: {
     idle: 'border-violet-200 bg-gradient-to-br from-violet-100/80 via-violet-50 to-white hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-cardHover',
     active: 'border-violet-500 bg-gradient-to-br from-violet-200/70 via-violet-100 to-violet-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-violet-500 to-violet-700',
+    bar: 'border-t-violet-500',
+    solid: 'bg-gradient-to-br from-violet-500 to-violet-700',
     title: 'text-violet-700',
   },
   red: {
     idle: 'border-rose-200 bg-gradient-to-br from-rose-100/80 via-rose-50 to-white hover:-translate-y-0.5 hover:border-rose-400 hover:shadow-cardHover',
     active: 'border-rose-500 bg-gradient-to-br from-rose-200/70 via-rose-100 to-rose-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-rose-500 to-rose-700',
+    bar: 'border-t-rose-500',
+    solid: 'bg-gradient-to-br from-rose-500 to-rose-700',
     title: 'text-rose-700',
   },
   slate: {
     idle: 'border-slate-200 bg-gradient-to-br from-slate-100/80 via-slate-50 to-white hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-cardHover',
     active: 'border-slate-500 bg-gradient-to-br from-slate-200/70 via-slate-100 to-slate-50 shadow-cardHover',
-    arrow: 'bg-gradient-to-br from-slate-500 to-slate-700',
+    bar: 'border-t-slate-500',
+    solid: 'bg-gradient-to-br from-slate-500 to-slate-700',
     title: 'text-slate-700',
   },
 };
@@ -98,25 +109,27 @@ export function TopNav() {
                 title={`${item.label} — ${item.hint}`}
                 className={({ isActive }) =>
                   cn(
-                    'group flex w-full items-center gap-3 rounded-xl border p-3 shadow-panel transition-all duration-150',
+                    'group flex w-full items-center gap-2.5 rounded-xl border border-t-4 p-2.5 shadow-panel transition-all duration-150',
+                    tone.bar,
                     isActive ? tone.active : tone.idle,
                   )
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <IconTile
-                      tone={item.tone}
-                      size="lg"
-                      active={isActive}
-                      className="shadow-sm ring-1 ring-inset ring-black/5"
+                    <span
+                      className={cn(
+                        'grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white shadow-md',
+                        tone.solid,
+                      )}
+                      aria-hidden
                     >
-                      <Icon size={20} />
-                    </IconTile>
+                      <Icon size={19} />
+                    </span>
                     <span className="min-w-0 flex-1">
                       <span
                         className={cn(
-                          'block truncate text-sm font-bold leading-tight',
+                          'block truncate text-sm font-extrabold leading-tight tracking-tight',
                           isActive ? tone.title : 'text-ink',
                         )}
                       >
@@ -128,8 +141,8 @@ export function TopNav() {
                     </span>
                     <span
                       className={cn(
-                        'grid h-8 w-8 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform duration-150 group-hover:scale-110',
-                        tone.arrow,
+                        'grid h-8 w-8 shrink-0 place-items-center rounded-full text-white shadow transition-all duration-150 group-hover:translate-x-0.5 group-hover:scale-105 group-hover:shadow-md',
+                        tone.solid,
                       )}
                       aria-hidden
                     >
