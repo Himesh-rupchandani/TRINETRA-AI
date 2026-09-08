@@ -7,10 +7,10 @@ import {
   LayoutDashboard,
   ListTree,
   Map,
-  ScanSearch,
   ScrollText,
   ShieldCheck,
   UserRound,
+  Video,
 } from 'lucide-react';
 import { IconTile, type TileTone } from '@/components/common/IconTile';
 import { cn } from '@/lib/utils';
@@ -33,13 +33,13 @@ interface TopNavItem {
  * scrolls sideways instead.
  */
 const ITEMS: TopNavItem[] = [
-  { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, tone: 'blue', end: true },
-  { to: '/vehicles', label: 'Find Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
-  { to: '/alerts', label: 'Alerts', hint: 'Active alerts', icon: Bell, tone: 'red', badge: 'alerts' },
+  { to: '/video-analysis', label: 'Video Analysis', hint: 'Upload and analyse CCTV or video files', icon: Video, tone: 'blue' },
   { to: '/cameras', label: 'Live Cameras', hint: 'Watch live feeds', icon: Cctv, tone: 'green' },
+  { to: '/vehicles', label: 'Find Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
   { to: '/gis', label: 'Map', hint: 'Cameras & vehicles on the map', icon: Map, tone: 'orange' },
-  { to: '/video-analysis', label: 'Video Analysis', hint: 'Compare multiple videos', icon: ScanSearch, tone: 'purple' },
   { to: '/events', label: 'Vehicle Log', hint: 'Vehicle history', icon: ListTree, tone: 'green' },
+  { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, tone: 'blue', end: true },
+  { to: '/alerts', label: 'Alerts', hint: 'Active alerts', icon: Bell, tone: 'red', badge: 'alerts' },
   { to: '/watchlist', label: 'Wanted List', hint: 'Vehicles being watched', icon: ShieldCheck, tone: 'purple' },
   { to: '/registry', label: 'Camera List', hint: 'All cameras', icon: ScrollText, tone: 'blue' },
   { to: '/system', label: 'System Status', hint: 'System health', icon: Activity, tone: 'amber' },
