@@ -28,18 +28,19 @@ interface HeaderLink {
   label: string;
   hint: string;
   icon: typeof LayoutDashboard;
-  badge?: 'alerts';
   end?: boolean;
 }
 
-/** Supporting sections, living directly in the top header bar. */
+/**
+ * Supporting sections on the right side of the top header bar.
+ * (Alerts and Profile are covered by the bell and officer buttons,
+ * so they are intentionally not repeated here.)
+ */
 const HEADER_LINKS: HeaderLink[] = [
   { to: '/', label: 'Dashboard', hint: 'Overview & statistics', icon: LayoutDashboard, end: true },
-  { to: '/alerts', label: 'Alerts', hint: 'Active alerts needing action', icon: Bell, badge: 'alerts' },
   { to: '/watchlist', label: 'Wanted List', hint: 'Vehicles being watched', icon: ShieldCheck },
   { to: '/registry', label: 'Camera List', hint: 'All registered cameras', icon: ScrollText },
   { to: '/system', label: 'System Status', hint: 'Health of all services', icon: Activity },
-  { to: '/profile', label: 'Profile', hint: 'Your details & challans', icon: UserRound },
 ];
 
 export function Header() {
@@ -95,40 +96,7 @@ export function Header() {
         </span>
       </button>
 
-      {/* Supporting sections — icon buttons on smaller screens, full labels on wide ones. */}
-      <nav aria-label="Secondary" className="hidden min-w-0 shrink-0 items-center gap-0.5 md:flex">
-        {HEADER_LINKS.map((item) => {
-          const Icon = item.icon;
-          const badgeCount = item.badge === 'alerts' ? counts.ACTIVE : 0;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              title={`${item.label} — ${item.hint}`}
-              className={({ isActive }) =>
-                cn(
-                  'relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-2xs font-semibold transition-colors',
-                  isActive ? 'bg-brand/10 text-brand' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-                )
-              }
-            >
-              <Icon size={15} aria-hidden />
-              <span className="hidden min-[1500px]:inline">{item.label}</span>
-              {badgeCount > 0 && (
-                <span
-                  className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-critical px-1 font-mono text-[10px] font-bold text-white"
-                  aria-label={`${badgeCount} active alerts`}
-                >
-                  {badgeCount}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
-      </nav>
-
-      {/* Global plate search — the hero entry point, reachable from every screen */}
+      {/* Global plate search on the left — the hero entry point, reachable from every screen */}
       <form onSubmit={submitQuick} className="hidden min-w-0 max-w-sm flex-1 sm:block" role="search">
         <label htmlFor="global-plate-search" className="sr-only">
           Trace registration number
@@ -147,7 +115,31 @@ export function Header() {
         </div>
       </form>
 
-      <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+      {/* Supporting sections on the right — icon buttons on smaller screens, full labels on wide ones. */}
+      <nav aria-label="Secondary" className="ml-auto hidden min-w-0 shrink-0 items-center gap-0.5 md:flex">
+        {HEADER_LINKS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              title={`${item.label} — ${item.hint}`}
+              className={({ isActive }) =>
+                cn(
+                  'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-2xs font-semibold transition-colors',
+                  isActive ? 'bg-brand/10 text-brand' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                )
+              }
+            >
+              <Icon size={15} aria-hidden />
+              <span className="hidden min-[1400px]:inline">{item.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {config.useMocks && (
           <span className="chip hidden border-brand/25 bg-brand/10 font-semibold text-brand min-[1500px]:inline-flex">
             Demo Data
