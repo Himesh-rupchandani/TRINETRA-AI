@@ -120,19 +120,59 @@ export function MapView({
 }: MapViewProps) {
   const [basemap, setBasemap] = useState<BasemapId>('street');
   const tiles = config.map.tiles[basemap];
-  const [fullscreen, setFullscreen] = useState(false);
+  /**
+   * Fullscreen in two flavours. Native is preferred, but inside an iframe
+   * without fullscreen permission (or an old browser) the request is denied —
+   * so a denied request falls back to a CSS overlay that looks identical.
+   */
+  const [fsMode, setFsMode] = useState<'native' | 'fake' | null>(null);
+  const fullscreen = fsMode != null;
   const rootRef = useRef<HTMLDivElement>(null);
   const playback = useRoutePlayback(route, onPlaybackStop);
 
   useEffect(() => {
-    const onFs = () => setFullscreen(document.fullscreenElement != null);
+    const onFs = () => {
+      if (document.fullscreenElement) setFsMode('native');
+      else setFsMode((m) => (m === 'native' ? null : m));
+    };
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
+  // Fake fullscreen: Escape exits it, and the page behind stops scrolling.
+  useEffect(() => {
+    if (fsMode !== 'fake') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFsMode(null);
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [fsMode]);
+
   const toggleFullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-    else rootRef.current?.requestFullscreen().catch(() => {});
+    if (fsMode === 'fake') {
+      setFsMode(null);
+      return;
+    }
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => setFsMode(null));
+      return;
+    }
+    const el = rootRef.current;
+    if (!el) return;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().then(
+        () => {},
+        () => setFsMode('fake'),
+      );
+    } else {
+      setFsMode('fake');
+    }
   };
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
@@ -150,7 +190,13 @@ export function MapView({
     // (tiles/markers/controls, z-index up to 1000) are confined to the map and
     // never paint over the panel content above or below it. `overflow-hidden`
     // additionally guarantees the map stays boxed inside its container.
-    <div ref={rootRef} className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
+    <div
+      ref={rootRef}
+      className={cn(
+        'isolate overflow-hidden',
+        fsMode === 'fake' ? 'fixed inset-0 z-[9999]' : (className ?? 'relative h-full w-full'),
+      )}
+    >
       <MapContainer
         center={center}
         zoom={zoom}
