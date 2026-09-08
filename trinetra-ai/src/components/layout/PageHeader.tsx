@@ -21,7 +21,7 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-line bg-surface-1 px-4 py-4 sm:px-5',
+        'enter-up flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-line bg-surface-1 px-4 py-4 sm:px-5',
         className,
       )}
     >

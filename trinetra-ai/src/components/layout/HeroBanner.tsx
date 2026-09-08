@@ -40,14 +40,14 @@ export function HeroBanner() {
             <button
               type="button"
               onClick={() => navigate('/cameras')}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-500"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:bg-blue-500"
             >
               <Play size={15} aria-hidden /> View Live Cameras
             </button>
             <button
               type="button"
               onClick={() => navigate('/video-analysis')}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-5 text-sm font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/15"
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/30 bg-white/5 px-5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white/15"
             >
               <Video size={15} aria-hidden /> Analyse a Video
             </button>

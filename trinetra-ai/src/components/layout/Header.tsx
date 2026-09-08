@@ -1,5 +1,5 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   ArrowLeft,
@@ -50,6 +50,19 @@ export function Header() {
   const { connection } = useLiveEvents();
   const { current: officer } = useOfficer();
   const [quick, setQuick] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Ctrl/⌘+K focuses the global search from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /** Every screen except the home page gets a way back to it. */
   const showBack = location.pathname !== '/';
@@ -65,12 +78,12 @@ export function Header() {
       {showBack && (
         <button
           type="button"
-          className="btn-ghost h-9 shrink-0 gap-1.5 px-2.5"
+          className="btn-ghost group h-9 shrink-0 gap-1.5 px-2.5"
           onClick={() => navigate('/')}
           aria-label="Back to home page"
           title="Back to home page"
         >
-          <ArrowLeft size={16} aria-hidden />
+          <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-0.5" aria-hidden />
           <span className="hidden sm:inline">Back</span>
         </button>
       )}
@@ -106,13 +119,17 @@ export function Header() {
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
           <input
             id="global-plate-search"
+            ref={searchRef}
             value={quick}
             onChange={(e) => setQuick(e.target.value.toUpperCase())}
             placeholder="Search number plate, camera, or location…"
-            className="input h-10 pl-9 font-mono uppercase"
+            className="input h-10 pl-9 pr-16 font-mono uppercase"
             autoComplete="off"
             spellCheck={false}
           />
+          <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint lg:inline-block">
+            Ctrl K
+          </kbd>
         </div>
       </form>
 
@@ -185,12 +202,15 @@ export function Header() {
           aria-label="Open officer profile"
         >
           {officer ? (
-            <img
-              src={officer.photoUrl}
-              alt=""
-              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-line"
-              aria-hidden
-            />
+            <span className="relative shrink-0">
+              <img
+                src={officer.photoUrl}
+                alt=""
+                className="h-9 w-9 rounded-full object-cover ring-1 ring-line"
+                aria-hidden
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface-1 bg-online" aria-hidden />
+            </span>
           ) : (
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand/10 text-brand" aria-hidden>
               <UserRound size={16} />
