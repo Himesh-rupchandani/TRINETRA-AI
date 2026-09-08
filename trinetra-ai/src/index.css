@@ -185,7 +185,7 @@
   }
 
   .panel-header {
-    @apply flex items-center justify-between gap-3 px-3.5 h-11 border-b border-line shrink-0;
+    @apply flex items-center justify-between gap-3 px-4 h-11 border-b border-line shrink-0;
   }
 
   /* Section labels: 11px uppercase, wide tracking, quiet. */
@@ -207,26 +207,26 @@
 
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold
-           tracking-normal px-3.5 h-9 transition-colors select-none
+           tracking-normal px-4 h-9 transition-colors select-none
            disabled:opacity-45 disabled:pointer-events-none whitespace-nowrap;
   }
   .btn-primary {
-    @apply btn bg-brand border-brand text-on-brand font-bold shadow-glow hover:bg-brand/90 hover:border-brand;
+    @apply btn bg-brand border-brand text-on-brand font-bold hover:bg-brand/90 hover:border-brand active:bg-brand/80;
   }
   .btn-solid {
-    @apply btn bg-brand border-brand text-on-brand font-bold hover:bg-brand/90;
+    @apply btn bg-brand border-brand text-on-brand font-bold hover:bg-brand/90 active:bg-brand/80;
   }
   .btn-tint {
-    @apply btn bg-brand/10 border-brand/30 text-brand hover:bg-brand/15 hover:border-brand/50;
+    @apply btn bg-brand/10 border-brand/30 text-brand hover:bg-brand/15 hover:border-brand/50 active:bg-brand/20;
   }
   .btn-ghost {
-    @apply btn bg-transparent border-line text-ink-muted hover:bg-surface-2 hover:text-ink hover:border-line-strong;
+    @apply btn bg-transparent border-line text-ink-muted hover:bg-surface-2 hover:text-ink hover:border-line-strong active:bg-surface-3;
   }
   .btn-danger {
-    @apply btn bg-critical/10 border-critical/40 text-critical hover:bg-critical/15 hover:border-critical/60;
+    @apply btn bg-critical/10 border-critical/40 text-critical hover:bg-critical/15 hover:border-critical/60 active:bg-critical/20;
   }
   .btn-xs {
-    @apply h-7 px-2.5 text-2xs gap-1 rounded-md;
+    @apply h-7 px-3 text-2xs gap-1 rounded-md;
   }
 
   /* ---------- Inputs ---------- */
@@ -269,10 +269,10 @@
   }
   .data-table thead th {
     @apply sticky top-0 z-10 bg-surface-2 text-left text-[11px] font-semibold uppercase
-           tracking-[0.06em] text-ink-muted px-3.5 py-2.5 border-b border-line whitespace-nowrap;
+           tracking-[0.06em] text-ink-muted px-4 py-2 border-b border-line whitespace-nowrap;
   }
   .data-table tbody td {
-    @apply px-3.5 py-2.5 border-b border-line/70 align-middle whitespace-nowrap;
+    @apply px-4 py-2 border-b border-line/70 align-middle whitespace-nowrap;
   }
   .data-table tbody tr:hover {
     @apply bg-surface-2;

@@ -52,6 +52,14 @@ attribute cleanly. No rule was weakened.
 | Iter | Surface | Criterion | Before | After | Change made | Gate |
 |------|---------|-----------|--------|-------|-------------|------|
 | 0 | setup | gate exists | — | — | reconstructed spec + gate; fixed real GIS empty-path gap it caught | GREEN |
+| 1 | tokens+primitives | 1 spacing | 2 | 3 | primitive padding onto the scale: `.btn`/`.panel-header`/`.data-table` `px-3.5`→`px-4` (14→16px), `py-2.5`→`py-2` (10→8px, rows land at ~36px), `.btn-xs` `px-2.5`→`px-3` (10→12px) — `src/index.css` | GREEN |
+| 1 | tokens+primitives | 5 colour discipline | 2 | 3 | deleted `shadow-glow` token + all 3 usages (`.btn-primary`, `TILE_ACTIVE`, timeline active node); zero glow references remain (grep-verified) — `tailwind.config.js`, `index.css`, `IconTile.tsx`, `MovementTimeline.tsx` | GREEN |
+| 1 | tokens+primitives | 6 component quality | 2 | 3 | press states on every `.btn` variant (`active:bg-*`), completing default/hover/press/disabled in the primitive — `src/index.css` | GREEN |
+
+**Surface 1 exit after iteration 1:** all 12 criteria ≥ 2 (evidence table above; untargeted
+criteria unchanged). Typography (2), motion (2) and responsive (2) are acceptable and
+carry explicit known-gap entries for audits B / E / F. Phase 4 verification: gate GREEN,
+typecheck exit 0, lint 24 warnings / 0 errors (baseline parity), build ✓ 1.31s.
 
 ### Surface 1 — Design tokens + primitives — Phase 1 (MEASURE, before any code change)
 

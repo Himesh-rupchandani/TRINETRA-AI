@@ -59,7 +59,6 @@ export default {
         // Dark UIs read with hairlines, not shadows — keep these whisper-soft.
         panel: '0 1px 2px rgb(0 0 0 / 0.35), 0 8px 28px -18px rgb(0 0 0 / 0.55)',
         cardHover: '0 2px 4px rgb(0 0 0 / 0.4), 0 14px 36px -20px rgb(0 0 0 / 0.7)',
-        glow: '0 0 18px rgb(34 211 238 / 0.28)',
       },
       keyframes: {
         'pulse-ring': {

@@ -28,7 +28,7 @@ export const TILE_TONES: Record<TileTone, string> = {
 };
 
 /** Solid tile used for the active sidebar item. */
-export const TILE_ACTIVE = 'bg-brand text-on-brand border border-brand shadow-glow';
+export const TILE_ACTIVE = 'bg-brand text-on-brand border border-brand';
 
 const SIZES = {
   sm: 'h-8 w-8 rounded-lg',
