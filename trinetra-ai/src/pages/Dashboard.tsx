@@ -9,7 +9,6 @@ import {
   Map as MapIcon,
   ScanLine,
   ShieldAlert,
-  Signal,
   Users,
 } from 'lucide-react';
 import { KpiCard } from '@/components/dashboard/KpiCard';
@@ -25,7 +24,8 @@ import { useAlerts } from '@/hooks/useAlerts';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
-import { formatNumber, formatTime, prettyVehicleClass } from '@/lib/utils';
+import { cn, formatNumber, formatPct, formatTime, prettyVehicleClass, relativeTime } from '@/lib/utils';
+import type { VehicleEvent } from '@/types';
 
 /**
  * COMMAND CENTER
@@ -51,49 +51,139 @@ export default function Dashboard() {
     () => recentEvents.filter((e) => e.watchlistMatch).slice(0, 25),
     [recentEvents],
   );
+  const sevCounts = useMemo(() => {
+    const c: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    activeAlerts.forEach((a) => {
+      if (a.severity in c) c[a.severity] += 1;
+    });
+    return c;
+  }, [activeAlerts]);
+  const latestSeen = useMemo(() => {
+    let best: string | undefined;
+    let t = -Infinity;
+    for (const e of recentEvents) {
+      const d = new Date(e.timestamp).getTime();
+      if (d > t) {
+        t = d;
+        best = e.timestamp;
+      }
+    }
+    return best;
+  }, [recentEvents]);
+  const lastHourCount = useMemo(
+    () => recentEvents.filter((e) => Date.now() - new Date(e.timestamp).getTime() <= 3_600_000).length,
+    [recentEvents],
+  );
+  const lastMatch = useMemo(() => {
+    let best: VehicleEvent | undefined;
+    let t = -Infinity;
+    for (const e of recentEvents) {
+      if (!e.watchlistMatch) continue;
+      const d = new Date(e.timestamp).getTime();
+      if (d > t) {
+        t = d;
+        best = e;
+      }
+    }
+    return best;
+  }, [recentEvents]);
+  const camerasOnline = kpis.data?.camerasOnline ?? stats.online;
+  const camerasTotal = kpis.data?.totalCameras ?? stats.total;
+  const camerasHealthPct = camerasTotal > 0 ? Math.round((camerasOnline / camerasTotal) * 100) : 0;
+  const readRate =
+    kpis.data?.anprReads24h != null && kpis.data?.vehicleDetections24h
+      ? kpis.data.anprReads24h / kpis.data.vehicleDetections24h
+      : undefined;
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
 
-      {/* KPI strip */}
+      {/* Ops status board: alerts hero first, then network health and 24h counters. */}
       <section
-        className="kpi-stagger grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4"
-        aria-label="Key performance indicators"
+        className="kpi-stagger grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-6"
+        aria-label="Operations status board"
       >
         <KpiCard
-          label="Cameras in System"
-          value={formatNumber(kpis.data?.totalCameras ?? stats.total)}
-          sub="Total cameras installed"
-          tile="blue"
+          label="Alerts to Action"
+          value={formatNumber(activeAlerts.length)}
+          sub={activeAlerts.length ? 'Needs an officer\u2019s eyes' : 'All clear \u2014 nothing pending'}
+          tone={activeAlerts.length ? 'critical' : 'online'}
+          tile={activeAlerts.length ? 'red' : 'green'}
+          icon={Bell}
+          to="/alerts"
+          cta="View alerts"
+          className="col-span-2 lg:col-span-2"
+          extra={
+            activeAlerts.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {sevCounts.CRITICAL > 0 && (
+                  <span className="chip border-red-200 bg-red-500/10 text-red-700">
+                    {sevCounts.CRITICAL} critical
+                  </span>
+                )}
+                {sevCounts.HIGH > 0 && (
+                  <span className="chip border-orange-200 bg-orange-500/10 text-orange-700">
+                    {sevCounts.HIGH} high
+                  </span>
+                )}
+                {sevCounts.MEDIUM > 0 && (
+                  <span className="chip border-amber-200 bg-amber-500/10 text-amber-700">
+                    {sevCounts.MEDIUM} medium
+                  </span>
+                )}
+                {sevCounts.LOW > 0 && (
+                  <span className="chip border-slate-200 bg-slate-500/10 text-slate-600">
+                    {sevCounts.LOW} low
+                  </span>
+                )}
+              </div>
+            ) : undefined
+          }
+        />
+        <KpiCard
+          label="Camera Network"
+          value={`${formatNumber(camerasOnline)}/${formatNumber(camerasTotal)}`}
+          sub={
+            stats.degraded + stats.offline > 0
+              ? `${stats.degraded} with problems \u00b7 ${stats.offline} offline`
+              : 'Every camera is online'
+          }
+          tile="green"
           icon={Cctv}
           to="/registry"
           cta="View all cameras"
           loading={kpis.loading && camsLoading}
-        />
-        <KpiCard
-          label="Cameras Working"
-          value={formatNumber(kpis.data?.camerasOnline ?? stats.online)}
-          sub={`${stats.degraded} with problems · ${stats.offline} offline`}
-          tile="green"
-          icon={Signal}
-          to="/cameras"
-          cta="View status"
-          loading={kpis.loading && camsLoading}
-        />
-        <KpiCard
-          label="Alerts to Action"
-          value={formatNumber(activeAlerts.length)}
-          sub="Active alerts pending"
-          tone={activeAlerts.length ? 'critical' : 'neutral'}
-          tile="orange"
-          icon={Bell}
-          to="/alerts"
-          cta="View alerts"
+          extra={
+            <div
+              className="h-1.5 overflow-hidden rounded-full bg-slate-500/15"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={camerasHealthPct}
+              aria-label="Cameras online"
+            >
+              <div
+                className={cn(
+                  'h-full rounded-full',
+                  stats.offline > 0 ? 'bg-red-500' : stats.degraded > 0 ? 'bg-amber-500' : 'bg-emerald-500',
+                )}
+                style={{ width: `${camerasHealthPct}%` }}
+              />
+            </div>
+          }
         />
         <KpiCard
           label="Vehicles Seen"
           value={formatNumber(kpis.data?.vehicleDetections24h)}
-          sub="In last 24 hours"
-          tile="purple"
+          sub={
+            latestSeen ? (
+              <>
+                Last seen {relativeTime(latestSeen)} · {lastHourCount} in the last hour
+              </>
+            ) : (
+              'In last 24 hours'
+            )
+          }
+          tile="blue"
           icon={Car}
           to="/events"
           cta="View vehicles"
@@ -102,7 +192,7 @@ export default function Dashboard() {
         <KpiCard
           label="Number Plates Read"
           value={formatNumber(kpis.data?.anprReads24h)}
-          sub="Read automatically"
+          sub={readRate != null ? `${formatPct(readRate)} of vehicles read` : 'Read automatically'}
           tile="sky"
           icon={ScanLine}
           to="/events"
@@ -112,9 +202,18 @@ export default function Dashboard() {
         <KpiCard
           label="Wanted Vehicles Found"
           value={formatNumber(kpis.data?.watchlistMatches24h)}
-          sub="In last 24 hours"
-          tone="critical"
-          tile="red"
+          sub={
+            lastMatch?.plate ? (
+              <>
+                Last: <span className="font-mono">{lastMatch.plate}</span> ·{' '}
+                {relativeTime(lastMatch.timestamp)}
+              </>
+            ) : (
+              'No matches in 24 hours'
+            )
+          }
+          tone={kpis.data?.watchlistMatches24h ? 'critical' : 'neutral'}
+          tile="orange"
           icon={ShieldAlert}
           to="/watchlist"
           cta="View wanted list"
