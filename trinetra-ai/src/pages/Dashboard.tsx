@@ -55,107 +55,6 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
 
-      {/* Who built this and what it does — plain words, no jargon. */}
-      <section className="panel p-5 sm:p-6" aria-label="About the team and the project">
-        <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
-          <div>
-            <div className="flex items-center gap-3">
-              <IconTile tone="blue" size="lg">
-                <Cctv size={20} aria-hidden />
-              </IconTile>
-              <div>
-                <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
-                  About the project
-                </p>
-                <h2 className="text-base font-bold text-ink">One screen for every camera in the city</h2>
-              </div>
-            </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-              TRINETRA AI started with a simple observation: a control room may have dozens
-              of CCTV feeds, but an officer can only watch a few at a time. So we joined
-              the pieces together — live cameras, automatic number-plate reading, and a
-              wanted-vehicle list — in a single dashboard. When a listed vehicle passes
-              any camera, the control room knows within seconds, with the photo, the
-              camera location, and the route it took.
-            </p>
-            <ul className="mt-4 space-y-2.5">
-              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
-                <IconTile tone="green" size="sm" className="mt-0.5">
-                  <Cctv size={14} aria-hidden />
-                </IconTile>
-                <span>
-                  <button type="button" className="link-btn" onClick={() => navigate('/cameras')}>
-                    Live Cameras
-                  </button>{' '}
-                  — open any feed straight from the bar above.
-                </span>
-              </li>
-              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
-                <IconTile tone="sky" size="sm" className="mt-0.5">
-                  <Car size={14} aria-hidden />
-                </IconTile>
-                <span>
-                  <button type="button" className="link-btn" onClick={() => navigate('/vehicles')}>
-                    Find a Vehicle
-                  </button>{' '}
-                  — trace a number plate across every sighting.
-                </span>
-              </li>
-              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
-                <IconTile tone="red" size="sm" className="mt-0.5">
-                  <Bell size={14} aria-hidden />
-                </IconTile>
-                <span>
-                  <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
-                    Alerts
-                  </button>{' '}
-                  — wanted-list matches flagged the moment they happen.
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="lg:border-l lg:border-line lg:pl-8">
-            <div className="flex items-center gap-3">
-              <IconTile tone="purple" size="lg">
-                <Users size={20} aria-hidden />
-              </IconTile>
-              <div>
-                <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
-                  About our team
-                </p>
-                <h2 className="text-base font-bold text-ink">Built by students, for the officers on duty</h2>
-              </div>
-            </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-              We are Team Trinetra, building for the Gujarat Police Innovation Hackathon.
-              Our aim was practical rather than flashy: software a duty officer can learn
-              in ten minutes and trust at 2 in the morning. Everything on this screen
-              runs on real camera events — detection, tracking and plate reading feed
-              straight into the log, the map and the alerts you see here.
-            </p>
-            <dl className="mt-4 space-y-2.5 rounded-xl border border-line bg-surface-2/60 p-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Built for</dt>
-                <dd className="text-right text-xs font-semibold text-ink">Gujarat Police Hackathon</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">What it does</dt>
-                <dd className="text-right text-xs font-semibold text-ink">CCTV + plate reading + alerts</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Vehicle search</dt>
-                <dd className="text-right text-xs">
-                  <Link className="link-btn" to="/vehicles">
-                    Open Find Vehicle <ArrowRight size={13} aria-hidden />
-                  </Link>
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </section>
-
       {/* KPI strip */}
       <section
         className="kpi-stagger grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4"
@@ -405,6 +304,107 @@ export default function Dashboard() {
           </div>
         </AsyncBoundary>
       </Panel>
+
+      {/* Who built this and what it does — plain words, no jargon. */}
+      <section className="panel p-5 sm:p-6" aria-label="About the team and the project">
+        <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
+          <div>
+            <div className="flex items-center gap-3">
+              <IconTile tone="blue" size="lg">
+                <Cctv size={20} aria-hidden />
+              </IconTile>
+              <div>
+                <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
+                  About the project
+                </p>
+                <h2 className="text-base font-bold text-ink">One screen for every camera in the city</h2>
+              </div>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+              TRINETRA AI started with a simple observation: a control room may have dozens
+              of CCTV feeds, but an officer can only watch a few at a time. So we joined
+              the pieces together — live cameras, automatic number-plate reading, and a
+              wanted-vehicle list — in a single dashboard. When a listed vehicle passes
+              any camera, the control room knows within seconds, with the photo, the
+              camera location, and the route it took.
+            </p>
+            <ul className="mt-4 space-y-2.5">
+              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
+                <IconTile tone="green" size="sm" className="mt-0.5">
+                  <Cctv size={14} aria-hidden />
+                </IconTile>
+                <span>
+                  <button type="button" className="link-btn" onClick={() => navigate('/cameras')}>
+                    Live Cameras
+                  </button>{' '}
+                  — open any feed straight from the bar above.
+                </span>
+              </li>
+              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
+                <IconTile tone="sky" size="sm" className="mt-0.5">
+                  <Car size={14} aria-hidden />
+                </IconTile>
+                <span>
+                  <button type="button" className="link-btn" onClick={() => navigate('/vehicles')}>
+                    Find a Vehicle
+                  </button>{' '}
+                  — trace a number plate across every sighting.
+                </span>
+              </li>
+              <li className="flex items-start gap-2.5 text-sm text-ink-muted">
+                <IconTile tone="red" size="sm" className="mt-0.5">
+                  <Bell size={14} aria-hidden />
+                </IconTile>
+                <span>
+                  <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
+                    Alerts
+                  </button>{' '}
+                  — wanted-list matches flagged the moment they happen.
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="lg:border-l lg:border-line lg:pl-8">
+            <div className="flex items-center gap-3">
+              <IconTile tone="purple" size="lg">
+                <Users size={20} aria-hidden />
+              </IconTile>
+              <div>
+                <p className="text-2xs font-bold uppercase tracking-[0.14em] text-ink-faint">
+                  About our team
+                </p>
+                <h2 className="text-base font-bold text-ink">Built by students, for the officers on duty</h2>
+              </div>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+              We are Team Trinetra, building for the Gujarat Police Innovation Hackathon.
+              Our aim was practical rather than flashy: software a duty officer can learn
+              in ten minutes and trust at 2 in the morning. Everything on this screen
+              runs on real camera events — detection, tracking and plate reading feed
+              straight into the log, the map and the alerts you see here.
+            </p>
+            <dl className="mt-4 space-y-2.5 rounded-xl border border-line bg-surface-2/60 p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Built for</dt>
+                <dd className="text-right text-xs font-semibold text-ink">Gujarat Police Hackathon</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">What it does</dt>
+                <dd className="text-right text-xs font-semibold text-ink">CCTV + plate reading + alerts</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-2xs font-semibold uppercase tracking-wide text-ink-faint">Vehicle search</dt>
+                <dd className="text-right text-xs">
+                  <Link className="link-btn" to="/vehicles">
+                    Open Find Vehicle <ArrowRight size={13} aria-hidden />
+                  </Link>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
