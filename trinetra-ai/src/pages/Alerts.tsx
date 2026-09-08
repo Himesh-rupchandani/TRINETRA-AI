@@ -27,6 +27,10 @@ export default function Alerts() {
     setFlash(highlightId);
   }, [highlightId]);
 
+
+  const { active, history, counts, acknowledge, resolve } = useAlerts({ severity, query });
+  const list = tab === 'ACTIVE' ? active : history;
+
   // Deep-link from a live toast: scroll the alert into view and ring it briefly.
   useEffect(() => {
     if (!flash) return;
@@ -34,9 +38,6 @@ export default function Alerts() {
     const t = setTimeout(() => setFlash(null), 5000);
     return () => clearTimeout(t);
   }, [flash, list.length]);
-
-  const { active, history, counts, acknowledge, resolve } = useAlerts({ severity, query });
-  const list = tab === 'ACTIVE' ? active : history;
 
   const evidenceEvent = useAsync(
     () => eventService.byId(evidenceFor!.eventId),
