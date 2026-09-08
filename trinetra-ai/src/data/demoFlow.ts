@@ -1,9 +1,11 @@
-import { Bell, Car, Cctv, Map } from 'lucide-react';
+import { Car, Cctv, ListTree, Map, Video } from 'lucide-react';
 import type { TileTone } from '@/components/common/IconTile';
 
 /**
- * The four things an officer does most often, in the order they usually do
- * them. Doubles as the guided demo walkthrough.
+ * The core investigation workflow, in the order an officer follows it:
+ * analyse a video → watch live cameras → look up a vehicle →
+ * see its route on the map → check the vehicle log.
+ * Used by the dashboard workflow strip and the hero task grid.
  */
 export interface DemoStep {
   step: number;
@@ -19,34 +21,42 @@ export const DEMO_PLATE = 'GJ01AB1234';
 export const demoFlow: DemoStep[] = [
   {
     step: 1,
-    label: 'Watch a Camera',
-    to: '/cameras/cam04',
-    hint: 'Open live view of any camera',
-    icon: Cctv,
+    label: 'Analyse a Video',
+    to: '/video-analysis',
+    hint: 'Upload CCTV footage, detect vehicles & plates',
+    icon: Video,
     tone: 'blue',
   },
   {
     step: 2,
-    label: 'Look Up a Vehicle',
-    to: `/vehicles/${DEMO_PLATE}`,
-    hint: 'See everywhere a vehicle has been seen',
-    icon: Car,
+    label: 'Watch Live Cameras',
+    to: '/cameras',
+    hint: 'Open live feeds from any camera',
+    icon: Cctv,
     tone: 'green',
   },
   {
     step: 3,
+    label: 'Look Up a Vehicle',
+    to: `/vehicles/${DEMO_PLATE}`,
+    hint: 'See everywhere a vehicle has been seen',
+    icon: Car,
+    tone: 'sky',
+  },
+  {
+    step: 4,
     label: 'See Route on Map',
     to: `/gis?plate=${DEMO_PLATE}`,
     hint: 'Track vehicle route from camera to camera',
     icon: Map,
-    tone: 'purple',
+    tone: 'orange',
   },
   {
-    step: 4,
-    label: 'Check Alerts',
-    to: '/alerts',
-    hint: 'View and confirm active alerts',
-    icon: Bell,
-    tone: 'orange',
+    step: 5,
+    label: 'Check Vehicle Log',
+    to: '/events',
+    hint: 'Full detection history with time & place',
+    icon: ListTree,
+    tone: 'purple',
   },
 ];
