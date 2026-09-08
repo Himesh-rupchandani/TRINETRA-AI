@@ -3,6 +3,7 @@ import { Header } from '@/components/layout/Header';
 import { TopNav } from '@/components/layout/TopNav';
 import { HeroBanner } from '@/components/layout/HeroBanner';
 import { AlertBanner } from '@/components/layout/AlertBanner';
+import { LiveAlertToaster } from '@/features/alerts/LiveAlertToaster';
 
 /**
  * Control-room shell: header on top, alert banner, hero card on the home
@@ -21,6 +22,7 @@ export function MainLayout() {
       <main id="main" className="min-h-0 flex-1">
         <Outlet />
       </main>
+      <LiveAlertToaster />
     </div>
   );
 }
