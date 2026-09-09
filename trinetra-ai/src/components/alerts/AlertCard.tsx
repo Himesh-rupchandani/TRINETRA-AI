@@ -66,7 +66,7 @@ export function AlertCard({
     <article
       id={`alert-${alert.id}`}
       className={cn(
-        'panel relative scroll-mt-36 overflow-hidden transition-shadow hover:shadow-cardHover',
+        'panel relative scroll-mt-52 overflow-hidden transition-shadow hover:shadow-cardHover',
         highlighted && 'ring-2 ring-brand',
         alert.status === 'NEW' && alert.severity === 'CRITICAL'
           ? 'alert-enter-pulse'

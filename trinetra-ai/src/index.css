@@ -137,11 +137,11 @@
            text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
   }
   /* Window-scrolled tables: stick below the sticky header (56px) + menu
-     bar (~106px) instead of viewport top. z-0 tucks the header under the
-     bars if their heights ever drift, so page content can never paint
-     over them. */
+     bar (measured live by TopNav into --trinetra-nav-h; 106px fallback
+     for first paint). z-0 tucks the header under the bars if their
+     heights ever drift, so page content can never paint over them. */
   .data-table-page thead th {
-    top: 162px;
+    top: calc(3.5rem + var(--trinetra-nav-h, 106px));
     z-index: 0;
   }
   .data-table tbody td {

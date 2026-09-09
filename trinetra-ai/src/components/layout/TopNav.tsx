@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Car, Cctv, ChevronRight, ListTree, Map, Video } from 'lucide-react';
 import type { TileTone } from '@/components/common/IconTile';
@@ -28,74 +29,81 @@ const PRIMARY: TopNavItem[] = [
 ];
 
 /**
- * Per-card colour: soft gradient body, solid top accent bar, glossy
- * gradient icon tile + arrow button, coloured title when active.
+ * Per-card colour: flat pastel body, coloured line icon straight on the
+ * tint, dark title, white arrow chip with a coloured chevron.
  */
 const CARD_TONES: Record<
   TileTone,
-  { idle: string; active: string; bar: string; solid: string; title: string }
+  { idle: string; active: string; icon: string; arrow: string }
 > = {
   blue: {
-    idle: 'border-blue-200 bg-gradient-to-br from-blue-100/80 via-blue-50 to-white hover:-translate-y-1 hover:border-blue-400 hover:shadow-lg',
-    active: 'border-blue-500 bg-gradient-to-br from-blue-200/70 via-blue-100 to-blue-50 shadow-lg',
-    bar: 'border-t-blue-500',
-    solid: 'bg-gradient-to-br from-blue-500 to-blue-700',
-    title: 'text-blue-700',
+    idle: 'border-blue-200 bg-blue-100 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md',
+    active: 'border-blue-400 bg-blue-200/60 shadow-md ring-2 ring-blue-500/25',
+    icon: 'text-blue-600',
+    arrow: 'text-blue-600',
   },
   sky: {
-    idle: 'border-sky-200 bg-gradient-to-br from-sky-100/80 via-sky-50 to-white hover:-translate-y-1 hover:border-sky-400 hover:shadow-lg',
-    active: 'border-sky-500 bg-gradient-to-br from-sky-200/70 via-sky-100 to-sky-50 shadow-lg',
-    bar: 'border-t-sky-500',
-    solid: 'bg-gradient-to-br from-sky-500 to-sky-700',
-    title: 'text-sky-700',
+    idle: 'border-sky-200 bg-sky-100 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md',
+    active: 'border-sky-400 bg-sky-200/60 shadow-md ring-2 ring-sky-500/25',
+    icon: 'text-sky-600',
+    arrow: 'text-sky-600',
   },
   green: {
-    idle: 'border-emerald-200 bg-gradient-to-br from-emerald-100/80 via-emerald-50 to-white hover:-translate-y-1 hover:border-emerald-400 hover:shadow-lg',
-    active: 'border-emerald-500 bg-gradient-to-br from-emerald-200/70 via-emerald-100 to-emerald-50 shadow-lg',
-    bar: 'border-t-emerald-500',
-    solid: 'bg-gradient-to-br from-emerald-500 to-emerald-700',
-    title: 'text-emerald-700',
+    idle: 'border-emerald-200 bg-emerald-100 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md',
+    active: 'border-emerald-400 bg-emerald-200/60 shadow-md ring-2 ring-emerald-500/25',
+    icon: 'text-emerald-600',
+    arrow: 'text-emerald-600',
   },
   orange: {
-    idle: 'border-orange-200 bg-gradient-to-br from-orange-100/80 via-orange-50 to-white hover:-translate-y-1 hover:border-orange-400 hover:shadow-lg',
-    active: 'border-orange-500 bg-gradient-to-br from-orange-200/70 via-orange-100 to-orange-50 shadow-lg',
-    bar: 'border-t-orange-500',
-    solid: 'bg-gradient-to-br from-orange-500 to-orange-700',
-    title: 'text-orange-700',
+    idle: 'border-orange-200 bg-orange-100 hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md',
+    active: 'border-orange-400 bg-orange-200/60 shadow-md ring-2 ring-orange-500/25',
+    icon: 'text-orange-600',
+    arrow: 'text-orange-600',
   },
   amber: {
-    idle: 'border-amber-200 bg-gradient-to-br from-amber-100/80 via-amber-50 to-white hover:-translate-y-1 hover:border-amber-400 hover:shadow-lg',
-    active: 'border-amber-500 bg-gradient-to-br from-amber-200/70 via-amber-100 to-amber-50 shadow-lg',
-    bar: 'border-t-amber-500',
-    solid: 'bg-gradient-to-br from-amber-500 to-amber-700',
-    title: 'text-amber-700',
+    idle: 'border-amber-200 bg-amber-100 hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md',
+    active: 'border-amber-400 bg-amber-200/60 shadow-md ring-2 ring-amber-500/25',
+    icon: 'text-amber-600',
+    arrow: 'text-amber-600',
   },
   purple: {
-    idle: 'border-violet-200 bg-gradient-to-br from-violet-100/80 via-violet-50 to-white hover:-translate-y-1 hover:border-violet-400 hover:shadow-lg',
-    active: 'border-violet-500 bg-gradient-to-br from-violet-200/70 via-violet-100 to-violet-50 shadow-lg',
-    bar: 'border-t-violet-500',
-    solid: 'bg-gradient-to-br from-violet-500 to-violet-700',
-    title: 'text-violet-700',
+    idle: 'border-violet-200 bg-violet-100 hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md',
+    active: 'border-violet-400 bg-violet-200/60 shadow-md ring-2 ring-violet-500/25',
+    icon: 'text-violet-600',
+    arrow: 'text-violet-600',
   },
   red: {
-    idle: 'border-rose-200 bg-gradient-to-br from-rose-100/80 via-rose-50 to-white hover:-translate-y-1 hover:border-rose-400 hover:shadow-lg',
-    active: 'border-rose-500 bg-gradient-to-br from-rose-200/70 via-rose-100 to-rose-50 shadow-lg',
-    bar: 'border-t-rose-500',
-    solid: 'bg-gradient-to-br from-rose-500 to-rose-700',
-    title: 'text-rose-700',
+    idle: 'border-rose-200 bg-rose-100 hover:-translate-y-0.5 hover:border-rose-300 hover:shadow-md',
+    active: 'border-rose-400 bg-rose-200/60 shadow-md ring-2 ring-rose-500/25',
+    icon: 'text-rose-600',
+    arrow: 'text-rose-600',
   },
   slate: {
-    idle: 'border-slate-200 bg-gradient-to-br from-slate-100/80 via-slate-50 to-white hover:-translate-y-1 hover:border-slate-400 hover:shadow-lg',
-    active: 'border-slate-500 bg-gradient-to-br from-slate-200/70 via-slate-100 to-slate-50 shadow-lg',
-    bar: 'border-t-slate-500',
-    solid: 'bg-gradient-to-br from-slate-500 to-slate-700',
-    title: 'text-slate-700',
+    idle: 'border-slate-200 bg-slate-100 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md',
+    active: 'border-slate-400 bg-slate-200/60 shadow-md ring-2 ring-slate-500/25',
+    icon: 'text-slate-600',
+    arrow: 'text-slate-600',
   },
 };
 
 export function TopNav() {
+  const navRef = useRef<HTMLElement>(null);
+
+  // Card height varies with viewport width (hints wrap), so publish the
+  // measured bar height for sticky content offsets (see .data-table-page).
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const write = () =>
+      document.documentElement.style.setProperty('--trinetra-nav-h', `${el.offsetHeight}px`);
+    write();
+    const ro = new ResizeObserver(write);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <nav aria-label="Primary" className="sticky top-14 z-10 shrink-0 border-b border-line bg-surface-0">
+    <nav ref={navRef} aria-label="Primary" className="sticky top-14 z-10 shrink-0 border-b border-line bg-surface-0">
       {/* Primary workflow cards — all five fit a single screen row. */}
       <ul className="no-scrollbar mx-auto flex max-w-[1600px] gap-2.5 overflow-x-auto px-3 py-2.5 sm:px-5">
         {PRIMARY.map((item) => {
@@ -109,47 +117,29 @@ export function TopNav() {
                 title={`${item.label} — ${item.hint}`}
                 className={({ isActive }) =>
                   cn(
-                    'group flex w-full items-center gap-2 rounded-2xl border border-t-4 p-2.5 shadow-md ring-1 ring-black/5 transition-all duration-150',
-                    tone.bar,
+                    'group flex h-full w-full items-center gap-2.5 rounded-2xl border p-3 shadow-sm transition-all duration-150',
                     isActive ? tone.active : tone.idle,
                   )
                 }
               >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      className={cn(
-                        'grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white shadow-md',
-                        tone.solid,
-                      )}
-                      aria-hidden
-                    >
-                      <Icon size={20} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={cn(
-                          'block truncate text-[13px] font-extrabold leading-tight tracking-tight',
-                          isActive ? tone.title : 'text-ink',
-                        )}
-                      >
-                        {item.label}
-                      </span>
-                      <span className="mt-1 block min-h-10 overflow-hidden text-xs leading-snug text-ink-muted [-webkit-box-orient:vertical] [-webkit-line-clamp:2] [display:-webkit-box]">
-                        {item.hint}
-                      </span>
-                    </span>
-                    <span
-                      className={cn(
-                        'grid h-9 w-9 shrink-0 place-items-center rounded-full text-white shadow transition-all duration-150 group-hover:translate-x-0.5 group-hover:scale-105 group-hover:shadow-md',
-                        tone.solid,
-                      )}
-                      aria-hidden
-                    >
-                      <ChevronRight size={18} />
-                    </span>
-                  </>
-                )}
+                <span className={cn('grid h-12 w-12 shrink-0 place-items-center', tone.icon)} aria-hidden>
+                  <Icon size={28} strokeWidth={2.25} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-extrabold leading-tight tracking-tight text-ink">
+                    {item.label}
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{item.hint}</span>
+                </span>
+                <span
+                  className={cn(
+                    'grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/80 shadow-sm transition-transform duration-150 group-hover:translate-x-0.5',
+                    tone.arrow,
+                  )}
+                  aria-hidden
+                >
+                  <ChevronRight size={20} />
+                </span>
               </NavLink>
             </li>
           );
