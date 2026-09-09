@@ -38,6 +38,33 @@ Sentinel CCTV → Frame (PTS) → Vehicle Detection (YOLO11) → Tracking
 → Frontend → Vehicle Search → GIS Route
 ```
 
+## Number-plate search — matching frames from processed videos
+
+The **Video Analysis** page (`/video-analysis`) includes a number-plate
+search built on the existing pipeline: upload CCTV videos, run the existing
+YOLO11 + tracker + ANPR stages, then search any plate that was read.
+
+- Every plate read is stored as a `vehicle_events` row (normalised plate,
+  confidence, video id, frame number, timestamp inside the video, bbox) —
+  ONE row per tracked vehicle pass, so hundreds of consecutive frames become
+  one searchable occurrence; long result sets paginate.
+- For each read, an annotated **full video frame** (detection box + plate
+  label drawn on the wide shot) is stored under `EVIDENCE_ROOT/analysis/…`
+  and served by `GET /api/evidence/…`. The search UI renders these frames in
+  a grid with timestamp + confidence per occurrence.
+- Clicking a frame opens a large preview with full metadata and
+  *Open video at this time* — the backend streams the stored video with
+  HTTP Range support so the browser seeks straight to the detection.
+- `GET /api/analysis/search?plate=…&page=1&limit=24` only queries stored
+  detections; videos are never re-processed for a search.
+  `GJ 01 AB 1234`, `GJ-01-AB-1234` and `GJ01AB1234` all normalise the same.
+- ANPR now joins two-line plates (typical on motorcycles), and the plate
+  detector accepts multi-class checkpoints — point `PLATE_MODEL_PATH` at
+  `trinetra_detection/models/best.pt` to use the project's trained detector.
+- No CCTV footage at hand? Build explicitly-synthetic demo clips (real
+  frames, real detections, rendered plate) with:
+  `python training/tools/make_image_demo_clips.py --out-dir /tmp/demo_clips --clip trinetra_detection/sample_data/sample_1.jpg:CAM1:GJ01AB1234`
+
 ## Quick start — Backend + Frontend Only (recommended for local dev)
 
 No cv-engine, no heavy ML models needed. 2 terminals.
@@ -72,6 +99,12 @@ npm run dev
 
 ```bash
 cd TRINETRAAI/backend && pip install -r requirements.txt
+# Video-analysis ML stack (vehicle detection + OCR). Install CPU torch FIRST —
+# the default PyPI torch wheel ships CUDA (~2.5 GB) and often fails
+# mid-download, leaving "Vehicle detection model unavailable" in the UI.
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install ultralytics rapidocr-onnxruntime
+pip install --force-reinstall --no-deps opencv-python-headless
 python -m scripts.seed_demo
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 

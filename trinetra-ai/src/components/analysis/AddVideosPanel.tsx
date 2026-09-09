@@ -1,7 +1,25 @@
 import { useRef, useState } from 'react';
 import { FileVideo, Link2, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import { Panel } from '@/components/common/Panel';
+import { ApiError } from '@/services/api';
 import { videoAnalysisService, type AnalysisVideo } from '@/services/videoAnalysisService';
+
+/**
+ * HTTP 413 means a proxy in front of the backend (e.g. a hosted preview)
+ * refused the body — the backend itself allows up to MAX_UPLOAD_SIZE_MB and
+ * answers with a readable message instead. Point the officer at the two
+ * paths that never push the file through their browser.
+ */
+function uploadErrorMessage(e: unknown): string {
+  if (e instanceof ApiError && e.status === 413) {
+    return (
+      'Upload rejected with HTTP 413 — the file is too large for the connection in front of the backend. ' +
+      'Use Option B (a shared Google Drive link: the backend downloads it directly) or upload from the ' +
+      'machine that runs the backend (http://localhost:5173).'
+    );
+  }
+  return e instanceof Error ? e.message : 'Upload failed';
+}
 
 /**
  * Add videos to a multi-video analysis run — local files and/or shared
@@ -51,7 +69,7 @@ export function AddVideosPanel({
       setFileErrors(res.errors);
       onAdded(res.added, res.batchId);
     } catch (e: unknown) {
-      setUploadError(e instanceof Error ? e.message : 'Upload failed');
+      setUploadError(uploadErrorMessage(e));
     } finally {
       setUploading(false);
     }

@@ -91,6 +91,8 @@ class Sighting:
     bbox: Optional[list]
     video_offset_sec: Optional[float]
     event_time: object
+    evidence_ref: Optional[str] = None   # vehicle crop (existing behaviour)
+    frame_ref: Optional[str] = None      # full annotated frame (plate search)
 
     def to_dict(self) -> dict:
         return {
@@ -112,7 +114,30 @@ class Sighting:
             "video_offset_sec": self.video_offset_sec,
             "timestamp": _fmt_offset(self.video_offset_sec),
             "event_time": self.event_time,
+            "evidence_ref": self.evidence_ref,
+            "frame_ref": self.frame_ref,
         }
+
+    def occurrence_dict(self) -> dict:
+        """
+        One search-result card: everything the UI needs to render an
+        occurrence — the stored frame, its position in the video, and the
+        URL of the source video so the operator can jump to that moment.
+        """
+        d = self.to_dict()
+        d.update({
+            "video_name": self.source_name or self.camera_id,
+            "confidence": self.plate_confidence,
+            "timestamp_sec": self.video_offset_sec,
+            "detected_at": self.event_time.isoformat() if self.event_time else None,
+            # Convenience URLs, resolved against the API origin by the client.
+            "frame_url": f"/api/evidence/{self.frame_ref}" if self.frame_ref else None,
+            "crop_url": f"/api/evidence/{self.evidence_ref}" if self.evidence_ref else None,
+            "video_url": (
+                f"/api/analysis/videos/{self.video_id}/file" if self.video_id else None
+            ),
+        })
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +204,8 @@ def load_sightings(
                 bbox=ev.bbox,
                 video_offset_sec=ev.video_offset_sec,
                 event_time=ev.event_time,
+                evidence_ref=ev.evidence_ref,
+                frame_ref=getattr(ev, "frame_ref", None),
             )
         )
     out.sort(key=lambda s: (s.video_order, s.video_offset_sec or 0.0, s.event_id))
@@ -393,12 +420,28 @@ def analyse(db: Session, batch_id: Optional[str] = None) -> dict:
     }
 
 
-def search(db: Session, plate_query: str, batch_id: Optional[str] = None) -> dict:
+DEFAULT_SEARCH_LIMIT = 24
+MAX_SEARCH_LIMIT = 100
+
+
+def search(
+    db: Session,
+    plate_query: str,
+    batch_id: Optional[str] = None,
+    page: int = 1,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+) -> dict:
     """
     Search one plate across every analysed video.
 
     Returns the exact record when found, plus any conservative fuzzy
     suggestions, so the operator is never silently given the wrong vehicle.
+
+    ``results`` is the paginated list of *occurrences* (one per tracked
+    sighting) with the stored frame image, the timestamp inside the video and
+    the URL of the source video — everything a plate-search UI needs. All of
+    it is read straight from the stored detections; the videos are never
+    re-processed for a search.
     """
     query = normalize_plate(plate_query)
     if not query:
@@ -411,6 +454,16 @@ def search(db: Session, plate_query: str, batch_id: Optional[str] = None) -> dic
 
     exact = grouped.get(query)
     record = build_vehicle_record(query, exact) if exact else None
+
+    # Paginated occurrences of the exact match.
+    occurrences = [s.occurrence_dict() for s in (exact or [])]
+    total = len(occurrences)
+    page = max(1, int(page))
+    limit = max(1, min(int(limit), MAX_SEARCH_LIMIT))
+    total_pages = max(1, -(-total // limit))
+    page = min(page, total_pages)  # an out-of-range page shows the last one
+    start = (page - 1) * limit
+    results = occurrences[start:start + limit]
 
     suggestions: List[dict] = []
     max_dist = int(getattr(settings, "MATCH_FUZZY_MAX_DISTANCE", 1))
@@ -440,11 +493,18 @@ def search(db: Session, plate_query: str, batch_id: Optional[str] = None) -> dic
     return {
         "query": plate_query,
         "normalized_query": query,
+        "plate": query,
         "found": record is not None,
         "match_type": "exact" if record else None,
         "vehicle": record,
         "possible_matches": suggestions,
         "sightings": [s.to_dict() for s in (exact or [])],
+        # Paginated occurrence cards for the plate-search UI.
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "results": results,
     }
 
 

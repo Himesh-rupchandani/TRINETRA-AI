@@ -465,16 +465,25 @@ def test_15_plate_search(client, analysed):
 # --------------------------------------------------------------------------- #
 def test_16_summary_statistics(analysed):
     r = analysed["results"]
-    assert r["total_videos"] == len(SCRIPT)
+    # Scope to the videos THIS suite registered (the dev server may hold other
+    # analysis videos in the same database — the invariant under test is that
+    # every summary number derives from the stored rows, not an empty DB).
+    assert {v["camera_id"] for v in r["videos"]} >= set(SCRIPT)
+    assert r["total_videos"] == len(r["videos"])
     assert r["total_sightings"] == r["readable_sightings"] + r["unreadable_sightings"]
     assert r["unique_plates"] == len(r["vehicles"])
     assert r["plates_in_multiple_videos"] == len(r["multi_video_vehicles"]) == 1
+    video_ids = [v["video_id"] for v in r["videos"]]
     db = SessionLocal()
     try:
         stored = db.query(func.count(VehicleEvent.id)).filter(
-            VehicleEvent.camera_id.like(f"{TEST_PREFIX}%")
+            VehicleEvent.video_id.in_(video_ids)
         ).scalar()
         assert r["total_sightings"] == stored
+        mine = db.query(func.count(VehicleEvent.id)).filter(
+            VehicleEvent.camera_id.like(f"{TEST_PREFIX}%")
+        ).scalar()
+        assert mine >= len(SCRIPT) - 1  # one vehicle per scripted camera
     finally:
         db.close()
 
@@ -515,3 +524,44 @@ def test_17_delete_video_and_no_regression(client, analysed, clips):
 
     after = client.get("/api/analysis/results").json()
     assert after["total_videos"] == before - 1
+
+
+# --------------------------------------------------------------------------- #
+# 18. A FAILED video is re-processed when the analysis is run again
+# --------------------------------------------------------------------------- #
+def test_18_failed_video_is_reprocessed_on_rerun(client, analysed):
+    """
+    The exact recovery flow of a machine where torch/OCR were installed only
+    AFTER a first failed run: FAILED is not terminal for /run — the video is
+    re-queued and reaches DONE with its plate searchable again.
+    """
+    db = SessionLocal()
+    try:
+        row = (db.query(VideoSource)
+               .filter(VideoSource.camera_id == "TCAM1")).first()
+        assert row is not None
+        vid = row.video_id
+        row.status = "FAILED"
+        row.error = "Vehicle detection model unavailable — install ultralytics + torch (CPU)."
+        row.plates_read = 0
+        db.commit()
+    finally:
+        db.close()
+
+    run = client.post("/api/analysis/run", json={"video_ids": [vid]})
+    assert run.status_code == 200
+    assert vid in run.json()["queued"], "a FAILED video must be re-queued"
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        v = [x for x in client.get("/api/analysis/status").json()["videos"]
+             if x["video_id"] == vid][0]
+        if v["status"] in ("DONE", "FAILED"):
+            break
+        time.sleep(0.3)
+    assert v["status"] == "DONE", v
+    assert v["plates_read"] >= 1
+
+    hit = client.get("/api/analysis/search", params={"plate": "GJ01AB1234"}).json()
+    assert hit["found"] is True
+    assert "TCAM1" in hit["vehicle"]["cameras"]

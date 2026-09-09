@@ -95,7 +95,8 @@ def read_plate_for_vehicle(
         if crop.shape[1] < 24 or crop.shape[0] < 8:
             continue
         for variant in preprocess_variants(crop):
-            for text, ocr_conf in ocr_service.read_lines(variant):
+            lines = ocr_service.read_lines(variant)
+            for text, ocr_conf in lines:
                 norm = candidate_from_text(text)
                 if norm is None:
                     continue
@@ -115,8 +116,43 @@ def read_plate_for_vehicle(
                 )
                 if best is None or read.confidence > best.confidence:
                     best = read
+
+            # Two-line plates (typical on Indian motorcycles): neither line
+            # is a full plate alone, but the vertical concatenation is one.
+            # Try the full stack plus every adjacent pair of lines.
+            raw_parts = [t for t, _ in lines if (t or "").strip()]
+            stacks = []
+            if len(raw_parts) >= 2:
+                stacks.append(raw_parts)
+                stacks.extend(raw_parts[i:i + 2] for i in range(len(raw_parts) - 1))
+            for stack in stacks:
+                joined_raw = " ".join(stack)
+                joined_norm = normalize_plate(joined_raw)
+                if not joined_norm or any(
+                    candidate_from_text(t) == joined_norm for t in stack
+                ):
+                    continue  # a single line already produced this candidate
+                fscore = format_score(joined_norm)
+                if fscore <= 0.0:
+                    continue
+                line_conf = min(float(c) for t, c in lines if (t or "").strip() in stack)
+                conf = line_conf * fscore
+                if conf < reject:
+                    continue
+                read = PlateRead(
+                    raw=joined_raw,
+                    normalized=joined_norm,
+                    confidence=round(min(conf, 1.0), 4),
+                    ocr_confidence=round(line_conf, 4),
+                    indian_format=bool(INDIAN_PLATE_RE.match(joined_norm)),
+                    plate_box=region,
+                )
+                if best is None or read.confidence > best.confidence:
+                    best = read
             # A confident canonical plate is good enough — stop burning CPU.
-            if best is not None and best.indian_format and best.confidence >= 0.92:
+            if best is None:
+                continue
+            if best.indian_format and best.confidence >= 0.92:
                 return best
     return best
 

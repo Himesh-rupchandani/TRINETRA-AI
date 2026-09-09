@@ -138,6 +138,12 @@ class VehicleEvent(Base):
     frame_number = Column(Integer, nullable=True)              # frame index inside the video
     vehicle_confidence = Column(Float, nullable=True)          # detector confidence 0.0-1.0
     bbox_json = Column(String(200), nullable=True)             # "[x1, y1, x2, y2]" in pixels
+    # FULL annotated video frame captured at the moment the plate was read
+    # (relative to EVIDENCE_ROOT, served by GET /api/evidence/...). The crop
+    # in ``evidence_ref`` is kept as-is; this adds the wide shot so a plate
+    # search can show WHERE and WHEN the vehicle was seen. NULL for
+    # live-camera sightings and for rows recorded before this feature.
+    frame_ref = Column(String(500), nullable=True)
     # HIGH | LOW_CONFIDENCE | UNKNOWN — an uncertain read is never promoted to
     # a confident plate; it is labelled instead.
     plate_status = Column(String(20), nullable=True)

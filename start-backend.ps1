@@ -42,6 +42,21 @@ Write-Host "Activating venv..." -ForegroundColor Yellow
 Write-Host "Installing requirements..." -ForegroundColor Yellow
 pip install -r requirements.txt
 
+# ---- ML stack for video analysis (vehicle detection + OCR) ----
+# CPU-only torch FIRST: the default PyPI torch wheel ships CUDA (~2.5 GB) and
+# routinely fails mid-download, which is what leaves a backend that reports
+# "Vehicle detection model unavailable". The CPU wheel is ~200 MB.
+Write-Host "Installing CPU torch + ultralytics + rapidocr (video-analysis stack)..." -ForegroundColor Yellow
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install ultralytics rapidocr-onnxruntime
+# ultralytics/rapidocr pull the GUI opencv wheel; force the headless build.
+pip install --force-reinstall --no-deps opencv-python-headless
+python -c "import torch, ultralytics, rapidocr_onnxruntime" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARNING: ML stack incomplete - video analysis will report 'model unavailable'." -ForegroundColor Yellow
+    Write-Host "Re-run the three pip commands above, then restart the backend." -ForegroundColor Yellow
+}
+
 # Ensure evidence dir exists (backend+frontend only may not have cv-engine/evidence)
 $EvidenceRoot = Join-Path $Root "cv-engine\evidence"
 if (-not (Test-Path $EvidenceRoot)) {

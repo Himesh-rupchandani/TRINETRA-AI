@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileImage, ImageOff, MapPin, ScanLine } from 'lucide-react';
 import type { VehicleEvent } from '@/types';
@@ -106,13 +107,7 @@ export function EvidencePanel({
       <div className="grid gap-3.5 sm:grid-cols-2">
         <figure className="overflow-hidden rounded border border-line bg-black">
           {ev?.plateCropUrl ? (
-            <img
-              src={ev.plateCropUrl}
-              alt={`Plate crop reading ${event.plate}`}
-              className="w-full object-contain"
-              loading="lazy"
-              decoding="async"
-            />
+            <PlateCropImage url={ev.plateCropUrl} plate={event.plate} />
           ) : (
             <div className="grid h-20 place-items-center bg-surface-2 text-2xs text-ink-faint">No plate crop</div>
           )}
@@ -163,5 +158,33 @@ export function EvidencePanel({
         </dl>
       </div>
     </div>
+  );
+}
+
+/**
+ * ANPR crop image with a clean degraded state: when the stored crop file is
+ * genuinely missing the panel shows "Plate crop unavailable" instead of a
+ * broken-image icon. Layout is identical to the original <img>.
+ */
+function PlateCropImage({ url, plate }: { url: string; plate: string }) {
+  // failed-state is keyed by url so a new crop resets it during render.
+  const [view, setView] = useState<{ url: string; failed: boolean }>({ url, failed: false });
+  const failed = view.url === url ? view.failed : false;
+  if (failed) {
+    return (
+      <div className="grid h-20 place-items-center bg-surface-2 text-2xs text-ink-faint">
+        Plate crop unavailable
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={`Plate crop reading ${plate}`}
+      className="w-full object-contain"
+      loading="lazy"
+      decoding="async"
+      onError={() => setView({ url, failed: true })}
+    />
   );
 }

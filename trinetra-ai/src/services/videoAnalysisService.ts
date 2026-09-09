@@ -1,4 +1,5 @@
 import { get, http, isMockMode, post } from './api';
+import { config } from '@/lib/config';
 
 /* ------------------------------------------------------------------ types */
 
@@ -130,6 +131,19 @@ export interface Sighting {
   video_offset_sec: number | null;
   timestamp: string;
   event_time: string;
+  evidence_ref?: string | null;
+  frame_ref?: string | null;
+}
+
+/** One occurrence card returned by the plate search (paginated `results`). */
+export interface PlateOccurrence extends Sighting {
+  video_name: string;
+  confidence: number;
+  timestamp_sec: number | null;
+  detected_at: string | null;
+  frame_url: string | null;
+  crop_url: string | null;
+  video_url: string | null;
 }
 
 export interface PossibleMatch {
@@ -171,6 +185,7 @@ export interface AnalysisResults {
 export interface PlateSearchResult {
   query: string;
   normalized_query: string;
+  plate: string;
   found: boolean;
   match_type: 'exact' | null;
   vehicle: VehicleRecord | null;
@@ -186,6 +201,12 @@ export interface PlateSearchResult {
     note: string;
   }>;
   sightings: Sighting[];
+  /** Paginated occurrence cards — the plate-search frame grid. */
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  results: PlateOccurrence[];
 }
 
 export interface DriveValidation {
@@ -260,6 +281,18 @@ function toVideo(d: AnalysisVideoDto): AnalysisVideo {
 
 const MOCK_GUARD =
   'Video analysis needs the backend — start it and set VITE_USE_MOCKS=false in trinetra-ai/.env.';
+
+const API = config.apiBaseUrl.replace(/\/$/, '');
+
+/** URL of a stored evidence image (analysis frame or vehicle crop). */
+export function evidenceUrl(ref?: string | null): string | null {
+  return ref ? `${API}/evidence/${ref}` : null;
+}
+
+/** URL that streams an analysed video back, seekable by the browser. */
+export function analysisVideoUrl(videoId: string): string {
+  return `${API}/analysis/videos/${encodeURIComponent(videoId)}/file`;
+}
 
 /**
  * Multi-video analysis: upload local CCTV videos and/or add shared Google
@@ -376,10 +409,10 @@ export const videoAnalysisService = {
     });
   },
 
-  async search(plate: string, batchId?: string): Promise<PlateSearchResult> {
+  async search(plate: string, batchId?: string, page = 1, limit = 24): Promise<PlateSearchResult> {
     if (isMockMode) throw new Error(MOCK_GUARD);
     return get<PlateSearchResult>('/analysis/search', {
-      params: { plate, ...(batchId ? { batch_id: batchId } : {}) },
+      params: { plate, page, limit, ...(batchId ? { batch_id: batchId } : {}) },
     });
   },
 

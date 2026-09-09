@@ -206,10 +206,23 @@ def results(batch_id: Optional[str] = Query(None), db: Session = Depends(get_db)
 def search_plate(
     plate: str = Query(..., min_length=1, description="Number plate, any formatting"),
     batch_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1, description="Occurrence page (1-based)"),
+    limit: int = Query(
+        plate_matching.DEFAULT_SEARCH_LIMIT, ge=1, le=plate_matching.MAX_SEARCH_LIMIT,
+        description="Occurrences per page",
+    ),
     db: Session = Depends(get_db),
 ):
+    """
+    Query the stored detections — the videos are never re-processed here.
+
+    ``results`` is the paginated list of matching occurrences; each entry
+    carries the stored annotated frame (``frame_url``), the timestamp inside
+    the source video, the frame number, the OCR confidence and
+    ``video_url`` so the UI can jump to that moment in the video.
+    """
     try:
-        return plate_matching.search(db, plate, batch_id)
+        return plate_matching.search(db, plate, batch_id, page=page, limit=limit)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 

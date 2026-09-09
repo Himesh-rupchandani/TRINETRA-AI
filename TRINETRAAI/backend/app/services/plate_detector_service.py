@@ -185,7 +185,19 @@ class PlateDetectorService:
         if not results or results[0].boxes is None:
             return out
         b = results[0].boxes
-        for xyxy, c in zip(b.xyxy.cpu().numpy(), b.conf.cpu().numpy()):
+        # A multi-class checkpoint (e.g. the project's vehicle+number_plate
+        # model) may also return whole-vehicle boxes on a vehicle crop; keep
+        # only plate-like classes. Single-class plate checkpoints carry no
+        # plate-named class, in which case every box is kept (old behaviour).
+        names = {int(k): str(v).lower() for k, v in (getattr(model, "names", {}) or {}).items()}
+        plate_ids = {
+            k for k, v in names.items()
+            if "plate" in v.replace("_", "").replace(" ", "")
+        }
+        cls = b.cls.cpu().numpy() if b.cls is not None else None
+        for i, (xyxy, c) in enumerate(zip(b.xyxy.cpu().numpy(), b.conf.cpu().numpy())):
+            if plate_ids and cls is not None and int(cls[i]) not in plate_ids:
+                continue
             out.append(
                 PlateBox(
                     x1=int(xyxy[0]) + ox, y1=int(xyxy[1]) + oy,

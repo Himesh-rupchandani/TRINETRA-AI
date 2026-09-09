@@ -157,6 +157,69 @@ def format_offset(seconds: Optional[float]) -> str:
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
+def crop_plate_region(frame, plate_box, pad_x: float = 0.10, pad_y: float = 0.20):
+    """
+    The number-plate image itself: crop ``plate_box`` (the existing plate
+    detector's bounding box, absolute pixels) out of the analysed frame with
+    a small sensible padding so the characters are not clipped.
+
+    Returned as JPEG bytes at native resolution (never upscaled), or None if
+    the box is degenerate. Mirrors the cv-engine EvidenceWriter's
+    ``{stem}_plate.jpg`` convention that the frontend already expects.
+    """
+    try:
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = (int(v) for v in (
+            plate_box.x1, plate_box.y1, plate_box.x2, plate_box.y2))
+        bw, bh = x2 - x1, y2 - y1
+        if bw < 8 or bh < 4:
+            return None
+        px = max(2, int(bw * pad_x))
+        py = max(2, int(bh * pad_y))
+        cx1, cy1 = max(0, x1 - px), max(0, y1 - py)
+        cx2, cy2 = min(w, x2 + px), min(h, y2 + py)
+        crop = frame[cy1:cy2, cx1:cx2]
+        if crop.size == 0:
+            return None
+        ok, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        return buf.tobytes() if ok else None
+    except Exception:
+        return None
+
+
+def annotate_frame(frame, bbox, plate: str, confidence: Optional[float]):
+    """
+    Full video frame with the detection box and plate label drawn on it,
+    returned as JPEG bytes (or None if anything goes wrong).
+
+    This is the wide shot stored with every plate sighting so a number-plate
+    search can show the whole scene — where the vehicle was in the frame and
+    which box the AI read — not just a tight crop.
+    """
+    try:
+        out = frame.copy()
+        h, w = out.shape[:2]
+        x1, y1, x2, y2 = (int(v) for v in bbox)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        colour = (80, 220, 120)  # green BGR — matches the live detection overlay
+        cv2.rectangle(out, (x1, y1), (x2, y2), colour, 2)
+        label = f"{plate} {confidence * 100:.0f}%" if confidence is not None else plate
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = max(0.45, min(out.shape[1] / 1280.0, 0.9))
+        thickness = 1 if scale < 0.6 else 2
+        (tw, th), baseline = cv2.getTextSize(label, font, scale, thickness)
+        ty = max(y1 - th - baseline - 4, 0)
+        cv2.rectangle(out, (x1, ty), (x1 + tw + 6, ty + th + baseline + 4), colour, -1)
+        cv2.putText(out, label, (x1 + 3, ty + th + 1), font, scale, (15, 15, 15), thickness, cv2.LINE_AA)
+        ok, buf = cv2.imencode(".jpg", out, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        return buf.tobytes() if ok else None
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Probing
 # ---------------------------------------------------------------------------
@@ -463,6 +526,16 @@ def _run_video(video_id: str) -> None:
         track_meta: Dict[int, dict] = {}
         cooldown: Dict[int, int] = {}
         best_crop: Dict[int, bytes] = {}
+        # track_id -> JPEG bytes of the FULL annotated frame at the best plate
+        # read, plus the confidence of that read (only re-encoded on a better
+        # read, so memory stays bounded to one frame per tracked vehicle).
+        best_frame: Dict[int, bytes] = {}
+        best_frame_conf: Dict[int, float] = {}
+        # track_id -> JPEG bytes of the PLATE-ONLY crop (the ANPR crop the
+        # evidence panel shows), taken from the plate detector's bounding box
+        # at the best read. Written as {stem}_plate.jpg, the convention the
+        # frontend's EvidencePanel already resolves from evidence_ref.
+        best_plate_crop: Dict[int, bytes] = {}
 
         counters = {"vehicles": 0, "plates": 0, "unknown": 0}
         seen_tracks: set = set()
@@ -475,6 +548,9 @@ def _run_video(video_id: str) -> None:
             acc = accum.pop(track_id, None)
             cooldown.pop(track_id, None)
             crop_bytes = best_crop.pop(track_id, None)
+            frame_bytes = best_frame.pop(track_id, None)
+            plate_crop_bytes = best_plate_crop.pop(track_id, None)
+            best_frame_conf.pop(track_id, None)
             if meta is None or meta["hits"] < min_hits:
                 return  # detector flicker, not a real vehicle sighting
 
@@ -490,14 +566,27 @@ def _run_video(video_id: str) -> None:
 
             offset = float(meta["offset_sec"])
             evidence_ref = None
-            if crop_bytes:
+            frame_ref = None
+            if crop_bytes or frame_bytes:
                 try:
                     ev_dir = _evidence_root() / "analysis" / video.camera_id.lower()
                     ev_dir.mkdir(parents=True, exist_ok=True)
                     tag = (plate_norm or "unknown").lower()
-                    fname = f"{video.camera_id.lower()}_{track_id}_{int(offset * 1000)}ms_{tag}.jpg"
-                    (ev_dir / fname).write_bytes(crop_bytes)
-                    evidence_ref = f"analysis/{video.camera_id.lower()}/{fname}"
+                    stem = f"{video.camera_id.lower()}_{track_id}_{int(offset * 1000)}ms_{tag}"
+                    if crop_bytes:
+                        (ev_dir / f"{stem}.jpg").write_bytes(crop_bytes)
+                        evidence_ref = f"analysis/{video.camera_id.lower()}/{stem}.jpg"
+                    if frame_bytes:
+                        # Wide shot with the detection box drawn on it — the
+                        # image a number-plate search displays per occurrence.
+                        (ev_dir / f"{stem}_frame.jpg").write_bytes(frame_bytes)
+                        frame_ref = f"analysis/{video.camera_id.lower()}/{stem}_frame.jpg"
+                    if plate_crop_bytes:
+                        # Plate-only ANPR crop — the image the evidence panel
+                        # shows next to the OCR text. Same {stem}_plate.jpg
+                        # naming the cv-engine EvidenceWriter uses for live
+                        # cameras, so the existing frontend URL just works.
+                        (ev_dir / f"{stem}_plate.jpg").write_bytes(plate_crop_bytes)
                 except Exception as exc:
                     logger.warning(f"[ANALYSIS:{video.camera_id}] evidence write failed: {exc}")
 
@@ -514,6 +603,7 @@ def _run_video(video_id: str) -> None:
                 latitude=cam.latitude if cam else None,
                 longitude=cam.longitude if cam else None,
                 evidence_ref=evidence_ref,
+                frame_ref=frame_ref,
                 video_file=video_filename,
                 video_offset_sec=offset,
                 video_id=video.video_id,
@@ -612,6 +702,25 @@ def _run_video(video_id: str) -> None:
                                 best_crop[track.track_id] = buf.tobytes()
                     except Exception:
                         pass
+                    # Also keep the FULL annotated frame from the *best* plate
+                    # read for this track — this is what a plate search shows,
+                    # so an officer sees the whole scene, not just the crop.
+                    if float(read.confidence) >= best_frame_conf.get(track.track_id, -1.0):
+                        annotated = annotate_frame(
+                            frame,
+                            (track.x1, track.y1, track.x2, track.y2),
+                            read.normalized,
+                            float(read.confidence),
+                        )
+                        if annotated is not None:
+                            best_frame[track.track_id] = annotated
+                            best_frame_conf[track.track_id] = float(read.confidence)
+                        # Plate-only crop from the EXISTING plate bounding box
+                        # (never the vehicle box) — this is the ANPR crop.
+                        if read.plate_box is not None:
+                            pcrop = crop_plate_region(frame, read.plate_box)
+                            if pcrop is not None:
+                                best_plate_crop[track.track_id] = pcrop
 
                 if analyzed % 10 == 0:
                     video.frames_read = frame_idx + 1
