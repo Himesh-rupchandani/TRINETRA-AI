@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Cctv, LayoutGrid, RefreshCcw, Search, Table2, Upload, X } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { CameraCard } from '@/components/camera/CameraCard';
@@ -17,7 +17,13 @@ const STATUSES = ['ALL', 'ONLINE', 'DEGRADED', 'OFFLINE'] as const;
 
 export default function Cameras() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState('');
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState(params.get('search') ?? '');
+
+  useEffect(() => {
+    const q = params.get('search');
+    if (q) setQuery(q);
+  }, [params]);
   const [status, setStatus] = useState<CameraFilters['status']>('ALL');
   const [department, setDepartment] = useState('ALL');
   const [zone, setZone] = useState('ALL');

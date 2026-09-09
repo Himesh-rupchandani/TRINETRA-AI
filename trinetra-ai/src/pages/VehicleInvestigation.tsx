@@ -10,11 +10,12 @@ import { DetectionTable } from '@/components/vehicle/DetectionTable';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
+import { InvalidPlateNotice } from '@/components/vehicle/InvalidPlateNotice';
 import { SeverityChip } from '@/components/common/Chips';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAlerts } from '@/hooks/useAlerts';
 import type { RoutePoint, VehicleEvent } from '@/types';
-import { formatDuration, minutesBetween, prettyPlate } from '@/lib/utils';
+import { formatDuration, isValidPlate, minutesBetween, prettyPlate } from '@/lib/utils';
 
 /**
  * VEHICLE INVESTIGATION WORKSPACE
@@ -74,6 +75,15 @@ export default function VehicleInvestigation() {
   }
 
   if (error) {
+    if (!isValidPlate(plate)) {
+      return (
+        <div className="p-4">
+          <div className="panel">
+            <InvalidPlateNotice raw={plate} />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="p-4">
         <div className="panel">

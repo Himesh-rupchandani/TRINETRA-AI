@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   UserRound,
 } from 'lucide-react';
-import { cn, normalisePlate } from '@/lib/utils';
+import { cn, isValidPlate, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { config } from '@/lib/config';
@@ -101,8 +101,17 @@ export function Header() {
 
   const submitQuick = (e: React.FormEvent) => {
     e.preventDefault();
-    const p = normalisePlate(quick);
-    if (p) navigate(`/vehicles/${p}`);
+    const raw = quick.trim();
+    if (!raw) return;
+    const p = normalisePlate(raw);
+    if (p && isValidPlate(p)) {
+      navigate(`/vehicles/${p}`);
+      return;
+    }
+    // Keyword, not a plate: plate-prefix fragments go to vehicle search,
+    // everything else (names, places) filters the camera wall.
+    if (/^[A-Z]{2}\d/i.test(p)) navigate(`/vehicles?plate=${encodeURIComponent(raw)}`);
+    else navigate(`/cameras?search=${encodeURIComponent(raw)}`);
   };
 
   return (
