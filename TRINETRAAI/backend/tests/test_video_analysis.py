@@ -179,13 +179,15 @@ def _upload(client, clips, cams):
     return client.post("/api/analysis/videos/upload", files=files)
 
 
-def _wait_done(client, timeout=120.0):
+def _wait_done(client, ids=None, timeout=120.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         body = client.get("/api/analysis/status").json()
-        if body["status"] in ("DONE", "EMPTY") and body["total_videos"]:
-            if all(v["status"] in ("DONE", "FAILED") for v in body["videos"]):
-                return body
+        vids = body["videos"]
+        if ids is not None:
+            vids = [v for v in vids if v["video_id"] in ids]
+        if vids and all(v["status"] in ("DONE", "FAILED") for v in vids):
+            return body
         time.sleep(0.4)
     raise AssertionError("analysis did not finish in time")
 
@@ -196,9 +198,12 @@ def analysed(client, clips):
     res = _upload(client, clips, list(SCRIPT))
     assert res.status_code in (200, 201), res.text
     assert res.json()["errors"] == []
-    run = client.post("/api/analysis/run", json={})
+    # Analyse ONLY this batch's videos — the dev database may hold other,
+    # much larger videos that would hog the worker and starve the wait.
+    ids = {v["video_id"] for v in res.json()["added"]}
+    run = client.post("/api/analysis/run", json={"video_ids": sorted(ids)})
     assert run.status_code == 200, run.text
-    status = _wait_done(client)
+    status = _wait_done(client, ids)
     results = client.get("/api/analysis/results").json()
     return {"status": status, "results": results}
 

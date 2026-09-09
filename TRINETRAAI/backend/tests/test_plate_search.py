@@ -210,7 +210,10 @@ def analysed(client, clips):
     res = client.post("/api/analysis/videos/upload", files=files, data={"batch_id": BATCH})
     assert res.status_code in (200, 201), res.text
     assert res.json()["errors"] == []
-    run = client.post("/api/analysis/run", json={})
+    # Analyse ONLY this batch's videos — the dev database may hold other,
+    # much larger videos that would hog the worker and starve the wait.
+    ids = [v["video_id"] for v in res.json()["added"]]
+    run = client.post("/api/analysis/run", json={"video_ids": ids})
     assert run.status_code == 200, run.text
     mine = _wait_mine_done(client)
     assert all(v["status"] == "DONE" for v in mine), mine

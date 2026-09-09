@@ -44,7 +44,12 @@ from .anpr_pipeline import (
     TrackPlateAccumulator,
     read_plate_for_vehicle,
 )
+from .plate_detector_service import PlateBox
 from .simple_tracker import SimpleTracker
+
+# Detection/evidence working resolution for very large frames (4K+). Keeps
+# memory bounded on small hosts; ANPR plate crops remain native-resolution.
+ANALYSIS_WORK_MAX_EDGE = 1600
 
 ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 ANALYSIS_ZONE = "Video Analysis"
@@ -719,10 +724,22 @@ def _run_video(video_id: str) -> None:
             ok, frame = cap.read()
             if not ok or frame is None:
                 break
+            # Bound memory/CPU on 4K+ sources: detection, tracking and the
+            # stored evidence snapshots run at a capped working resolution;
+            # the ANPR plate crop itself stays NATIVE (its box is mapped
+            # back below), so crop quality is unchanged.
+            fh, fw = frame.shape[:2]
+            scale = min(1.0, float(ANALYSIS_WORK_MAX_EDGE) / max(fh, fw))
+            if scale < 1.0:
+                work = cv2.resize(
+                    frame, (int(fw * scale), int(fh * scale)),
+                    interpolation=cv2.INTER_AREA)
+            else:
+                work = frame
             offset_sec = frame_idx / fps
             if frame_idx % every_n == 0:
                 analyzed += 1
-                detections = vehicle_detection_service.detect(frame)
+                detections = vehicle_detection_service.detect(work)
                 live, retired = tracker.update(
                     [(d.x1, d.y1, d.x2, d.y2, d.class_name, d.confidence) for d in detections]
                 )
@@ -750,7 +767,7 @@ def _run_video(video_id: str) -> None:
                     else:
                         prev["hits"] = track.hits
 
-                    if not ocr_ok or track.hits < min_hits or area < min_area:
+                    if not ocr_ok or track.hits < min_hits or area < min_area * scale * scale:
                         continue
                     left = cooldown.get(track.track_id, 0)
                     if left > 0:
@@ -778,7 +795,7 @@ def _run_video(video_id: str) -> None:
                     # so an officer sees the whole scene, not just the crop.
                     if float(read.confidence) >= best_frame_conf.get(track.track_id, -1.0):
                         annotated = annotate_frame(
-                            frame,
+                            work,
                             (track.x1, track.y1, track.x2, track.y2),
                             read.normalized,
                             float(read.confidence),
@@ -787,9 +804,17 @@ def _run_video(video_id: str) -> None:
                             best_frame[track.track_id] = annotated
                             best_frame_conf[track.track_id] = float(read.confidence)
                         # Plate-only crop from the EXISTING plate bounding box
-                        # (never the vehicle box) — this is the ANPR crop.
+                        # (never the vehicle box) — this is the ANPR crop,
+                        # taken from the NATIVE frame for full resolution.
                         if read.plate_box is not None:
-                            pcrop = crop_plate_region(frame, read.plate_box)
+                            pb = read.plate_box
+                            if scale < 1.0:
+                                pb = PlateBox(
+                                    int(pb.x1 / scale), int(pb.y1 / scale),
+                                    int(pb.x2 / scale), int(pb.y2 / scale),
+                                    pb.confidence, pb.source,
+                                )
+                            pcrop = crop_plate_region(frame, pb)
                             if pcrop is not None:
                                 best_plate_crop[track.track_id] = pcrop
 
