@@ -378,6 +378,15 @@ def chunks_dir(upload_id: str) -> Path:
     return d
 
 
+def purge_stale_chunks() -> None:
+    """Drop chunk dirs left behind by uploads interrupted by crash/restart."""
+    import shutil
+
+    root = analysis_dir() / "_chunks"
+    if root.is_dir():
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def store_chunk(upload_id: str, part: int, data: bytes) -> int:
     """Persist one part; returns total bytes received so far for this id."""
     if part < 0 or part >= CHUNK_MAX_PARTS:

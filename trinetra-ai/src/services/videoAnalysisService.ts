@@ -282,26 +282,50 @@ function toVideo(d: AnalysisVideoDto): AnalysisVideo {
 /** Above this size an upload is sent as small chunks (proxy body caps). */
 const CHUNK_THRESHOLD = 64 * 1024 * 1024;
 const CHUNK_SIZE = 8 * 1024 * 1024;
+/** Parallel in-flight chunk requests — parts are order-independent server-side. */
+const CHUNK_CONCURRENCY = 4;
 
 /**
  * Chunked upload: every request is a small multipart, so reverse proxies
  * with a request-body limit (HTTP 413 on one big upload) never trigger. The
  * backend reassembles the parts and registers the video like a plain upload.
+ * Chunks fly 4-in-parallel (each part carries its own index), which uses the
+ * uplink much better than one request at a time.
  */
 async function uploadChunked(file: File, batchId: string, autoStart: boolean): Promise<AnalysisVideo> {
   const uploadId = `${Date.now().toString(36)}-${file.size.toString(36)}-${file.name
     .replace(/[^A-Za-z0-9._-]+/g, '_')
     .slice(0, 40)}`;
-  for (let part = 0, off = 0; off < file.size; part += 1, off += CHUNK_SIZE) {
-    const form = new FormData();
-    form.append('upload_id', uploadId);
-    form.append('part', String(part));
-    form.append('data', file.slice(off, off + CHUNK_SIZE), 'chunk');
-    await http.post('/analysis/videos/upload/chunk', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 0,
-    });
+  const totalParts = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  let nextPart = 0;
+  let failure: unknown = null;
+
+  const worker = async () => {
+    while (failure === null) {
+      const part = nextPart;
+      nextPart += 1;
+      if (part >= totalParts) return;
+      const form = new FormData();
+      form.append('upload_id', uploadId);
+      form.append('part', String(part));
+      form.append('data', file.slice(part * CHUNK_SIZE, (part + 1) * CHUNK_SIZE), 'chunk');
+      try {
+        await http.post('/analysis/videos/upload/chunk', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 0,
+        });
+      } catch (e) {
+        if (failure === null) failure = e;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(CHUNK_CONCURRENCY, totalParts) }, () => worker()),
+  );
+  if (failure !== null) {
+    throw failure instanceof Error ? failure : new Error('Chunked upload failed');
   }
+
   const done = new FormData();
   done.append('upload_id', uploadId);
   done.append('filename', file.name);

@@ -61,6 +61,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not create evidence root {settings.EVIDENCE_ROOT}: {e}")
 
+    # 1c. Drop chunk dirs left behind by uploads interrupted by a crash/restart
+    try:
+        from .services import video_analysis_service as vas
+
+        vas.purge_stale_chunks()
+    except Exception as e:
+        logger.warning(f"Could not purge stale upload chunks: {e}")
+
     # 2. Sync the env-configured REAL live camera (.env -> registry), then
     # register existing cameras into CameraManager
     db = SessionLocal()
