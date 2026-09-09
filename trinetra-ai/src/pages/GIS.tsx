@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Layers, Map as MapIcon, Route, Search } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Layers, Map as MapIcon, Route, Search, X } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { MapLegend } from '@/components/gis/MapLegend';
 import { Panel, EmptyState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
+import { CameraPlayer } from '@/components/camera/CameraPlayer';
 import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { useCameras } from '@/hooks/useCameras';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
@@ -13,7 +14,7 @@ import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { normalisePlate } from '@/lib/utils';
-import type { RoutePoint } from '@/types';
+import type { Camera, RoutePoint } from '@/types';
 
 /** GIS — camera network, live detections and chronological vehicle routes. */
 export default function GIS() {
@@ -30,9 +31,23 @@ export default function GIS() {
   const [showCoverage, setShowCoverage] = useState(false);
   const [activeSequence, setActiveSequence] = useState<number | null>(null);
   const [panTo, setPanTo] = useState<[number, number] | null>(null);
+  /** Camera whose live feed is docked on the map (null = no player open). */
+  const [liveCameraId, setLiveCameraId] = useState<string | null>(null);
 
   const focusCamera = params.get('focus');
   const plateParam = params.get('plate');
+
+  // Resolve the id against the live registry so status changes flow to the player.
+  const liveCamera = useMemo<Camera | null>(
+    () => cameras.find((c) => c.id === liveCameraId) ?? null,
+    [cameras, liveCameraId],
+  );
+
+  /** Marker/list click: pan to the camera and dock its live feed on the map. */
+  const focusCameraOnMap = (c: Camera) => {
+    setLiveCameraId(c.id);
+    setPanTo([c.latitude, c.longitude]);
+  };
 
   useEffect(() => {
     if (plateParam) void trace(plateParam);
@@ -57,6 +72,9 @@ export default function GIS() {
   const selectPoint = (p: RoutePoint) => {
     setActiveSequence(p.sequence);
     setPanTo([p.latitude, p.longitude]);
+    // Sighting stop → dock that camera's feed too, when the registry knows it.
+    const cam = cameras.find((c) => c.id === p.cameraId.toLowerCase());
+    if (cam) setLiveCameraId(cam.id);
   };
 
   return (
@@ -104,6 +122,7 @@ export default function GIS() {
                   setPlateInput('');
                   setParams({});
                   setActiveSequence(null);
+                  setLiveCameraId(null);
                 }}
               >
                 Clear
@@ -142,16 +161,45 @@ export default function GIS() {
             route={points}
             routePlate={result?.plate}
             activeRouteSequence={activeSequence}
-            selectedCameraId={focusCamera}
+            selectedCameraId={liveCamera?.id ?? focusCamera}
             onSelectRoutePoint={selectPoint}
             onPlaybackStop={(pt) => setActiveSequence(pt.sequence)}
-            onSelectCamera={(c) => setPanTo([c.latitude, c.longitude])}
+            onSelectCamera={focusCameraOnMap}
+            onWatchCamera={(c) => setLiveCameraId(c.id)}
             panTo={panTo}
             showCoverage={showCoverage}
             className="absolute inset-0"
             zoom={12}
           />
           <MapLegend showRoute={points.length > 0} />
+
+          {/* Live feed docked to the map: opens for the camera selected on the
+              map (marker click / popup "Watch Live") or a route stop. */}
+          {liveCamera && (
+            <div className="absolute right-3 top-[104px] z-[1200] w-[360px] max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-line bg-surface-1 shadow-2xl">
+              <div className="flex items-center justify-between gap-2 border-b border-line bg-surface-2/60 px-3 py-1.5">
+                <p className="min-w-0 truncate text-2xs font-bold text-ink">
+                  <span className="font-mono">{liveCamera.id.toUpperCase()}</span>
+                  <span className="text-ink-faint"> · {liveCamera.location}</span>
+                </p>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Link to={`/cameras/${liveCamera.id}`} className="btn-ghost btn-xs">
+                    Full view
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setLiveCameraId(null)}
+                    aria-label="Close live feed"
+                    title="Close live feed"
+                    className="grid h-6 w-6 place-items-center rounded-md text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                  >
+                    <X size={13} aria-hidden />
+                  </button>
+                </div>
+              </div>
+              <CameraPlayer key={liveCamera.id} camera={liveCamera} autoRequest className="rounded-none border-0" />
+            </div>
+          )}
         </Panel>
 
         <div className="flex min-h-0 flex-col gap-3 sm:gap-4 xl:col-span-3">
@@ -183,7 +231,7 @@ export default function GIS() {
                     <li key={c.id}>
                       <button
                         type="button"
-                        onClick={() => setPanTo([c.latitude, c.longitude])}
+                        onClick={() => focusCameraOnMap(c)}
                         className="flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left hover:bg-surface-2"
                       >
                         <span className="min-w-0">

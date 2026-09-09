@@ -109,6 +109,8 @@ export interface MapViewProps {
   showCoverage?: boolean;
   /** Fired as the replay dot reaches each stop (timeline sync). */
   onPlaybackStop?: (point: RoutePoint) => void;
+  /** Open this camera's live feed on the map (floating player). */
+  onWatchCamera?: (camera: Camera) => void;
 }
 
 /**
@@ -132,8 +134,9 @@ export function MapView({
   className,
   showCoverage = false,
   onPlaybackStop,
+  onWatchCamera,
 }: MapViewProps) {
-  const [basemap, setBasemap] = useState<BasemapId>('street');
+  const [basemap, setBasemap] = useState<BasemapId>(config.map.defaultBasemap);
   const [mapZoom, setMapZoom] = useState(zoom);
   const tiles = config.map.tiles[basemap];
   /**
@@ -248,10 +251,12 @@ export function MapView({
           key={basemap}
           url={tiles.base}
           attribution={config.map.attribution[basemap]}
-          maxZoom={19}
+          maxZoom={tiles.maxZoom ?? 19}
           errorTileUrl={ERROR_TILE}
         />
-        {tiles.labels && <TileLayer url={tiles.labels} maxZoom={19} errorTileUrl={ERROR_TILE} />}
+        {tiles.labels && (
+          <TileLayer url={tiles.labels} maxZoom={tiles.maxZoom ?? 19} errorTileUrl={ERROR_TILE} />
+        )}
         <ScaleControl position="bottomright" imperial={false} />
         <ResizeGuard />
         <ZoomTracker onZoom={setMapZoom} />
@@ -283,7 +288,7 @@ export function MapView({
             title={`${c.name} — ${c.location}`}
           >
             <Popup>
-              <CameraPopup camera={c} />
+              <CameraPopup camera={c} onWatch={onWatchCamera} />
             </Popup>
           </Marker>
         ))}
@@ -351,28 +356,21 @@ export function MapView({
           role="group"
           aria-label="Basemap style"
         >
-          <button
-            type="button"
-            onClick={() => setBasemap('street')}
-            aria-pressed={basemap === 'street'}
-            className={cn(
-              'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
-              basemap === 'street' ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-            )}
-          >
-            Map
-          </button>
-          <button
-            type="button"
-            onClick={() => setBasemap('satellite')}
-            aria-pressed={basemap === 'satellite'}
-            className={cn(
-              'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
-              basemap === 'satellite' ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-            )}
-          >
-            Satellite
-          </button>
+          {config.map.basemaps.map((b, i) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setBasemap(b.id)}
+              aria-pressed={basemap === b.id}
+              className={cn(
+                'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
+                i > 0 && 'border-l border-line',
+                basemap === b.id ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+              )}
+            >
+              {b.label}
+            </button>
+          ))}
         </div>
         <button
           type="button"

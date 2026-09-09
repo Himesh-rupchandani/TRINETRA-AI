@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Play } from 'lucide-react';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { formatDateTime, formatDuration, formatTime, prettyPlate, prettyVehicleClass } from '@/lib/utils';
 import { useRoadLeg } from '@/hooks/useRoadLegs';
@@ -6,7 +7,14 @@ import { StatusChip } from '@/components/common/Chips';
 
 /** Popups intentionally repeat the key investigative fields: camera, time, plate, confidence. */
 
-export function CameraPopup({ camera }: { camera: Camera }) {
+export function CameraPopup({
+  camera,
+  onWatch,
+}: {
+  camera: Camera;
+  /** Opens the camera's live feed on the map (floating player). */
+  onWatch?: (camera: Camera) => void;
+}) {
   return (
     <div className="min-w-[210px] p-2.5 text-ink">
       <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -30,9 +38,20 @@ export function CameraPopup({ camera }: { camera: Camera }) {
           {camera.latitude.toFixed(4)}, {camera.longitude.toFixed(4)}
         </dd>
       </dl>
-      <Link to={`/cameras/${camera.id}`} className="btn-primary btn-xs mt-2.5 w-full">
-        Open Camera Detail
-      </Link>
+      <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+        {onWatch && camera.status !== 'OFFLINE' ? (
+          <button type="button" onClick={() => onWatch(camera)} className="btn-primary btn-xs">
+            <Play size={10} aria-hidden /> Watch Live
+          </button>
+        ) : (
+          <span className="btn-ghost btn-xs cursor-not-allowed justify-center opacity-50">
+            {camera.status === 'OFFLINE' ? 'Camera offline' : 'No live stream'}
+          </span>
+        )}
+        <Link to={`/cameras/${camera.id}`} className="btn-ghost btn-xs justify-center">
+          Camera Detail
+        </Link>
+      </div>
     </div>
   );
 }
