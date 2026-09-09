@@ -328,6 +328,8 @@ class UploadedVideoResponse(BaseModel):
     job_error: Optional[str] = None
     note: Optional[str] = None
     last_processed_at: Optional[datetime] = None
+    # OpenCV-annotated output video (boxes + plate reads burned in) exists.
+    annotated_available: bool = False
 
 
 class UploadedVideoDetailResponse(UploadedVideoResponse):

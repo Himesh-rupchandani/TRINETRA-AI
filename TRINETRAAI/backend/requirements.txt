@@ -18,5 +18,9 @@ ultralytics>=8.3.0
 # ANPR/OCR for uploaded CCTV videos (bundled ONNX models — works fully offline).
 # The pipeline degrades gracefully to "Unknown" plates when this is absent.
 rapidocr-onnxruntime>=1.0.0
+# Browser-compatible H.264 re-encode of the OpenCV-annotated output video
+# (bundles a static ffmpeg binary; without it the annotated video falls back
+# to mp4v which some browsers cannot play inline).
+imageio-ffmpeg>=0.4.9
 pytest>=8.1.0
 pytest-asyncio>=0.23.0

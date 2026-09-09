@@ -1,5 +1,6 @@
 import type { VehicleEvent } from '@/types';
 import { get, http, isMockMode } from './api';
+import { config } from '@/lib/config';
 import { cameraDirectory, toVehicleEvent, type VehicleEventDto } from './adapters';
 
 export type UploadJobStatus = 'IDLE' | 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED';
@@ -20,6 +21,8 @@ export interface UploadedVideo {
   jobError?: string | null;
   note?: string | null;
   lastProcessedAt?: string | null;
+  /** OpenCV-annotated output video (boxes + plate reads burned in) is ready. */
+  annotatedAvailable: boolean;
 }
 
 export interface UploadedVideoDetail extends UploadedVideo {
@@ -41,6 +44,7 @@ interface UploadedVideoDto {
   job_error?: string | null;
   note?: string | null;
   last_processed_at?: string | null;
+  annotated_available?: boolean;
 }
 
 interface UploadedVideoDetailDto extends UploadedVideoDto {
@@ -63,10 +67,19 @@ function toUploadedVideo(dto: UploadedVideoDto): UploadedVideo {
     jobError: dto.job_error,
     note: dto.note,
     lastProcessedAt: dto.last_processed_at,
+    annotatedAvailable: Boolean(dto.annotated_available),
   };
 }
 
 const MOCK_GUARD = 'Video upload needs the backend — start it and set VITE_USE_MOCKS=false.';
+
+/** Absolute URL of the OpenCV-annotated output video for one uploaded camera. */
+export function annotatedVideoUrl(cameraId: string): string {
+  const path = `/uploads/videos/${encodeURIComponent(cameraId)}/annotated-video`;
+  return config.apiBaseUrl.startsWith('http')
+    ? `${config.apiBaseUrl.replace(/\/$/, '')}${path}`
+    : `${window.location.origin}${config.apiBaseUrl.replace(/\/$/, '')}${path}`;
+}
 
 /**
  * Manually-uploaded CCTV videos (demo/test only — never live cameras).

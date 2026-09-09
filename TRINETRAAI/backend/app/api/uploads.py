@@ -6,6 +6,7 @@ GET  /api/uploads/videos                  — uploaded cameras + job states
 GET  /api/uploads/videos/next-camera-id   — first free CAM<n> id
 GET  /api/uploads/videos/{camera_id}      — one upload + recent plate reads
 POST /api/uploads/videos/{camera_id}/process — (re-)run detection
+GET  /api/uploads/videos/{camera_id}/annotated-video — OpenCV output video (boxes + plate reads)
 GET  /api/uploads/videos/{camera_id}/file — download/stream the uploaded file
 """
 import mimetypes
@@ -37,6 +38,7 @@ def _summary(cam: Camera) -> dict:
         "location": cam.location,
         "video_file": os.path.basename(cam.stream_url or ""),
         "status": cam.status or "OFFLINE",
+        "annotated_available": uvs.has_annotated(cam.camera_id),
         **job,
     }
 
@@ -100,6 +102,7 @@ async def upload_video(
         cam.status = "ONLINE"
         db.commit()
         db.refresh(cam)
+        uvs.delete_annotated(cam.camera_id)  # stale annotated output from the old file
         if old and old != str(path) and old.startswith(str(uvs.upload_dir())):
             try:
                 os.remove(old)
@@ -186,6 +189,26 @@ def process_uploaded_video(camera_id: str, db: Session = Depends(get_db)):
         )
     job = uvs.start_processing(cam.camera_id)
     return {**_summary(cam), **job}
+
+
+@router.get("/videos/{camera_id}/annotated-video")
+def get_annotated_video(camera_id: str, db: Session = Depends(get_db)):
+    """
+    OpenCV-annotated output video for an uploaded video — the original
+    footage with green vehicle boxes, gold number-plate reads and the
+    TRINETRA banner burned in. Produced by the detection job.
+    """
+    cam_id = camera_id.strip().upper()
+    cam = db.query(Camera).filter(func.upper(Camera.camera_id) == cam_id).first()
+    if not cam or not uvs.is_uploaded_camera(cam):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Uploaded video '{camera_id}' not found.")
+    if not uvs.has_annotated(cam.camera_id):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Annotated video not ready yet — run detection first.",
+        )
+    path = uvs.annotated_path(cam.camera_id)
+    return FileResponse(path, media_type="video/mp4", filename=f"{cam.camera_id}_annotated.mp4")
 
 
 @router.get("/videos/{camera_id}/file")

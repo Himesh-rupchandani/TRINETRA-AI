@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { FileVideo, RefreshCcw, ScanLine } from 'lucide-react';
+import { FileVideo, RefreshCcw, ScanLine, Clapperboard } from 'lucide-react';
 import { Panel, EmptyState } from '@/components/common/Panel';
 import { PlateLink, ConfidenceBar } from '@/components/common/Links';
-import { uploadService, type UploadedVideoDetail } from '@/services/uploadService';
+import { annotatedVideoUrl, uploadService, type UploadedVideoDetail } from '@/services/uploadService';
 import { cn, formatVideoOffset, prettyVehicleClass } from '@/lib/utils';
 
 const JOB_TONE: Record<string, string> = {
@@ -30,6 +30,7 @@ export function UploadedVideoPanel({ cameraId }: { cameraId: string }) {
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +153,41 @@ export function UploadedVideoPanel({ cameraId }: { cameraId: string }) {
             <p className="border-b border-line/60 px-4 py-2.5 text-2xs text-critical" role="alert">
               {detail.jobError}
             </p>
+          )}
+
+          {/* OpenCV-annotated output: boxes + plate reads burned into the footage. */}
+          {detail.annotatedAvailable && !busy && (
+            <div className="border-b border-line/60 px-4 py-3">
+              <p className="mb-2 flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-ink-muted">
+                <Clapperboard size={12} aria-hidden /> AI-annotated video — detected plates
+              </p>
+              {videoFailed ? (
+                <p className="text-2xs text-ink-muted">
+                  Preview not supported here —{' '}
+                  <a
+                    className="text-brand underline"
+                    href={`${annotatedVideoUrl(detail.cameraId)}?v=${encodeURIComponent(
+                      detail.lastProcessedAt ?? '',
+                    )}`}
+                    download
+                  >
+                    download the annotated video
+                  </a>
+                  .
+                </p>
+              ) : (
+                <video
+                  key={`${detail.cameraId}-${detail.lastProcessedAt ?? ''}`}
+                  src={`${annotatedVideoUrl(detail.cameraId)}?v=${encodeURIComponent(
+                    detail.lastProcessedAt ?? '',
+                  )}`}
+                  controls
+                  preload="metadata"
+                  onError={() => setVideoFailed(true)}
+                  className="max-h-[360px] w-full rounded-md border border-line bg-black"
+                />
+              )}
+            </div>
           )}
 
           {detail.recentPlates.length === 0 ? (
