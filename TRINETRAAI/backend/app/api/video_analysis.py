@@ -109,6 +109,55 @@ async def upload_videos(
     return {"batch_id": batch, "added": added, "errors": errors}
 
 
+@router.post(
+    "/videos/upload/chunk",
+    summary="Upload one small part of a large video (bypasses proxy body caps)",
+)
+def upload_chunk(
+    upload_id: str = Form(..., description="Client-generated id for this upload"),
+    part: int = Form(..., ge=0, description="0-based part index"),
+    data: bytes = File(...),
+):
+    """
+    Hosted previews reject one big multipart body with HTTP 413. Clients
+    therefore split large videos into small parts; every request here stays
+    far below any proxy limit. The backend only stores parts.
+    """
+    try:
+        total = vas.store_chunk(upload_id, part, data)
+    except vas.AnalysisError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    return {"upload_id": upload_id, "part": part, "received_bytes": total}
+
+
+@router.post(
+    "/videos/upload/complete",
+    status_code=status.HTTP_201_CREATED,
+    summary="Reassemble a chunked upload and register it for analysis",
+)
+def complete_chunked_upload(
+    upload_id: str = Form(...),
+    filename: str = Form(...),
+    batch_id: Optional[str] = Form(None),
+    camera_id: Optional[str] = Form(None),
+    auto_start: bool = Form(False),
+    db: Session = Depends(get_db),
+):
+    batch = (batch_id or "").strip() or uuid.uuid4().hex[:12]
+    try:
+        video = vas.assemble_chunks(db, upload_id, filename, batch, camera_id=camera_id)
+    except vas.AnalysisError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    added = [vas.video_to_dict(video)]
+    errors: List[dict] = []
+    if auto_start and added:
+        try:
+            vas.start_analysis(db, [v["video_id"] for v in added])
+        except vas.AnalysisError as exc:
+            errors.append({"source_name": filename, "error": str(exc)})
+    return {"batch_id": batch, "added": added, "errors": errors}
+
+
 @router.post("/videos/gdrive/validate", summary="Validate a Google Drive video link")
 def validate_gdrive(payload: GDriveRequest):
     """

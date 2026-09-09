@@ -355,6 +355,77 @@ def register_upload(db, filename: str, data: bytes, batch_id: str,
         raise
 
 
+# ---------------------------------------------------------------------------
+# Chunked upload — for connections with a request-body cap in front of the
+# backend (hosted previews return HTTP 413 on one big multipart). The client
+# posts small parts; each part is far below any proxy limit; the server
+# reassembles and registers exactly like a normal upload.
+# ---------------------------------------------------------------------------
+
+CHUNK_PART_MAX_BYTES = 16 * 1024 * 1024     # per-request cap (proxies allow far more)
+CHUNK_MAX_PARTS = 2000                       # 2000 * 16 MB >> any single video
+
+
+def chunks_dir(upload_id: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", upload_id or "").strip("._")[:64] or "upload"
+    d = analysis_dir() / "_chunks" / safe
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def store_chunk(upload_id: str, part: int, data: bytes) -> int:
+    """Persist one part; returns total bytes received so far for this id."""
+    if part < 0 or part >= CHUNK_MAX_PARTS:
+        raise AnalysisError("Invalid chunk index.")
+    if not data:
+        raise AnalysisError("Empty chunk.")
+    d = chunks_dir(upload_id)
+    (d / f"{part:06d}").write_bytes(data)
+    total = sum(p.stat().st_size for p in d.iterdir())
+    max_bytes = int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
+    if total > max_bytes:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
+        raise AnalysisError(
+            f"'{upload_id}' exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB upload limit."
+        )
+    return total
+
+
+def assemble_chunks(
+    db, upload_id: str, filename: str, batch_id: str,
+    camera_id: Optional[str] = None,
+) -> VideoSource:
+    """Reassemble stored parts into the final video file and register it."""
+    import shutil
+
+    d = chunks_dir(upload_id)
+    parts = sorted((p for p in d.iterdir() if p.is_file()), key=lambda p: p.name)
+    if not parts:
+        raise AnalysisError("No chunks were received for this upload id.")
+    expected = list(range(len(parts)))
+    if [int(p.name) for p in parts] != expected:
+        shutil.rmtree(d, ignore_errors=True)
+        raise AnalysisError("Chunks are missing or out of order — retry the upload.")
+    target = _unique_path(analysis_dir(), filename)
+    try:
+        with open(target, "wb") as out:
+            for p in parts:
+                out.write(p.read_bytes())
+        shutil.rmtree(d, ignore_errors=True)
+        return _register(
+            db, path=target, source_type="UPLOAD", source_name=safe_filename(filename),
+            source_ref=None, batch_id=batch_id, camera_id=camera_id,
+        )
+    except Exception:
+        shutil.rmtree(d, ignore_errors=True)
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def register_gdrive(db, url: str, batch_id: str, camera_id: Optional[str] = None) -> VideoSource:
     """Validate + download a shared Drive video and register it for analysis."""
     from . import gdrive_service

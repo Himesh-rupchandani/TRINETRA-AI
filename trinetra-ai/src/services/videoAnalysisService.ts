@@ -279,6 +279,45 @@ function toVideo(d: AnalysisVideoDto): AnalysisVideo {
   };
 }
 
+/** Above this size an upload is sent as small chunks (proxy body caps). */
+const CHUNK_THRESHOLD = 64 * 1024 * 1024;
+const CHUNK_SIZE = 8 * 1024 * 1024;
+
+/**
+ * Chunked upload: every request is a small multipart, so reverse proxies
+ * with a request-body limit (HTTP 413 on one big upload) never trigger. The
+ * backend reassembles the parts and registers the video like a plain upload.
+ */
+async function uploadChunked(file: File, batchId: string, autoStart: boolean): Promise<AnalysisVideo> {
+  const uploadId = `${Date.now().toString(36)}-${file.size.toString(36)}-${file.name
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .slice(0, 40)}`;
+  for (let part = 0, off = 0; off < file.size; part += 1, off += CHUNK_SIZE) {
+    const form = new FormData();
+    form.append('upload_id', uploadId);
+    form.append('part', String(part));
+    form.append('data', file.slice(off, off + CHUNK_SIZE), 'chunk');
+    await http.post('/analysis/videos/upload/chunk', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+    });
+  }
+  const done = new FormData();
+  done.append('upload_id', uploadId);
+  done.append('filename', file.name);
+  done.append('batch_id', batchId);
+  done.append('auto_start', String(autoStart));
+  const res = await http.post<{
+    batch_id: string;
+    added: AnalysisVideoDto[];
+    errors: Array<{ source_name: string; error: string }>;
+  }>('/analysis/videos/upload/complete', done, { timeout: 0 });
+  if (!res.data.added?.length) {
+    throw new Error(res.data.errors?.[0]?.error ?? 'Chunked upload failed');
+  }
+  return toVideo(res.data.added[0]);
+}
+
 const MOCK_GUARD =
   'Video analysis needs the backend — start it and set VITE_USE_MOCKS=false in trinetra-ai/.env.';
 
@@ -316,24 +355,39 @@ export const videoAnalysisService = {
     opts: { batchId?: string; cameraIds?: string[]; autoStart?: boolean } = {},
   ): Promise<{ batchId: string; added: AnalysisVideo[]; errors: Array<{ source_name: string; error: string }> }> {
     if (isMockMode) throw new Error(MOCK_GUARD);
-    const form = new FormData();
-    files.forEach((f) => form.append('files', f));
-    if (opts.batchId) form.append('batch_id', opts.batchId);
-    if (opts.cameraIds?.length) form.append('camera_ids', opts.cameraIds.join(','));
-    form.append('auto_start', String(Boolean(opts.autoStart)));
-    const res = await http.post<{
-      batch_id: string;
-      added: AnalysisVideoDto[];
-      errors: Array<{ source_name: string; error: string }>;
-    }>('/analysis/videos/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 0,
-    });
-    return {
-      batchId: res.data.batch_id,
-      added: (res.data.added ?? []).map(toVideo),
-      errors: res.data.errors ?? [],
-    };
+    const batchId = opts.batchId ?? Math.random().toString(36).slice(2, 14);
+    const added: AnalysisVideo[] = [];
+    const errors: Array<{ source_name: string; error: string }> = [];
+    // Bodies above the threshold travel as small chunks: hosted previews
+    // reject one big multipart with HTTP 413, chunks stay far below any cap.
+    const small = files.filter((f) => f.size <= CHUNK_THRESHOLD);
+    const big = files.filter((f) => f.size > CHUNK_THRESHOLD);
+
+    if (small.length) {
+      const form = new FormData();
+      small.forEach((f) => form.append('files', f));
+      form.append('batch_id', batchId);
+      if (opts.cameraIds?.length) form.append('camera_ids', opts.cameraIds.join(','));
+      form.append('auto_start', String(Boolean(opts.autoStart) && big.length === 0));
+      const res = await http.post<{
+        batch_id: string;
+        added: AnalysisVideoDto[];
+        errors: Array<{ source_name: string; error: string }>;
+      }>('/analysis/videos/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 0,
+      });
+      added.push(...(res.data.added ?? []).map(toVideo));
+      errors.push(...(res.data.errors ?? []));
+    }
+    for (const f of big) {
+      try {
+        added.push(await uploadChunked(f, batchId, Boolean(opts.autoStart)));
+      } catch (e: unknown) {
+        errors.push({ source_name: f.name, error: e instanceof Error ? e.message : 'Upload failed' });
+      }
+    }
+    return { batchId, added, errors };
   },
 
   async validateDriveLink(url: string): Promise<DriveValidation> {
