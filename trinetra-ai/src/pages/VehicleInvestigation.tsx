@@ -8,6 +8,7 @@ import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { VehicleInfoPanel } from '@/components/vehicle/VehicleInfoPanel';
 import { DetectionTable } from '@/components/vehicle/DetectionTable';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
+import { PhotoEvidenceSearch } from '@/components/vehicle/PhotoEvidenceSearch';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
 import { InvalidPlateNotice } from '@/components/vehicle/InvalidPlateNotice';
@@ -256,6 +257,7 @@ export default function VehicleInvestigation() {
         </Panel>
 
         <Panel title="Photo evidence" icon={FileImage} className="xl:col-span-4">
+          <PhotoEvidenceSearch />
           <EvidencePanel event={activeEvent} />
         </Panel>
       </div>

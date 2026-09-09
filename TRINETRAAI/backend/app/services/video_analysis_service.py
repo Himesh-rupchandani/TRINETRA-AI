@@ -45,6 +45,7 @@ from .anpr_pipeline import (
     read_plate_for_vehicle,
 )
 from .simple_tracker import SimpleTracker
+from . import plate_evidence_search as photo_ev
 
 ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 ANALYSIS_ZONE = "Video Analysis"
@@ -322,6 +323,7 @@ def delete_video(db, video_id: str) -> None:
         raise AnalysisError(f"Video '{video_id}' not found.")
     if video.status in (PROCESSING, QUEUED, DOWNLOADING):
         raise AnalysisError("This video is being processed — wait for it to finish first.")
+    photo_ev.delete_for_video(db, video_id)
     db.query(VehicleEvent).filter(VehicleEvent.video_id == video_id).delete(synchronize_session=False)
     cam = db.query(Camera).filter(Camera.camera_id == video.camera_id).first()
     if cam is not None and (cam.zone or "") == ANALYSIS_ZONE:
@@ -612,6 +614,20 @@ def _run_video(video_id: str) -> None:
                                 best_crop[track.track_id] = buf.tobytes()
                     except Exception:
                         pass
+                    if read.normalized:
+                        photo_ev.save_ocr_frame(
+                            db,
+                            video=video,
+                            frame=frame,
+                            plate=read.normalized,
+                            plate_raw=read.raw,
+                            confidence=float(read.confidence or 0.0),
+                            frame_number=frame_idx,
+                            offset_sec=offset_sec,
+                            bbox=(track.x1, track.y1, track.x2, track.y2),
+                            track_id=track.track_id,
+                            vehicle_class=track.class_name,
+                        )
 
                 if analyzed % 10 == 0:
                     video.frames_read = frame_idx + 1

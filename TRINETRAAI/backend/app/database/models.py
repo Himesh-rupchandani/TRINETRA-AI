@@ -236,3 +236,44 @@ class VideoSource(Base):
         Index("idx_video_sources_status", "status"),
         Index("idx_video_sources_batch", "batch_id"),
     )
+
+
+class PlateEvidenceFrame(Base):
+    """
+    One OCR read of a number plate during video analysis, with a real
+    full-frame JPEG captured from the source video at that timestamp.
+
+    Consecutive reads of the same plate are clustered at query time so the
+    Photo evidence search does not dump hundreds of near-identical frames.
+    """
+
+    __tablename__ = "plate_evidence_frames"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    video_id = Column(String(64), index=True, nullable=False)
+    camera_id = Column(String(50), index=True, nullable=False)
+    plate_number = Column(String(30), index=True, nullable=False)
+    plate_raw = Column(String(100), nullable=True)
+    plate_confidence = Column(Float, nullable=True)
+    vehicle_class = Column(String(50), nullable=True)
+    track_id = Column(Integer, nullable=True)
+    frame_number = Column(Integer, nullable=True)
+    video_offset_sec = Column(Float, nullable=True)
+    bbox_json = Column(String(200), nullable=True)
+    evidence_ref = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+
+    @property
+    def bbox(self):
+        try:
+            return json.loads(self.bbox_json) if self.bbox_json else None
+        except Exception:
+            return None
+
+    @bbox.setter
+    def bbox(self, value):
+        self.bbox_json = json.dumps([round(float(v), 1) for v in value]) if value else None
+
+    __table_args__ = (
+        Index("idx_pef_plate_video", "plate_number", "video_id"),
+    )

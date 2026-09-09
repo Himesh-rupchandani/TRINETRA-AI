@@ -168,6 +168,32 @@ export interface AnalysisResults {
   possible_matches: PossibleMatch[];
 }
 
+export interface PhotoEvidenceMatch {
+  occurrence: number;
+  plate: string;
+  timestamp: string;
+  video_offset_sec: number | null;
+  frame_number: number | null;
+  confidence: number;
+  camera_id: string;
+  video_id: string | null;
+  source_name: string | null;
+  vehicle_class: string | null;
+  bbox: number[] | null;
+  grouped_detections: number;
+  frame_url: string;
+  evidence_ref: string;
+}
+
+export interface PhotoEvidenceResult {
+  query: string;
+  normalized_query: string;
+  found: boolean;
+  match_count: number;
+  matches: PhotoEvidenceMatch[];
+  message: string | null;
+}
+
 export interface PlateSearchResult {
   query: string;
   normalized_query: string;
@@ -380,6 +406,16 @@ export const videoAnalysisService = {
     if (isMockMode) throw new Error(MOCK_GUARD);
     return get<PlateSearchResult>('/analysis/search', {
       params: { plate, ...(batchId ? { batch_id: batchId } : {}) },
+    });
+  },
+
+  async photoEvidence(
+    plate: string,
+    videoId?: string,
+  ): Promise<PhotoEvidenceResult> {
+    if (isMockMode) throw new Error(MOCK_GUARD);
+    return get<PhotoEvidenceResult>('/analysis/photo-evidence', {
+      params: { plate, ...(videoId ? { video_id: videoId } : {}) },
     });
   },
 

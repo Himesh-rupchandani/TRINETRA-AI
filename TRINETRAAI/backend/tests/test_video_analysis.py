@@ -480,6 +480,35 @@ def test_16_summary_statistics(analysed):
 
 
 # --------------------------------------------------------------------------- #
+# 18. Photo evidence search returns real frames, clustered occurrences, empty state
+# --------------------------------------------------------------------------- #
+def test_18_photo_evidence_search_returns_real_frames(client, analysed):
+    hit = client.get("/api/analysis/photo-evidence", params={"plate": "gj 01 ab-1234"}).json()
+    assert hit["found"] is True
+    assert hit["normalized_query"] == "GJ01AB1234"
+    assert hit["match_count"] >= 2, "same plate in two videos must yield multiple frames"
+    assert len(hit["matches"]) == hit["match_count"]
+    cams = {m["camera_id"] for m in hit["matches"]}
+    assert {"TCAM1", "TCAM3"} <= cams
+    for m in hit["matches"]:
+        assert m["plate"] == "GJ01AB1234"
+        assert m["frame_url"]
+        assert m["timestamp"]
+        img = client.get(m["frame_url"] if m["frame_url"].startswith("/api") else f"/api{m['frame_url']}")
+        if img.status_code != 200:
+            img = client.get(f"/api/evidence/{m['evidence_ref']}")
+        assert img.status_code == 200, img.text
+        assert img.headers.get("content-type", "").startswith("image/")
+        assert len(img.content) > 100, "must be an actual JPEG, not a placeholder"
+
+    miss = client.get("/api/analysis/photo-evidence", params={"plate": "ZZ99NOTHERE"}).json()
+    assert miss["found"] is False
+    assert miss["match_count"] == 0
+    assert miss["matches"] == []
+    assert "No matching number plate found" in (miss["message"] or "")
+
+
+# --------------------------------------------------------------------------- #
 # 17. Removing a video removes its sightings; existing endpoints still work
 # --------------------------------------------------------------------------- #
 def test_17_delete_video_and_no_regression(client, analysed, clips):

@@ -33,6 +33,7 @@ from ..core.logging_config import logger
 from ..database.database import get_db
 from ..database.models import VehicleEvent, VideoSource
 from ..services import gdrive_service, plate_matching
+from ..services import plate_evidence_search
 from ..services import video_analysis_service as vas
 
 router = APIRouter(prefix="/analysis", tags=["Video Analysis"])
@@ -210,6 +211,21 @@ def search_plate(
 ):
     try:
         return plate_matching.search(db, plate, batch_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+
+@router.get(
+    "/photo-evidence",
+    summary="Search number plate → matching video frames for Photo evidence",
+)
+def photo_evidence(
+    plate: str = Query(..., min_length=1, description="Number plate, any formatting"),
+    video_id: Optional[str] = Query(None, description="Limit search to one analysed video"),
+    db: Session = Depends(get_db),
+):
+    try:
+        return plate_evidence_search.search_frames(db, plate, video_id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 

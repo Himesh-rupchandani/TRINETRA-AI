@@ -5,6 +5,7 @@ import { InvestigationLayout } from '@/layouts/InvestigationLayout';
 import { CameraPlayer } from '@/components/camera/CameraPlayer';
 import { UploadedVideoPanel } from '@/components/camera/UploadedVideoPanel';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
+import { PhotoEvidenceSearch } from '@/components/vehicle/PhotoEvidenceSearch';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { Panel, AsyncBoundary, KeyValue, ErrorState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
@@ -228,6 +229,7 @@ export default function CameraDetail() {
               </Panel>
 
               <Panel title="Photo evidence" icon={ScanLine}>
+                <PhotoEvidenceSearch />
                 <EvidencePanel event={activeEvidence} dense />
               </Panel>
             </div>
