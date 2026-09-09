@@ -93,10 +93,10 @@ export const JOURNEY_SEEDS: JourneySeed[] = [
     model: 'Swift VXI',
     owner: 'DEMO RECORD — H. Trivedi (Paldi)',
     hops: [
-      { cam: 'CAM04', h: 14, m: 12, s: 8, conf: 96.4 },
-      { cam: 'CAM08', h: 14, m: 27, s: 19, conf: 93.1 },
-      { cam: 'CAM12', h: 14, m: 41, s: 5, conf: 97.8 },
-      { cam: 'CAM17', h: 15, m: 3, s: 41, conf: 91.6 },
+      { cam: 'CAM04', h: 0, m: 52, s: 8, conf: 96.4 },
+      { cam: 'CAM17', h: 3, m: 57, s: 41, conf: 93.1 },
+      { cam: 'CAM08', h: 5, m: 23, s: 12, conf: 97.8 },
+      { cam: 'CAM07', h: 6, m: 28, s: 44, conf: 91.6 },
     ],
   },
   {
@@ -107,11 +107,9 @@ export const JOURNEY_SEEDS: JourneySeed[] = [
     model: 'Supro',
     owner: 'DEMO RECORD — Registered to commercial fleet',
     hops: [
-      { cam: 'CAM27', h: 13, m: 48, s: 22, conf: 89.7 },
-      { cam: 'CAM06', h: 13, m: 59, s: 44, conf: 94.2 },
-      { cam: 'CAM05', h: 14, m: 12, s: 57, conf: 92.5 },
-      { cam: 'CAM11', h: 14, m: 33, s: 9, conf: 88.4 },
-      { cam: 'CAM09', h: 14, m: 46, s: 31, conf: 95.0 },
+      { cam: 'CAM09', h: 1, m: 23, s: 15, conf: 89.7 },
+      { cam: 'CAM17', h: 2, m: 48, s: 9, conf: 94.2 },
+      { cam: 'CAM30', h: 4, m: 32, s: 27, conf: 92.5 },
     ],
   },
   {
@@ -122,10 +120,10 @@ export const JOURNEY_SEEDS: JourneySeed[] = [
     model: 'LPT 1618',
     owner: 'DEMO RECORD — Goods carrier (permit revoked)',
     hops: [
-      { cam: 'CAM29', h: 12, m: 5, s: 12, conf: 90.3 },
-      { cam: 'CAM28', h: 12, m: 21, s: 40, conf: 87.9 },
-      { cam: 'CAM30', h: 12, m: 44, s: 3, conf: 93.6 },
-      { cam: 'CAM16', h: 13, m: 9, s: 55, conf: 91.2 },
+      { cam: 'CAM24', h: 0, m: 38, s: 40, conf: 90.3 },
+      { cam: 'CAM21', h: 2, m: 7, s: 53, conf: 87.9 },
+      { cam: 'CAM22', h: 2, m: 34, s: 41, conf: 93.6 },
+      { cam: 'CAM30', h: 5, m: 58, s: 19, conf: 91.2 },
     ],
   },
 ];
@@ -183,12 +181,9 @@ function buildAmbientEvents(count = 340): VehicleEvent[] {
     let eventType: EventType = conf > 78 ? 'ANPR_READ' : 'VEHICLE_DETECTION';
     let severity: Severity = 'INFO';
 
-    // A few ambient watchlist hits so the alert history is not empty.
-    if (roll > 0.965) {
-      plate = pick(['GJ12PQ8899', 'GJ16TU9090', 'GJ21RS3344', 'GJ06KL2211', 'GJ03DT5566']);
-      eventType = 'WATCHLIST_MATCH';
-      severity = watchlistByPlate(plate)?.severity ?? 'MEDIUM';
-    } else if (roll > 0.94) {
+    // (Repeat watchlist sightings live in buildAmbientMiniJourneys below, as
+    // coherent two-hop runs — never sprinkled at random cameras.)
+    if (roll > 0.94) {
       eventType = 'SPEED_VIOLATION';
       severity = 'MEDIUM';
     } else if (roll > 0.925) {
@@ -212,7 +207,7 @@ function buildAmbientEvents(count = 340): VehicleEvent[] {
         colour: pick(COLOURS),
         eventType,
         severity,
-        watchlistMatch: eventType === 'WATCHLIST_MATCH',
+        watchlistMatch: false,
         direction: pick(['N→S', 'S→N', 'E→W', 'W→E']),
         speedKmph: Math.round(between(18, eventType === 'SPEED_VIOLATION' ? 96 : 62)),
       }),
@@ -244,7 +239,64 @@ function buildAmbientEvents(count = 340): VehicleEvent[] {
 
 export const journeyEvents = buildJourneyEvents();
 
-export const mockEvents: VehicleEvent[] = [...journeyEvents, ...buildAmbientEvents()].sort(
+/* ------------------------------------------------------------------ *
+ * Ambient repeat sightings — the recycled watchlist plates as         *
+ * coherent two-hop runs at 63–66 km/h, never random sprinkles. Times  *
+ * are minutes-ago so they always read as recent history.              *
+ * ------------------------------------------------------------------ */
+interface MiniHop {
+  cam: string;
+  agoMin: number;
+  conf: number;
+}
+
+const AMBIENT_MINIS: Array<{
+  plate: string;
+  vehicleClass: NonNullable<VehicleEvent['vehicleClass']>;
+  colour: string;
+  hops: [MiniHop, MiniHop];
+}> = [
+  { plate: 'GJ03DT5566', vehicleClass: 'BUS', colour: 'White', hops: [{ cam: 'CAM04', agoMin: 46, conf: 93.5 }, { cam: 'CAM24', agoMin: 18, conf: 91.2 }] },
+  { plate: 'GJ16TU9090', vehicleClass: 'TRUCK', colour: 'Blue', hops: [{ cam: 'CAM18', agoMin: 102, conf: 89.8 }, { cam: 'CAM09', agoMin: 16, conf: 94.4 }] },
+  { plate: 'GJ21RS3344', vehicleClass: 'CAR', colour: 'Silver', hops: [{ cam: 'CAM24', agoMin: 118, conf: 90.6 }, { cam: 'CAM22', agoMin: 25, conf: 92.9 }] },
+  { plate: 'GJ06KL2211', vehicleClass: 'VAN', colour: 'Grey', hops: [{ cam: 'CAM21', agoMin: 115, conf: 87.3 }, { cam: 'CAM24', agoMin: 27, conf: 95.1 }] },
+  { plate: 'GJ12PQ8899', vehicleClass: 'CAR', colour: 'Red', hops: [{ cam: 'CAM07', agoMin: 88, conf: 91.7 }, { cam: 'CAM08', agoMin: 25, conf: 88.5 }] },
+];
+
+function buildAmbientMiniJourneys(): VehicleEvent[] {
+  const now = Date.now();
+  const out: VehicleEvent[] = [];
+  AMBIENT_MINIS.forEach((m, mi) => {
+    const severity = watchlistByPlate(m.plate)?.severity ?? 'MEDIUM';
+    m.hops.forEach((hop, hi) => {
+      const cam = cameraByName(hop.cam)!;
+      out.push(
+        attachEvidence({
+          id: `evt-a-mini-${mi + 1}${hi + 1}`,
+          cameraId: cam.id,
+          cameraName: cam.name,
+          vehicleId: 2000 + mi * 10 + hi,
+          plate: m.plate,
+          plateConfidence: hop.conf,
+          timestamp: new Date(now - hop.agoMin * 60_000).toISOString(),
+          latitude: cam.latitude,
+          longitude: cam.longitude,
+          location: cam.location,
+          vehicleClass: m.vehicleClass,
+          colour: m.colour,
+          eventType: 'WATCHLIST_MATCH',
+          severity,
+          watchlistMatch: true,
+          direction: pick(['N→S', 'S→N', 'E→W', 'W→E']),
+          speedKmph: Math.round(between(58, 72)),
+        }),
+      );
+    });
+  });
+  return out;
+}
+
+export const mockEvents: VehicleEvent[] = [...journeyEvents, ...buildAmbientMiniJourneys(), ...buildAmbientEvents()].sort(
   (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
 );
 

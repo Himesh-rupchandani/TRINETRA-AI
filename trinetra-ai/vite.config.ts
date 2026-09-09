@@ -15,18 +15,21 @@ import path from 'node:path';
 // Sentinel gateway still authenticates every connection (integrator guide):
 // the proxy adds the Authorization header server-side.
 
-function sentinelProxy(env: Record<string, string | undefined>): ProxyOptions {
-  const target = env.SENTINEL_WHEP_ORIGIN || 'http://103.250.160.189:8889';
+function sentinelBasic(env: Record<string, string | undefined>): string | null {
   const email = (env.SENTINEL_EMAIL ?? '').trim();
   const password = (env.SENTINEL_PASSWORD ?? '').trim();
-  // Sentinel WHEP authenticates with your registered email + access password
-  // embedded in the URL (guide §0/§1) — equivalent to HTTP Basic auth. The
-  // browser only ever talks to the same-origin /sentinel path, so the proxy
-  // injects the Authorization header. No credential is compiled into the app.
-  const basic =
-    email && password
-      ? `Basic ${Buffer.from(`${email}:${password}`).toString('base64')}`
-      : null;
+  // Sentinel authenticates with your registered email + access password —
+  // equivalent to HTTP Basic auth. The browser only ever talks to the
+  // same-origin /sentinel path, so the proxy injects the Authorization
+  // header. No credential is compiled into the app.
+  return email && password
+    ? `Basic ${Buffer.from(`${email}:${password}`).toString('base64')}`
+    : null;
+}
+
+function sentinelProxy(env: Record<string, string | undefined>): ProxyOptions {
+  const target = env.SENTINEL_WHEP_ORIGIN || 'http://103.250.160.189:8889';
+  const basic = sentinelBasic(env);
 
   if (!basic && /103\.250\.160\.189/.test(target)) {
     // eslint-disable-next-line no-console
@@ -70,6 +73,34 @@ function sentinelProxy(env: Record<string, string | undefined>): ProxyOptions {
   };
 }
 
+/**
+ * HLS compatibility playback (guide §1): /sentinel/live/... -> /live/...
+ * on the gateway's HTTP port. Playlists use relative segment URLs, so
+ * segments resolve under /sentinel/live/... and ride the same proxy.
+ */
+function sentinelHlsProxy(env: Record<string, string | undefined>): ProxyOptions {
+  let host = '103.250.160.189';
+  try {
+    host = new URL(env.SENTINEL_WHEP_ORIGIN || 'http://103.250.160.189:8889').hostname;
+  } catch {
+    /* keep the default host */
+  }
+  return {
+    target: env.SENTINEL_HLS_ORIGIN || `http://${host}`,
+    changeOrigin: true,
+    secure: false,
+    rewrite: (p) => p.replace(/^\/sentinel\/live/, '/live'),
+    configure(proxy) {
+      const basic = sentinelBasic(env);
+      if (basic) {
+        proxy.on('proxyReq', (proxyReq) => {
+          proxyReq.setHeader('Authorization', basic);
+        });
+      }
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // Read the NON-VITE_ server-side Sentinel vars from trinetra-ai/.env, with
   // real shell environment variables taking precedence over the file.
@@ -78,6 +109,7 @@ export default defineConfig(({ mode }) => {
     ...process.env,
   };
   const proxy = sentinelProxy(env);
+  const hlsProxy = sentinelHlsProxy(env);
 
   return {
     plugins: [react()],
@@ -91,6 +123,8 @@ export default defineConfig(({ mode }) => {
       // Allow the sandboxed preview host + any deployment host.
       allowedHosts: true,
       proxy: {
+        // First match wins: the HLS prefix must precede the WHEP prefix.
+        '/sentinel/live': hlsProxy,
         '/sentinel': proxy,
         // CV engine's annotated MJPEG preview (live detection boxes).
         '/cvfeed': {
@@ -115,6 +149,8 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       allowedHosts: true,
       proxy: {
+        // First match wins: the HLS prefix must precede the WHEP prefix.
+        '/sentinel/live': hlsProxy,
         '/sentinel': proxy,
         '/cvfeed': {
           target: process.env.CV_FEED_ORIGIN ?? 'http://localhost:8555',

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Cctv, LayoutGrid, RefreshCcw, Search, Table2, Upload, X } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { CameraCard } from '@/components/camera/CameraCard';
@@ -17,7 +17,13 @@ const STATUSES = ['ALL', 'ONLINE', 'DEGRADED', 'OFFLINE'] as const;
 
 export default function Cameras() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState('');
+  const [params] = useSearchParams();
+  const [query, setQuery] = useState(params.get('search') ?? '');
+
+  useEffect(() => {
+    const q = params.get('search');
+    if (q) setQuery(q);
+  }, [params]);
   const [status, setStatus] = useState<CameraFilters['status']>('ALL');
   const [department, setDepartment] = useState('ALL');
   const [zone, setZone] = useState('ALL');
@@ -51,7 +57,7 @@ export default function Cameras() {
       <PageHeader
         title="Live Cameras"
         icon={Cctv}
-        tone="blue"
+        tone="green"
         subtitle={
           <>
             {stats.total} cameras · <span className="text-online">{stats.online} working</span> ·{' '}
@@ -212,7 +218,7 @@ export default function Cameras() {
           ) : (
             <Panel>
               <div className="overflow-x-auto">
-                <table className="data-table">
+                <table className="data-table data-table-page">
                   <thead>
                     <tr>
                       <th scope="col">Camera</th>

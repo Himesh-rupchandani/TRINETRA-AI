@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Bell, Search, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
@@ -18,9 +19,25 @@ export default function Alerts() {
   const [severity, setSeverity] = useState<Severity | 'ALL'>('ALL');
   const [query, setQuery] = useState('');
   const [evidenceFor, setEvidenceFor] = useState<Alert | null>(null);
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
+  const [flash, setFlash] = useState<string | null>(highlightId);
+
+  useEffect(() => {
+    setFlash(highlightId);
+  }, [highlightId]);
+
 
   const { active, history, counts, acknowledge, resolve } = useAlerts({ severity, query });
   const list = tab === 'ACTIVE' ? active : history;
+
+  // Deep-link from a live toast: scroll the alert into view and ring it briefly.
+  useEffect(() => {
+    if (!flash) return;
+    document.getElementById(`alert-${flash}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const t = setTimeout(() => setFlash(null), 5000);
+    return () => clearTimeout(t);
+  }, [flash, list.length]);
 
   const evidenceEvent = useAsync(
     () => eventService.byId(evidenceFor!.eventId),
@@ -148,6 +165,7 @@ export default function Alerts() {
                         onAcknowledge={acknowledge}
                         onResolve={resolve}
                         onViewEvidence={setEvidenceFor}
+                        highlighted={flash === a.id}
                       />
                     ))}
                   </div>
@@ -164,6 +182,7 @@ export default function Alerts() {
                 onAcknowledge={acknowledge}
                 onResolve={resolve}
                 onViewEvidence={setEvidenceFor}
+                highlighted={flash === a.id}
               />
             ))}
           </div>

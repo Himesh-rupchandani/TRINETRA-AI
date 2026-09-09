@@ -62,7 +62,7 @@ export function TraceSearchBar({
         </div>
         <button
           type="submit"
-          className={cn('btn-solid shrink-0', big ? 'h-12 px-6 text-sm' : 'h-10 px-5 text-sm')}
+          className={cn('btn-solid shrink-0 bg-gradient-to-br from-blue-600 to-blue-800 shadow', big ? 'h-12 px-6 text-sm' : 'h-10 px-5 text-sm')}
           disabled={loading}
         >
           {loading ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Search size={15} aria-hidden />}
@@ -82,8 +82,8 @@ export function TraceSearchBar({
                 onTrace(s);
               }}
               className={cn(
-                'chip border-line bg-surface-2 font-mono text-ink-muted hover:border-brand/50 hover:text-brand',
-                s === config.demo.primaryPlate && 'border-brand/40 text-brand',
+                'chip rounded-full border-line bg-surface-2 px-3 py-1 font-mono shadow-sm transition-all hover:-translate-y-px hover:border-brand hover:bg-brand hover:text-white hover:shadow',
+                s === config.demo.primaryPlate && 'border-brand/50 bg-brand/10 text-brand',
               )}
             >
               {s}

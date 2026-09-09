@@ -27,7 +27,7 @@ export function DetectionTable({
 
   return (
     <div className={cn('overflow-x-auto', className)}>
-      <table className="data-table">
+      <table className="data-table data-table-page">
         <caption className="sr-only">Detection history</caption>
         <thead>
           <tr>

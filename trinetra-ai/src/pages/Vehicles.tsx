@@ -4,13 +4,14 @@ import { ArrowRight, Car, MapPin, Route, Search as SearchIcon, ShieldAlert, Shie
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
 import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
+import { InvalidPlateNotice } from '@/components/vehicle/InvalidPlateNotice';
 import { IconTile } from '@/components/common/IconTile';
 import { SeverityChip } from '@/components/common/Chips';
 import { PlateLink } from '@/components/common/Links';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAsync } from '@/hooks/useAsync';
 import { vehicleService } from '@/services/vehicleService';
-import { formatDateTime, formatTime, formatVideoOffset, prettyPlate } from '@/lib/utils';
+import { formatDateTime, formatTime, formatVideoOffset, isValidPlate, prettyPlate } from '@/lib/utils';
 
 /**
  * VEHICLE SEARCH — the hero screen.
@@ -42,6 +43,7 @@ export default function Vehicles() {
       <PageHeader
         title="Find a Vehicle"
         icon={Car}
+        tone="sky"
         subtitle="Type a number plate to see everywhere it has been seen."
       />
 
@@ -71,7 +73,11 @@ export default function Vehicles() {
 
           {error && !loading && (
             <div className="panel mt-4">
-              <ErrorState message={error} />
+              {!isValidPlate(initial || '') ? (
+                <InvalidPlateNotice raw={initial} />
+              ) : (
+                <ErrorState message={error} />
+              )}
             </div>
           )}
 
@@ -219,7 +225,7 @@ export default function Vehicles() {
                 <LoadingState label="Loading watchlist" />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="data-table">
+                  <table className="data-table data-table-page">
                     <thead>
                       <tr>
                         <th scope="col">Plate</th>

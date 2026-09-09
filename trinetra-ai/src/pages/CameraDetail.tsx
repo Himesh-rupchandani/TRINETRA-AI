@@ -216,7 +216,7 @@ export default function CameraDetail() {
                 </dl>
               </Panel>
 
-              <Panel title="Where this camera is" icon={MapPin} className="min-h-[220px]" bodyClassName="relative">
+              <Panel title="Where this camera is" icon={MapPin} className="min-h-[220px]" bodyClassName="relative isolate">
                 <LazyMap
                   cameras={[camera]}
                   selectedCameraId={camera.id}

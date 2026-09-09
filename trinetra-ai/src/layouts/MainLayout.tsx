@@ -1,37 +1,28 @@
-import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
-import { Sidebar } from '@/components/layout/Sidebar';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
+import { TopNav } from '@/components/layout/TopNav';
+import { HeroBanner } from '@/components/layout/HeroBanner';
 import { AlertBanner } from '@/components/layout/AlertBanner';
-import { useLocalStorage, useMediaQuery } from '@/hooks/useUi';
-import { cn } from '@/lib/utils';
+import { LiveAlertToaster } from '@/features/alerts/LiveAlertToaster';
 
-/** Standard control-room shell: persistent sidebar + header + alert banner. */
+/**
+ * Control-room shell: header on top, alert banner, hero card on the home
+ * page, then the workflow menu bar and the active page.
+ */
 export function MainLayout() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useLocalStorage('trinetra.sidebarCollapsed', false);
-  const isDesktop = useMediaQuery('(min-width: 1024px)');
-  const effectiveCollapsed = isDesktop ? collapsed : false;
+  const location = useLocation();
+  const isHome = location.pathname === '/';
 
   return (
-    <div className="flex h-full min-h-screen bg-surface-0">
-      <Sidebar open={mobileOpen} onClose={() => setMobileOpen(false)} collapsed={effectiveCollapsed} />
-      <div
-        className={cn(
-          'flex min-w-0 flex-1 flex-col transition-[padding] duration-200',
-          effectiveCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[240px]',
-        )}
-      >
-        <Header
-          onMenu={() => setMobileOpen(true)}
-          onToggleCollapse={() => setCollapsed(!collapsed)}
-          collapsed={effectiveCollapsed}
-        />
-        <AlertBanner />
-        <main id="main" className="min-h-0 flex-1">
-          <Outlet />
-        </main>
-      </div>
+    <div className="flex min-h-screen flex-col bg-surface-0">
+      <Header />
+      {isHome && <AlertBanner />}
+      {isHome && <HeroBanner />}
+      <TopNav />
+      <main id="main" className="min-h-0 flex-1">
+        <Outlet />
+      </main>
+      <LiveAlertToaster />
     </div>
   );
 }

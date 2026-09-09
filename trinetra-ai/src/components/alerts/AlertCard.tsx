@@ -23,12 +23,14 @@ export function AlertCard({
   onResolve,
   onViewEvidence,
   compact = false,
+  highlighted = false,
 }: {
   alert: Alert;
   onAcknowledge: (id: string) => Promise<void>;
   onResolve?: (id: string) => Promise<void>;
   onViewEvidence?: (alert: Alert) => void;
   compact?: boolean;
+  highlighted?: boolean;
 }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -62,8 +64,10 @@ export function AlertCard({
 
   return (
     <article
+      id={`alert-${alert.id}`}
       className={cn(
-        'panel relative overflow-hidden transition-shadow hover:shadow-cardHover',
+        'panel relative scroll-mt-52 overflow-hidden transition-shadow hover:shadow-cardHover',
+        highlighted && 'ring-2 ring-brand',
         alert.status === 'NEW' && alert.severity === 'CRITICAL'
           ? 'alert-enter-pulse'
           : 'enter-up',

@@ -49,6 +49,7 @@ export function relativeTime(iso?: string, now: number = Date.now()): string {
 
 export function formatDuration(minutes: number): string {
   if (!Number.isFinite(minutes)) return '—';
+  if (minutes > 0 && minutes < 1) return `${Math.max(1, Math.round(minutes * 60))}s`;
   const m = Math.round(minutes);
   if (m < 60) return `${m}m`;
   return `${Math.floor(m / 60)}h ${m % 60}m`;

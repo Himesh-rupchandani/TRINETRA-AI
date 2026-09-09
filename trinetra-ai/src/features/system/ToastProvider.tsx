@@ -4,15 +4,27 @@ import { cn } from '@/lib/utils';
 
 type ToastKind = 'success' | 'error' | 'info' | 'warning';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: number;
   kind: ToastKind;
   title: string;
   detail?: string;
+  action?: ToastAction;
+}
+
+export interface PushOpts {
+  action?: ToastAction;
+  /** Auto-dismiss delay. Defaults to 5000ms. */
+  durationMs?: number;
 }
 
 interface ToastContextValue {
-  push: (kind: ToastKind, title: string, detail?: string) => void;
+  push: (kind: ToastKind, title: string, detail?: string, opts?: PushOpts) => void;
   success: (title: string, detail?: string) => void;
   error: (title: string, detail?: string) => void;
   info: (title: string, detail?: string) => void;
@@ -43,10 +55,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const remove = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), []);
 
   const push = useCallback(
-    (kind: ToastKind, title: string, detail?: string) => {
+    (kind: ToastKind, title: string, detail?: string, opts?: PushOpts) => {
       const id = ++counter;
-      setToasts((t) => [...t.slice(-3), { id, kind, title, detail }]);
-      setTimeout(() => remove(id), 5000);
+      setToasts((t) => [...t.slice(-3), { id, kind, title, detail, action: opts?.action }]);
+      setTimeout(() => remove(id), opts?.durationMs ?? 5000);
     },
     [remove],
   );
@@ -84,6 +96,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-ink">{t.title}</p>
                 {t.detail && <p className="mt-0.5 text-2xs text-ink-muted">{t.detail}</p>}
+                {t.action && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      t.action!.onClick();
+                      remove(t.id);
+                    }}
+                    className="mt-1 text-2xs font-bold underline underline-offset-2 hover:opacity-80"
+                  >
+                    {t.action.label}
+                  </button>
+                )}
               </div>
               <button
                 type="button"

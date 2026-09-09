@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Cctv, Layers, Loader2, Play, RefreshCcw, ScanSearch } from 'lucide-react';
+import { AlertTriangle, Cctv, Layers, Loader2, Play, RefreshCcw, Video } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Panel, EmptyState, ErrorState } from '@/components/common/Panel';
 import { AddVideosPanel } from '@/components/analysis/AddVideosPanel';
@@ -115,9 +115,9 @@ export default function VideoAnalysis() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Video Analysis"
-        icon={ScanSearch}
-        tone="purple"
-        subtitle="Analyse several CCTV videos together and find the vehicles that appear in more than one."
+        icon={Video}
+        tone="blue"
+        subtitle="Upload and analyse CCTV or video files — find the vehicles that appear in more than one."
         actions={
           <>
             <button type="button" className="btn-ghost" onClick={() => void refreshAll()} disabled={loading}>

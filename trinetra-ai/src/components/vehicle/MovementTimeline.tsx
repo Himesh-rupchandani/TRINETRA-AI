@@ -2,10 +2,15 @@ import { ArrowDown, Clock, Gauge, MapPin, Route } from 'lucide-react';
 import type { RoutePoint } from '@/types';
 import { cn, formatDuration, formatTime, formatVideoOffset } from '@/lib/utils';
 import { EmptyState } from '@/components/common/Panel';
+import { useRoadLegs } from '@/hooks/useRoadLegs';
+
+function formatRoadKm(km: number): string {
+  return km >= 10 ? km.toFixed(0) : km.toFixed(1);
+}
 
 /**
  * Chronological cross-camera movement timeline:
- * CAM04 → CAM08 → CAM12 → CAM17, with dwell gaps and derived speed.
+ * CAM04 → CAM17 → CAM08 → CAM07, with observed gaps, road legs and derived speed.
  */
 export function MovementTimeline({
   points,
@@ -18,6 +23,7 @@ export function MovementTimeline({
   onSelect?: (point: RoutePoint) => void;
   className?: string;
 }) {
+  const legs = useRoadLegs(points);
   if (!points.length) {
     return (
       <EmptyState
@@ -33,6 +39,8 @@ export function MovementTimeline({
       {points.map((p, i) => {
         const active = p.sequence === activeSequence;
         const last = i === points.length - 1;
+        const prev = i > 0 ? points[i - 1] : undefined;
+        const sameCamera = prev != null && prev.cameraId === p.cameraId;
         return (
           <li key={`${p.eventId}-${p.sequence}`} className="relative pl-8">
             {!last && <span className="absolute left-[13px] top-6 h-[calc(100%-8px)] w-px bg-brand/25" aria-hidden />}
@@ -76,11 +84,28 @@ export function MovementTimeline({
               </p>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-ink-faint">
                 <span>Plate match {p.plateConfidence.toFixed(1)}%</span>
-                {p.distanceKm != null && <span>{p.distanceKm.toFixed(2)} km from the last camera</span>}
-                {p.speedKmph != null && (
-                  <span className="inline-flex items-center gap-0.5">
-                    <Gauge size={9} aria-hidden /> {p.speedKmph} km/h average
-                  </span>
+                {sameCamera ? (
+                  <span>Same camera · still in view</span>
+                ) : (
+                  <>
+                    {legs[p.sequence] != null && (
+                      <span
+                        title={
+                          legs[p.sequence].live
+                            ? 'Live road distance and typical drive time'
+                            : 'Road distance and typical drive time, estimated from map data'
+                        }
+                      >
+                        {formatRoadKm(legs[p.sequence].roadKm)} km by road · typically{' '}
+                        {formatDuration(legs[p.sequence].typicalMinutes)}
+                      </span>
+                    )}
+                    {p.speedKmph != null && (p.gapMinutes ?? 0) >= 1 && (
+                      <span className="inline-flex items-center gap-0.5">
+                        <Gauge size={9} aria-hidden /> {p.speedKmph} km/h average
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </button>

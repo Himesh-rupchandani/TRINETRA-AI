@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
-import { formatDateTime, formatTime, prettyPlate, prettyVehicleClass } from '@/lib/utils';
+import { formatDateTime, formatDuration, formatTime, prettyPlate, prettyVehicleClass } from '@/lib/utils';
+import { useRoadLeg } from '@/hooks/useRoadLegs';
 import { StatusChip } from '@/components/common/Chips';
 
 /** Popups intentionally repeat the key investigative fields: camera, time, plate, confidence. */
@@ -65,7 +66,16 @@ export function EventPopup({ event }: { event: VehicleEvent }) {
   );
 }
 
-export function RoutePopup({ point, plate }: { point: RoutePoint; plate?: string }) {
+export function RoutePopup({
+  point,
+  prev,
+  plate,
+}: {
+  point: RoutePoint;
+  prev?: RoutePoint;
+  plate?: string;
+}) {
+  const leg = useRoadLeg(prev, point);
   return (
     <div className="min-w-[210px] p-2.5 text-ink">
       <div className="mb-1.5 flex items-center gap-2">
@@ -89,16 +99,29 @@ export function RoutePopup({ point, plate }: { point: RoutePoint; plate?: string
             <dd className="text-right font-mono">{point.gapMinutes.toFixed(0)} min</dd>
           </>
         )}
-        {point.distanceKm != null && (
+        {prev?.cameraId === point.cameraId ? (
           <>
-            <dt className="text-ink-faint">Distance</dt>
-            <dd className="text-right font-mono">{point.distanceKm.toFixed(2)} km</dd>
+            <dt className="text-ink-faint">Leg</dt>
+            <dd className="text-right font-mono">Same camera</dd>
           </>
-        )}
-        {point.speedKmph != null && (
+        ) : (
           <>
-            <dt className="text-ink-faint">Avg speed</dt>
-            <dd className="text-right font-mono">{point.speedKmph} km/h</dd>
+            {leg != null && (
+              <>
+                <dt className="text-ink-faint">Road distance</dt>
+                <dd className="text-right font-mono">
+                  {leg.roadKm >= 10 ? leg.roadKm.toFixed(0) : leg.roadKm.toFixed(1)} km
+                </dd>
+                <dt className="text-ink-faint">Typical drive</dt>
+                <dd className="text-right font-mono">{formatDuration(leg.typicalMinutes)}</dd>
+              </>
+            )}
+            {point.speedKmph != null && (point.gapMinutes ?? 0) >= 1 && (
+              <>
+                <dt className="text-ink-faint">Avg speed</dt>
+                <dd className="text-right font-mono">{point.speedKmph} km/h</dd>
+              </>
+            )}
           </>
         )}
       </dl>

@@ -136,6 +136,14 @@
     @apply sticky top-0 z-10 bg-surface-2 text-left text-xs font-semibold
            text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
   }
+  /* Window-scrolled tables: stick below the sticky header (56px) + menu
+     bar (measured live by TopNav into --trinetra-nav-h; 106px fallback
+     for first paint). z-0 tucks the header under the bars if their
+     heights ever drift, so page content can never paint over them. */
+  .data-table-page thead th {
+    top: calc(3.5rem + var(--trinetra-nav-h, 106px));
+    z-index: 0;
+  }
   .data-table tbody td {
     @apply px-4 py-3 border-b border-line/60 align-middle whitespace-nowrap;
   }
@@ -145,6 +153,15 @@
 
   .plate {
     @apply font-mono font-bold tracking-wider;
+  }
+
+  /* Horizontal top-nav scroller: swipe/scroll without a visible bar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   .link-btn {
@@ -204,6 +221,84 @@
 .leaflet-marker-icon.trinetra-marker {
   background: transparent;
   border: 0;
+  /* New markers ease in — opacity only, Leaflet owns the transform. */
+  animation: trinetra-dot-in 0.25s ease both;
+}
+/* Menu cards rise in one after another on load. */
+.trinetra-card-in {
+  animation: trinetra-card-in 0.45s ease both;
+}
+@keyframes trinetra-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trinetra-card-in,
+  .trinetra-live-dot span {
+    animation: none;
+  }
+}
+@keyframes trinetra-dot-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Route-playback dot: solid core with an expanding ping ring. */
+.trinetra-playback-dot {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+.trinetra-playback-dot::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+.trinetra-playback-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #2563eb;
+  animation: trinetra-ping 1.2s ease-out infinite;
+}
+@keyframes trinetra-ping {
+  0% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+/* Dashboard → home view transition: the old page sinks away, home rises in. */
+::view-transition-old(root) {
+  animation: trinetra-page-out 0.25s ease both;
+}
+::view-transition-new(root) {
+  animation: trinetra-page-in 0.35s ease both;
+}
+@keyframes trinetra-page-out {
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+  }
+}
+@keyframes trinetra-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
 }
 
 /* ============================================================

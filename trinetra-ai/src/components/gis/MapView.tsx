@@ -1,22 +1,26 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CircleMarker,
   MapContainer,
   Marker,
   Polyline,
   Popup,
+  ScaleControl,
   TileLayer,
   useMap,
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { Maximize, Minimize, Pause, Play, RotateCcw, X, ZoomIn } from 'lucide-react';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
-import { config } from '@/lib/config';
+import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
-import { cameraIcon, eventIcon, routeIcon } from './mapIcons';
+import { useRoutePlayback } from '@/hooks/useRoutePlayback';
+import { cameraIcon, eventIcon, playbackIcon, routeIcon } from './mapIcons';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
-/** Transparent placeholder so a blocked tile server degrades to the dark canvas. */
+/** Transparent placeholder so a blocked tile server degrades gracefully. */
 const ERROR_TILE =
   "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3C/svg%3E";
 
@@ -47,6 +51,23 @@ function PanTo({ target }: { target?: [number, number] | null }) {
   useEffect(() => {
     if (target) map.flyTo(target, Math.max(map.getZoom(), 15), { duration: 0.6 });
   }, [map, target?.[0], target?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+/** Sighting dots appear from this zoom down: statewide views stay clean. */
+const DETECTION_ZOOM = 10;
+
+/** Reports the live zoom so the map can layer markers by it. */
+function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    const report = () => onZoom(map.getZoom());
+    report();
+    map.on('zoomend', report);
+    return () => {
+      map.off('zoomend', report);
+    };
+  }, [map, onZoom]);
   return null;
 }
 
@@ -86,6 +107,8 @@ export interface MapViewProps {
   className?: string;
   /** Draw a coverage halo around each camera. */
   showCoverage?: boolean;
+  /** Fired as the replay dot reaches each stop (timeline sync). */
+  onPlaybackStop?: (point: RoutePoint) => void;
 }
 
 /**
@@ -108,8 +131,96 @@ export function MapView({
   center = config.map.center,
   className,
   showCoverage = false,
+  onPlaybackStop,
 }: MapViewProps) {
-  const tiles = config.map.tiles.light;
+  const [basemap, setBasemap] = useState<BasemapId>('street');
+  const [mapZoom, setMapZoom] = useState(zoom);
+  const tiles = config.map.tiles[basemap];
+  /**
+   * Fullscreen in two flavours. Native is preferred (the browser's top
+   * layer hides everything else). Inside an iframe without fullscreen
+   * permission — or an old browser — the request is denied, so a denied
+   * request portals the whole map to <body>: that escapes every ancestor
+   * stacking context (sticky header, later panels), so again NOTHING else
+   * shows. Either way there is always a visible way out (pill + Esc).
+   */
+  const [fsMode, setFsMode] = useState<'native' | 'fake' | null>(null);
+  const [fsPortalEl, setFsPortalEl] = useState<HTMLDivElement | null>(null);
+  const fullscreen = fsMode != null;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const playback = useRoutePlayback(route, onPlaybackStop);
+
+  const enterFake = () => {
+    const el = document.createElement('div');
+    el.className = 'fixed inset-0 z-[9999] bg-white';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Fullscreen map');
+    document.body.appendChild(el);
+    setFsPortalEl(el);
+    setFsMode('fake');
+  };
+
+  const exitFake = () => {
+    fsPortalEl?.remove();
+    setFsPortalEl(null);
+    setFsMode(null);
+  };
+
+  useEffect(() => {
+    const onFs = () => {
+      if (document.fullscreenElement) setFsMode('native');
+      else setFsMode((m) => (m === 'native' ? null : m));
+    };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  // The portal node is owned by this component: never leak it.
+  useEffect(
+    () => () => {
+      fsPortalEl?.remove();
+    },
+    [fsPortalEl],
+  );
+
+  // Fake fullscreen: Escape exits it, and the page behind stops scrolling.
+  useEffect(() => {
+    if (fsMode !== 'fake') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        fsPortalEl?.remove();
+        setFsPortalEl(null);
+        setFsMode(null);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [fsMode, fsPortalEl]);
+
+  const toggleFullscreen = () => {
+    if (fsMode === 'fake') {
+      exitFake();
+      return;
+    }
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+      return;
+    }
+    const el = rootRef.current;
+    if (el?.requestFullscreen) {
+      el.requestFullscreen().then(
+        () => {},
+        () => enterFake(),
+      );
+    } else {
+      enterFake();
+    }
+  };
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],
@@ -121,12 +232,9 @@ export function MapView({
     return events.map((e) => [e.latitude, e.longitude] as [number, number]);
   }, [routeLine, cameras, events]);
 
-  return (
-    // `isolate` creates a fresh stacking context so Leaflet's high z-index panes
-    // (tiles/markers/controls, z-index up to 1000) are confined to the map and
-    // never paint over the panel content above or below it. `overflow-hidden`
-    // additionally guarantees the map stays boxed inside its container.
-    <div className={cn('isolate overflow-hidden', className ?? 'h-full w-full')}>
+  const mapInner = (
+    <>
+
       <MapContainer
         center={center}
         zoom={zoom}
@@ -137,13 +245,16 @@ export function MapView({
         attributionControl
       >
         <TileLayer
+          key={basemap}
           url={tiles.base}
-          attribution={config.map.tileAttribution}
-          maxZoom={18}
+          attribution={config.map.attribution[basemap]}
+          maxZoom={19}
           errorTileUrl={ERROR_TILE}
         />
-        <TileLayer url={tiles.labels} maxZoom={18} errorTileUrl={ERROR_TILE} />
+        {tiles.labels && <TileLayer url={tiles.labels} maxZoom={19} errorTileUrl={ERROR_TILE} />}
+        <ScaleControl position="bottomright" imperial={false} />
         <ResizeGuard />
+        <ZoomTracker onZoom={setMapZoom} />
         <FitBounds points={fitPoints} enabled={fit} />
         <PanTo target={panTo} />
 
@@ -177,19 +288,20 @@ export function MapView({
           </Marker>
         ))}
 
-        {events.map((e) => (
-          <Marker
-            key={e.id}
-            position={[e.latitude, e.longitude]}
-            icon={eventIcon(e.watchlistMatch)}
-            eventHandlers={{ click: () => onSelectEvent?.(e) }}
-            title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
-          >
-            <Popup>
-              <EventPopup event={e} />
-            </Popup>
-          </Marker>
-        ))}
+        {mapZoom >= DETECTION_ZOOM &&
+          events.map((e) => (
+            <Marker
+              key={e.id}
+              position={[e.latitude, e.longitude]}
+              icon={eventIcon(e.watchlistMatch)}
+              eventHandlers={{ click: () => onSelectEvent?.(e) }}
+              title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
+            >
+              <Popup>
+                <EventPopup event={e} />
+              </Popup>
+            </Marker>
+          ))}
 
         {routeLine.length > 1 && (
           <>
@@ -202,7 +314,7 @@ export function MapView({
           </>
         )}
 
-        {route.map((p) => (
+        {route.map((p, i) => (
           <Marker
             key={`${p.eventId}-${p.sequence}`}
             position={[p.latitude, p.longitude]}
@@ -212,11 +324,132 @@ export function MapView({
             title={`Sighting ${p.sequence} — ${p.cameraName}`}
           >
             <Popup>
-              <RoutePopup point={p} plate={routePlate} />
+              <RoutePopup point={p} prev={i > 0 ? route[i - 1] : undefined} plate={routePlate} />
             </Popup>
           </Marker>
         ))}
+        {playback.started && route.length > 1 && (
+          <Marker
+            ref={playback.markerRef}
+            position={[route[0].latitude, route[0].longitude]}
+            icon={playbackIcon()}
+            interactive={false}
+            keyboard={false}
+            zIndexOffset={1000}
+          />
+        )}
       </MapContainer>
+      {events.length > 0 && mapZoom < DETECTION_ZOOM && (
+        <div className="absolute left-3 top-[76px] z-[1001] flex items-center gap-1.5 rounded-full border border-line bg-surface-1/95 px-3 py-1.5 text-2xs font-semibold text-ink-muted shadow-md backdrop-blur">
+          <ZoomIn size={12} aria-hidden />
+          Zoom in to see {events.length} sighting{events.length === 1 ? '' : 's'}
+        </div>
+      )}
+      <div className="absolute right-3 top-3 z-[1001] flex flex-col items-end gap-2">
+        <div
+          className="flex overflow-hidden rounded-lg border border-line bg-surface-1/95 shadow-md backdrop-blur"
+          role="group"
+          aria-label="Basemap style"
+        >
+          <button
+            type="button"
+            onClick={() => setBasemap('street')}
+            aria-pressed={basemap === 'street'}
+            className={cn(
+              'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
+              basemap === 'street' ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+            )}
+          >
+            Map
+          </button>
+          <button
+            type="button"
+            onClick={() => setBasemap('satellite')}
+            aria-pressed={basemap === 'satellite'}
+            className={cn(
+              'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
+              basemap === 'satellite' ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+            )}
+          >
+            Satellite
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          aria-label={fullscreen ? 'Exit fullscreen map' : 'Fullscreen map'}
+          title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-surface-1/95 text-ink-muted shadow-md backdrop-blur transition-colors hover:text-ink"
+        >
+          {fullscreen ? <Minimize size={14} aria-hidden /> : <Maximize size={14} aria-hidden />}
+        </button>
+      </div>
+      {route.length > 1 && (
+        <div className="absolute bottom-3 left-1/2 z-[1001] -translate-x-1/2">
+          <div className="flex items-center gap-2 rounded-full border border-line bg-surface-1/95 py-1.5 pl-1.5 pr-3 shadow-lg backdrop-blur">
+            <button
+              type="button"
+              onClick={playback.toggle}
+              aria-label={playback.playing ? 'Pause route replay' : 'Replay route'}
+              title={playback.playing ? 'Pause' : 'Replay route'}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand text-white shadow transition-transform hover:scale-105"
+            >
+              {playback.playing ? (
+                <Pause size={14} aria-hidden />
+              ) : (
+                <Play size={14} className="ml-0.5" aria-hidden />
+              )}
+            </button>
+            {playback.started && (
+              <button
+                type="button"
+                onClick={playback.reset}
+                aria-label="Reset replay"
+                title="Reset"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              >
+                <RotateCcw size={13} aria-hidden />
+              </button>
+            )}
+            <div className="min-w-[120px]">
+              <p className="whitespace-nowrap font-mono text-[10px] font-semibold text-ink">
+                {playback.started
+                  ? `Stop ${playback.stopIndex + 1} of ${route.length} \u00b7 ${route[playback.stopIndex]?.cameraName ?? ''}`
+                  : `Replay ${route.length} stops`}
+              </p>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-500/20">
+                <div ref={playback.barRef} className="h-full w-0 rounded-full bg-brand" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {fullscreen && (
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute left-1/2 top-3 z-[1001] flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/85 px-3.5 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur transition-transform hover:scale-105"
+        >
+          <X size={14} aria-hidden />
+          Exit fullscreen
+        </button>
+      )}
+    </>
+  );
+
+  // Fake fullscreen portals the whole map to <body>, escaping every ancestor
+  // stacking context, so the header, nav and page content all disappear.
+  if (fsMode === 'fake' && fsPortalEl) {
+    return createPortal(<div className="h-full w-full">{mapInner}</div>, fsPortalEl);
+  }
+
+  return (
+    // `isolate` creates a fresh stacking context so Leaflet's high z-index panes
+    // (tiles/markers/controls, z-index up to 1000) are confined to the map and
+    // never paint over the panel content above or below it. `overflow-hidden`
+    // additionally guarantees the map stays boxed inside its container.
+    <div ref={rootRef} className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
+      {mapInner}
     </div>
   );
 }
