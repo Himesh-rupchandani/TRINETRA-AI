@@ -390,3 +390,100 @@ export const videoAnalysisService = {
     });
   },
 };
+
+/* --------------------------------------------------- plate usage (time in shot) */
+
+/** One continuous stretch of time a vehicle was tracked in the video. */
+export interface PlateUsageSegment {
+  start_sec: number;
+  end_sec: number;
+  duration_sec: number;
+  start: string;
+  end: string;
+  track_id: number | null;
+}
+
+/** One number plate, with how long it was in shot. */
+export interface PlateUsageRow {
+  plate: string | null;
+  plate_label: string;
+  vehicle_class: string | null;
+  plate_status: PlateStatus;
+  best_plate_confidence: number | null;
+  best_detection_confidence: number | null;
+
+  /** How many separate times it entered the shot. */
+  appearances: number;
+  first_seen_sec: number;
+  last_seen_sec: number;
+  first_seen: string;
+  last_seen: string;
+
+  /** Span from first sighting to last (time in the area). HH:MM:SS. */
+  dwell_sec: number;
+  dwell_label: string;
+  /** Time actually tracked on screen. Always <= dwell_sec. */
+  visible_sec: number;
+  visible_label: string;
+  /** Share of the video's duration this plate was present for. */
+  presence_pct: number | null;
+
+  frames_present: number;
+  track_ids: Array<number | null>;
+  evidence_ref: string | null;
+  watchlist_match: boolean;
+  segments: PlateUsageSegment[];
+}
+
+export interface PlateUsageReport {
+  video: {
+    video_id: string;
+    camera_id: string;
+    source_name: string;
+    source_type: string;
+    status: string;
+    error: string | null;
+    progress_pct: number;
+    duration_sec: number | null;
+    duration_label: string | null;
+    fps: number | null;
+    vehicles_detected: number;
+    plates_read: number;
+    unknown_plates: number;
+  };
+  summary: {
+    appearances: number;
+    unique_plates: number;
+    unreadable_vehicles: number;
+    total_dwell_sec: number;
+    total_dwell_label: string;
+    longest_dwell_sec: number;
+    longest_dwell_label: string;
+    longest_plate: string | null;
+    watchlist_hits: number;
+    video_duration_sec: number | null;
+  };
+  plates: PlateUsageRow[];
+  unreadable: PlateUsageRow[];
+  notes: string[];
+}
+
+const PLATE_USAGE_GUARD =
+  'Plate usage needs the backend — start it and set VITE_USE_MOCKS=false in trinetra-ai/.env.';
+
+export const plateUsageService = {
+  /** Per-plate time-in-shot report. Omit videoId to use the latest video. */
+  async report(videoId?: string): Promise<PlateUsageReport> {
+    if (isMockMode) throw new Error(PLATE_USAGE_GUARD);
+    return get<PlateUsageReport>('/analysis/plate-usage', {
+      params: videoId ? { video_id: videoId } : undefined,
+    });
+  },
+
+  /** Absolute URL of the CSV export (use as a download href). */
+  csvUrl(videoId?: string): string {
+    const base = http.defaults.baseURL ?? '';
+    const qs = videoId ? `?video_id=${encodeURIComponent(videoId)}` : '';
+    return `${base}/analysis/plate-usage.csv${qs}`;
+  },
+};

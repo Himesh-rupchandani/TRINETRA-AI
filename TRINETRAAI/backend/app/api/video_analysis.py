@@ -9,6 +9,8 @@ Multi-video analysis API.
     POST   /api/analysis/run                — start/restart the analysis
     GET    /api/analysis/status             — processing status of every video
     GET    /api/analysis/results            — cross-video comparison results
+    GET    /api/analysis/plate-usage        — per-plate time-in-shot report
+    GET    /api/analysis/plate-usage.csv    — the same report as CSV
     GET    /api/analysis/search?plate=…     — search one number plate
     GET    /api/analysis/vehicles/{plate}   — full vehicle history
     GET    /api/analysis/videos/{id}/detections — raw detections of one video
@@ -25,7 +27,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -33,6 +35,7 @@ from ..core.logging_config import logger
 from ..database.database import get_db
 from ..database.models import VehicleEvent, VideoSource
 from ..services import gdrive_service, plate_matching
+from ..services import plate_usage_service as pus
 from ..services import video_analysis_service as vas
 
 router = APIRouter(prefix="/analysis", tags=["Video Analysis"])
@@ -200,6 +203,82 @@ def results(batch_id: Optional[str] = Query(None), db: Session = Depends(get_db)
     stored detections — nothing is cached or hard-coded.
     """
     return plate_matching.analyse(db, batch_id)
+
+
+# ---------------------------------------------------------------------------
+# Plate usage — "every plate in this video, and how long it was in shot"
+# ---------------------------------------------------------------------------
+
+def _resolve_video_id(db: Session, video_id: Optional[str]) -> str:
+    """
+    Which video to report on.
+
+    Omit ``video_id`` and you get the most recently added one, so the common
+    case — "I uploaded one video, show me its plates" — needs no extra call.
+    """
+    if video_id:
+        return video_id
+    latest = pus.latest_video_id(db)
+    if not latest:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="No videos have been uploaded for analysis yet.",
+        )
+    return latest
+
+
+@router.get(
+    "/plate-usage",
+    summary="Every number plate in a video, with how long each was in shot",
+)
+def plate_usage(
+    video_id: Optional[str] = Query(
+        None, description="Defaults to the most recently added video"
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    The whole point of the feature: one list, every plate seen in the video,
+    each with
+
+    * ``dwell_sec``    — span from first sighting to last (time in the area)
+    * ``visible_sec``  — time actually tracked on screen (always <= dwell)
+    * ``appearances``  — how many separate times it entered the shot
+    * ``first_seen`` / ``last_seen`` — entry and exit timestamps
+    * ``presence_pct`` — share of the video's duration it was present for
+
+    Sorted by dwell time, longest first. Vehicles whose plate could not be read
+    are returned under ``unreadable`` rather than being dropped or guessed.
+    """
+    try:
+        return pus.build_report(db, _resolve_video_id(db, video_id))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.get(
+    "/plate-usage.csv",
+    summary="The plate time-in-shot report as a downloadable CSV",
+    response_class=Response,
+)
+def plate_usage_csv(
+    video_id: Optional[str] = Query(
+        None, description="Defaults to the most recently added video"
+    ),
+    db: Session = Depends(get_db),
+):
+    try:
+        report = pus.build_report(db, _resolve_video_id(db, video_id))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    name = (report["video"]["source_name"] or report["video"]["video_id"]).rsplit(".", 1)[0]
+    filename = f"plate-usage_{report['video']['camera_id']}_{name}.csv".replace(" ", "_")
+    return Response(
+        content=pus.report_to_csv(report),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/search", summary="Search a number plate across all analysed videos")

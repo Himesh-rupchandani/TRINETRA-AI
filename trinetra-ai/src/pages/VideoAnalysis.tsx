@@ -6,10 +6,13 @@ import { AddVideosPanel } from '@/components/analysis/AddVideosPanel';
 import { VideoSourceList } from '@/components/analysis/VideoSourceList';
 import { PlateSearchPanel } from '@/components/analysis/PlateSearchPanel';
 import { CameraSequence, VehicleJourneyCard } from '@/components/analysis/VehicleJourneyCard';
+import { PlateUsageTable } from '@/components/analysis/PlateUsageTable';
 import {
   videoAnalysisService,
+  plateUsageService,
   type AnalysisResults,
   type AnalysisStatus,
+  type PlateUsageReport,
 } from '@/services/videoAnalysisService';
 
 /**
@@ -28,6 +31,9 @@ export default function VideoAnalysis() {
   const [starting, setStarting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [onlyMulti, setOnlyMulti] = useState(false);
+  const [usage, setUsage] = useState<PlateUsageReport | null>(null);
+  const [usageVideoId, setUsageVideoId] = useState<string | undefined>(undefined);
+  const [usageLoading, setUsageLoading] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const refreshStatus = useCallback(async () => {
@@ -40,21 +46,41 @@ export default function VideoAnalysis() {
     setResults(await videoAnalysisService.results());
   }, []);
 
+  const refreshUsage = useCallback(async (videoId?: string) => {
+    setUsageLoading(true);
+    try {
+      setUsage(await plateUsageService.report(videoId));
+    } catch {
+      setUsage(null);
+    } finally {
+      setUsageLoading(false);
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
     try {
       const s = await refreshStatus();
-      if (s.totalVideos > 0) await refreshResults();
+      if (s.totalVideos > 0) {
+        await refreshResults();
+        await refreshUsage();
+      }
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Request failed');
     } finally {
       setLoading(false);
     }
-  }, [refreshStatus, refreshResults]);
+  }, [refreshStatus, refreshResults, refreshUsage]);
 
   useEffect(() => {
     void refreshAll();
   }, [refreshAll]);
+
+  const videos = status?.videos ?? [];
+  const analysable = videos.filter((v) => v.status !== 'PROCESSING' && v.status !== 'QUEUED');
+  // Default to the most recently added video, so the common one-video workflow
+  // needs no extra click: upload, run, and the plate list is right there.
+  const effectiveVideoId = usageVideoId ?? videos[videos.length - 1]?.videoId;
 
   // Poll while any video is being downloaded/queued/processed.
   const busy = status?.status === 'PROCESSING';
@@ -68,7 +94,10 @@ export default function VideoAnalysis() {
       void (async () => {
         try {
           const s = await refreshStatus();
-          if (s.status !== 'PROCESSING') await refreshResults();
+          if (s.status !== 'PROCESSING') {
+            await refreshResults();
+            await refreshUsage(effectiveVideoId);
+          }
         } catch {
           /* transient — the next tick retries */
         }
@@ -78,10 +107,14 @@ export default function VideoAnalysis() {
       if (pollRef.current) window.clearInterval(pollRef.current);
       pollRef.current = null;
     };
-  }, [busy, refreshStatus, refreshResults]);
+  }, [busy, refreshStatus, refreshResults, refreshUsage, effectiveVideoId]);
 
-  const videos = status?.videos ?? [];
-  const analysable = videos.filter((v) => v.status !== 'PROCESSING' && v.status !== 'QUEUED');
+
+  // Re-fetch the plate-usage report whenever the selected video changes.
+  useEffect(() => {
+    if (!effectiveVideoId) return;
+    void refreshUsage(effectiveVideoId);
+  }, [effectiveVideoId, refreshUsage]);
 
   const startAnalysis = async () => {
     if (starting || !videos.length) return;
@@ -169,6 +202,40 @@ export default function VideoAnalysis() {
               <span className="ml-auto text-2xs text-ink-faint">
                 Vehicle detection → tracking → plate detection → OCR → plate matching
               </span>
+            </div>
+          )}
+
+          {/* --- Per-video: every plate and how long it was in shot --- */}
+          {videos.length > 0 && (
+            <div className="space-y-2">
+              {videos.length > 1 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <label
+                    htmlFor="usage-video"
+                    className="text-2xs uppercase tracking-wider text-ink-faint"
+                  >
+                    Video
+                  </label>
+                  <select
+                    id="usage-video"
+                    className="input h-7 w-auto text-xs"
+                    value={effectiveVideoId ?? ''}
+                    onChange={(e) => setUsageVideoId(e.target.value || undefined)}
+                  >
+                    {videos.map((v) => (
+                      <option key={v.videoId} value={v.videoId}>
+                        {v.sourceName} ({v.status})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <PlateUsageTable
+                report={usage}
+                videoId={effectiveVideoId}
+                loading={usageLoading}
+                onRefresh={() => void refreshUsage(effectiveVideoId)}
+              />
             </div>
           )}
 

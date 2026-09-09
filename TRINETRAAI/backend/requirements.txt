@@ -10,8 +10,15 @@ opencv-python-headless>=4.9.0  # headless: no libGL/X11 required on servers
 numpy>=1.26.0
 pillow>=10.2.0
 httpx>=0.27.0
-# Real-time vehicle detection (YOLO11) for the live view. CPU-only torch is
-# enough: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# ---- Vehicle detection: two interchangeable backends ----
+# RF-DETR (default when installed) — Roboflow's real-time DETR, SOTA on COCO.
+#   pip install rfdetr            (pulls torch + torchvision)
+#   CPU-only torch: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#   Set DETECTOR_BACKEND=rfdetr|yolo|auto to choose; without rfdetr the app
+#   falls back to the YOLO11 backend below, so this one is optional.
+rfdetr>=1.0.0
+#
+# YOLO11 (previous default, still fully supported fallback).
 # NOTE: ultralytics pulls the GUI opencv-python wheel; on headless servers
 # re-run `pip install --force-reinstall --no-deps opencv-python-headless` after.
 ultralytics>=8.3.0

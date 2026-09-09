@@ -7,3 +7,7 @@ workspace-*.zip
 
 # Uploaded zips replaced by real source folders
 trinetra_detection.zip
+
+# Local SQLite databases created by running the backend/tests
+/trinetra.db
+/TRINETRAAI/backend/trinetra.db

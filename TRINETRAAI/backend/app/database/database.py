@@ -87,6 +87,12 @@ def _auto_migrate(target_engine=None):
             ("vehicle_confidence", "FLOAT"),
             ("bbox_json", "VARCHAR(200)"),
             ("plate_status", "VARCHAR(20)"),
+            # Measured time-in-shot for the plate-usage report.
+            ("first_seen_sec", "FLOAT"),
+            ("last_seen_sec", "FLOAT"),
+            ("dwell_sec", "FLOAT"),
+            ("visible_sec", "FLOAT"),
+            ("frames_present", "INTEGER"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE vehicle_events ADD COLUMN {col} {col_def}"))

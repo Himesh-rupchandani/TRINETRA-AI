@@ -23,6 +23,21 @@ class Settings(BaseSettings):
     RTSP_TRANSPORT: str = "tcp"
 
     # AI & Computer Vision Settings
+    # Which vehicle detector to use: "auto" (RF-DETR when installed, else
+    # YOLO11), "rfdetr" (RF-DETR, falling back to YOLO11 if it cannot load),
+    # or "yolo" (the previous behaviour — YOLO11 only).
+    DETECTOR_BACKEND: str = "auto"
+    # ---- RF-DETR (https://github.com/roboflow/rf-detr) ----
+    # Set False to keep using YOLO11 even when rfdetr is installed.
+    RFDETR_ENABLED: bool = True
+    # nano | small | medium | base | large  (bigger = slower, more accurate)
+    RFDETR_VARIANT: str = "base"
+    # Optional path to a checkpoint. Empty = the variant's published COCO
+    # weights (downloaded once into RF-DETR's cache on first use).
+    RFDETR_PRETRAIN_WEIGHTS: str = ""
+    # Square inference resolution. 0 = the variant's own default.
+    RFDETR_RESOLUTION: int = 0
+    RFDETR_OPTIMIZE: bool = True
     YOLO_MODEL_PATH: str = "models/yolo11s.pt"
     CONFIDENCE_THRESHOLD: float = 0.45
     PROCESS_EVERY_N_FRAMES: int = 3
@@ -50,6 +65,11 @@ class Settings(BaseSettings):
     PLATE_MODEL_PATH: str = "models/plate_detector.pt"
     PLATE_DETECTION_IMGSZ: int = 320
     PLATE_CONF_THRESHOLD: float = 0.25
+    # Optional fine-tuned RF-DETR plate detector (trained by
+    # training/train_plate_detector.py). When empty the stage is skipped and
+    # the classical OpenCV proposer is used, as before.
+    PLATE_RFDETR_MODEL_PATH: str = ""
+    PLATE_RFDETR_VARIANT: str = "nano"
 
     # ---- Multi-video analysis ----
     ANALYSIS_DIR: str = "uploads/analysis"      # downloaded / uploaded analysis videos

@@ -35,6 +35,7 @@ import numpy as np
 
 from ..core.config import settings
 from ..core.logging_config import logger
+from .rfdetr_detector import rfdetr_detector
 
 
 @dataclass
@@ -161,7 +162,13 @@ class PlateDetectorService:
         if crop.size == 0:
             return []
 
-        boxes = self._detect_model(crop, vx1, vy1)
+        # Priority: a fine-tuned RF-DETR plate model, then a fine-tuned YOLO
+        # plate model, then the dependency-free classical proposer, then a
+        # geometric guess. Each stage is tried only if the one before it
+        # produced nothing, so adding a backend can only ever add accuracy.
+        boxes = self._detect_rfdetr(crop, vx1, vy1)
+        if not boxes:
+            boxes = self._detect_model(crop, vx1, vy1)
         if not boxes:
             boxes = self._detect_classical(crop, vx1, vy1, vehicle_class)
         if not boxes:
@@ -170,6 +177,26 @@ class PlateDetectorService:
         return boxes[:max_candidates]
 
     # ------------------------------------------------------------ backends
+    def _detect_rfdetr(self, crop: np.ndarray, ox: int, oy: int) -> List[PlateBox]:
+        """
+        Fine-tuned RF-DETR plate detector, when ``PLATE_RFDETR_MODEL_PATH``
+        points at a checkpoint. No checkpoint configured → ``[]`` and the
+        caller falls through to the next stage (behaviour unchanged).
+        """
+        try:
+            raw = rfdetr_detector.detect_plates(crop)
+        except Exception as exc:
+            logger.error(f"[PLATE] RF-DETR plate inference failed: {exc}")
+            return []
+        return [
+            PlateBox(
+                x1=int(x1) + ox, y1=int(y1) + oy,
+                x2=int(x2) + ox, y2=int(y2) + oy,
+                confidence=float(c), source="rfdetr",
+            )
+            for x1, y1, x2, y2, c in raw
+        ]
+
     def _detect_model(self, crop: np.ndarray, ox: int, oy: int) -> List[PlateBox]:
         model = self._ensure_model()
         if model is None:

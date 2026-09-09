@@ -141,6 +141,15 @@ class VehicleEvent(Base):
     # HIGH | LOW_CONFIDENCE | UNKNOWN — an uncertain read is never promoted to
     # a confident plate; it is labelled instead.
     plate_status = Column(String(20), nullable=True)
+    # --- How long this vehicle was in shot (seconds, measured not guessed) ---
+    # first_seen_sec / last_seen_sec are offsets into the source video.
+    # dwell_sec   = last_seen_sec - first_seen_sec (span, gaps included)
+    # visible_sec = frames_present * sample_period  (time actually tracked)
+    first_seen_sec = Column(Float, nullable=True)
+    last_seen_sec = Column(Float, nullable=True)
+    dwell_sec = Column(Float, nullable=True)
+    visible_sec = Column(Float, nullable=True)
+    frames_present = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
 
     @property
@@ -158,6 +167,68 @@ class VehicleEvent(Base):
         Index("idx_ve_plate_cam_time", "plate_number", "camera_id", "event_time"),
         Index("idx_ve_watchlist", "watchlist_match"),
         Index("idx_ve_plate_time", "plate_number", "event_time"),
+    )
+
+
+class VehiclePresence(Base):
+    """
+    One *continuous appearance* of one tracked vehicle in one video.
+
+    ``vehicle_events`` stores one row per track summarised at the vehicle's
+    best frame — exactly right for "where was it seen", but it cannot answer
+    "how long was it there". This table is the missing half: it records the
+    entry time, exit time and tracked-frame count of every appearance, so a
+    plate's time in shot is measured rather than inferred.
+
+    A vehicle that leaves the frame and comes back produces two rows (two
+    appearances) with the same plate; the reporting layer merges them.
+
+    All times are seconds from the start of the video.
+    """
+
+    __tablename__ = "vehicle_presence"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    video_id = Column(String(64), index=True, nullable=False)   # video_sources.video_id
+    camera_id = Column(String(50), index=True, nullable=False)
+    track_id = Column(Integer, index=True, nullable=True)
+
+    plate_number = Column(String(30), index=True, nullable=True)   # NULL = not readable
+    plate_status = Column(String(20), nullable=True)               # HIGH | LOW_CONFIDENCE | UNKNOWN
+    plate_confidence = Column(Float, nullable=True)
+    vehicle_class = Column(String(50), nullable=True)
+    vehicle_confidence = Column(Float, nullable=True)
+
+    # Measured presence window for this appearance.
+    first_seen_sec = Column(Float, nullable=False, default=0.0)
+    last_seen_sec = Column(Float, nullable=False, default=0.0)
+    dwell_sec = Column(Float, nullable=False, default=0.0)       # last - first (span)
+    visible_sec = Column(Float, nullable=False, default=0.0)     # frames_present * sample_period
+    frames_present = Column(Integer, nullable=False, default=0)  # analysed samples tracked
+    sample_period_sec = Column(Float, nullable=True)             # seconds per analysed sample
+
+    best_frame_number = Column(Integer, nullable=True)
+    bbox_json = Column(String(200), nullable=True)
+    evidence_ref = Column(String(500), nullable=True)
+    event_id = Column(Integer, ForeignKey("vehicle_events.id"), index=True, nullable=True)
+    watchlist_match = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+
+    @property
+    def bbox(self):
+        try:
+            return json.loads(self.bbox_json) if self.bbox_json else None
+        except Exception:
+            return None
+
+    @bbox.setter
+    def bbox(self, value):
+        self.bbox_json = json.dumps([round(float(v), 1) for v in value]) if value else None
+
+    __table_args__ = (
+        Index("idx_presence_video_plate", "video_id", "plate_number"),
+        Index("idx_presence_plate", "plate_number"),
     )
 
 

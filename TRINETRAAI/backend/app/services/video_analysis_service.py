@@ -14,6 +14,9 @@ Per video:
         -> ocr_service               (super-resolved, multi-variant OCR)
         -> normalize_plate           (GJ 01 AB 1234 -> GJ01AB1234)
         -> ONE VehicleEvent per tracked vehicle  (never one per frame)
+        -> ONE VehiclePresence per appearance   (entry/exit times, so the
+                                                 plate-usage report can say
+                                                 how long each plate was in shot)
 
 Every number in the results comes from this loop. Nothing is fabricated: a
 vehicle whose plate could not be read is stored with ``plate_status=UNKNOWN``
@@ -35,7 +38,7 @@ import cv2
 from ..core.config import settings
 from ..core.logging_config import logger
 from ..database.database import SessionLocal
-from ..database.models import Camera, VehicleEvent, VideoSource
+from ..database.models import Camera, VehicleEvent, VehiclePresence, VideoSource
 from ..utils.plate_normalizer import normalize_plate
 from .anpr_pipeline import (
     PLATE_STATUS_HIGH,
@@ -322,6 +325,10 @@ def delete_video(db, video_id: str) -> None:
         raise AnalysisError(f"Video '{video_id}' not found.")
     if video.status in (PROCESSING, QUEUED, DOWNLOADING):
         raise AnalysisError("This video is being processed — wait for it to finish first.")
+    # Presence rows reference vehicle_events, so they go first.
+    db.query(VehiclePresence).filter(VehiclePresence.video_id == video_id).delete(
+        synchronize_session=False
+    )
     db.query(VehicleEvent).filter(VehicleEvent.video_id == video_id).delete(synchronize_session=False)
     cam = db.query(Camera).filter(Camera.camera_id == video.camera_id).first()
     if cam is not None and (cam.zone or "") == ANALYSIS_ZONE:
@@ -364,6 +371,12 @@ def start_analysis(db, video_ids: Optional[List[str]] = None) -> List[VideoSourc
         video.progress_pct = 0.0
         video.frames_read = 0
         video.frames_analyzed = 0
+        # A re-run replaces the presence rows measured last time, so the
+        # plate-usage report never mixes two runs of the same video.
+        # (vehicle_events are deliberately left alone — alerts reference them.)
+        db.query(VehiclePresence).filter(VehiclePresence.video_id == video.video_id).delete(
+            synchronize_session=False
+        )
         video.vehicles_detected = 0
         video.plates_read = 0
         video.unknown_plates = 0
@@ -456,6 +469,10 @@ def _run_video(video_id: str) -> None:
         cooldown_steps = max(1, int(getattr(settings, "ANALYSIS_OCR_COOLDOWN_STEPS", 3)))
         min_hits = max(1, int(getattr(settings, "ANALYSIS_MIN_TRACK_HITS", 2)))
         min_area = int(getattr(settings, "ANALYSIS_MIN_VEHICLE_AREA", 1200))
+        # Seconds of video that one *analysed* frame stands for. Presence is
+        # counted in analysed samples (we only look at every Nth frame), so
+        # this is the multiplier that turns a frame count into seconds.
+        sample_period = (every_n / fps) if fps > 0 else 0.0
 
         tracker = SimpleTracker(iou_threshold=0.25, max_misses=8)
         accum: Dict[int, TrackPlateAccumulator] = {}
@@ -489,6 +506,22 @@ def _run_video(video_id: str) -> None:
                 plate_status = PLATE_STATUS_UNKNOWN
 
             offset = float(meta["offset_sec"])
+            # --- time in shot -------------------------------------------------
+            # entry / exit are the first and last analysed frames this track was
+            # actually held by the tracker; nothing here is estimated.
+            first_seen = float(meta.get("first_offset", offset))
+            last_seen = float(meta.get("last_offset", offset))
+            frames_present = int(meta.get("frames_present", 1) or 1)
+            # Span from entry to exit, inclusive of the sampling window on
+            # both ends: an analysed frame at t represents the video from
+            # t - period/2 to t + period/2, so the window it covers is
+            # (last - first) + period. Includes any gap where the tracker lost
+            # the vehicle and picked it back up.
+            dwell = round(max(0.0, last_seen - first_seen) + sample_period, 3)
+            # Time actually tracked: one analysed sample == sample_period sec.
+            # Can never exceed the span it was tracked within.
+            visible = round(min(frames_present * sample_period, dwell), 3)
+
             evidence_ref = None
             if crop_bytes:
                 try:
@@ -519,17 +552,48 @@ def _run_video(video_id: str) -> None:
                 video_id=video.video_id,
                 frame_number=int(meta["frame_number"]),
                 watchlist_match=False,
+                first_seen_sec=round(first_seen, 3),
+                last_seen_sec=round(last_seen, 3),
+                dwell_sec=round(dwell, 3),
+                visible_sec=visible,
+                frames_present=frames_present,
             )
             event.bbox = meta["bbox"]
             db.add(event)
             db.commit()
             db.refresh(event)
 
+            # One row per continuous appearance: this is what the plate-usage
+            # report aggregates into "how long was this plate in shot".
+            presence = VehiclePresence(
+                video_id=video.video_id,
+                camera_id=video.camera_id,
+                track_id=track_id,
+                plate_number=plate_norm,
+                plate_status=plate_status,
+                plate_confidence=plate_conf,
+                vehicle_class=meta["class_name"],
+                vehicle_confidence=round(float(meta["confidence"]), 4),
+                first_seen_sec=round(first_seen, 3),
+                last_seen_sec=round(last_seen, 3),
+                dwell_sec=round(dwell, 3),
+                visible_sec=visible,
+                frames_present=frames_present,
+                sample_period_sec=round(sample_period, 4),
+                best_frame_number=int(meta["frame_number"]),
+                evidence_ref=evidence_ref,
+                event_id=event.id,
+            )
+            presence.bbox = meta["bbox"]
+            db.add(presence)
+            db.commit()
+
             if plate_norm:
                 counters["plates"] += 1
                 entry = match_watchlist(db, plate_norm)
                 if entry and plate_status == PLATE_STATUS_HIGH:
                     event.watchlist_match = True
+                    presence.watchlist_match = True
                     db.commit()
                     alert = create_watchlist_alert(db, event, entry)
                     kind = "ALERT_CREATED" if alert else "WATCHLIST_MATCH"
@@ -573,21 +637,41 @@ def _run_video(video_id: str) -> None:
                         seen_tracks.add(track.track_id)
                         counters["vehicles"] += 1
                     area = max(track.x2 - track.x1, 0) * max(track.y2 - track.y1, 0)
-                    prev = track_meta.get(track.track_id)
-                    # Keep the *largest* (closest / sharpest) view of the vehicle
-                    # as its representative record.
-                    if prev is None or area >= prev["area"]:
-                        track_meta[track.track_id] = {
-                            "class_name": track.class_name,
-                            "confidence": track.confidence,
-                            "hits": track.hits,
-                            "area": area,
-                            "bbox": [track.x1, track.y1, track.x2, track.y2],
-                            "frame_number": frame_idx,
-                            "offset_sec": offset_sec,
+                    meta = track_meta.get(track.track_id)
+                    if meta is None:
+                        # First analysed frame this vehicle appears in — this
+                        # is its entry time, and where its presence window
+                        # starts. Never overwritten afterwards.
+                        meta = {
+                            "first_offset": offset_sec,
+                            "frames_present": 0,
+                            "area": -1.0,
                         }
-                    else:
-                        prev["hits"] = track.hits
+                        track_meta[track.track_id] = meta
+                    meta["hits"] = track.hits
+
+                    # Only a frame the detector actually matched this track to
+                    # a real detection counts as "on screen". The tracker
+                    # deliberately coasts for up to ``max_misses`` frames so a
+                    # vehicle is not lost behind a brief occlusion — those
+                    # coasted frames carry the previous box forward and are not
+                    # sightings, so they must not extend the presence window or
+                    # become the evidence crop. Without this, every dwell time
+                    # would be inflated by ~4 s (max_misses x sample period).
+                    if track.misses == 0:
+                        meta["last_offset"] = offset_sec
+                        meta["frames_present"] += 1
+                        # Keep the *largest* (closest / sharpest) real view of
+                        # the vehicle as its representative record.
+                        if area >= meta["area"]:
+                            meta.update({
+                                "class_name": track.class_name,
+                                "confidence": track.confidence,
+                                "area": area,
+                                "bbox": [track.x1, track.y1, track.x2, track.y2],
+                                "frame_number": frame_idx,
+                                "offset_sec": offset_sec,
+                            })
 
                     if not ocr_ok or track.hits < min_hits or area < min_area:
                         continue
