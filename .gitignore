@@ -4,3 +4,6 @@ __pycache__/
 
 # Workspace snapshot archives (stale code copies — never commit)
 workspace-*.zip
+
+# Uploaded zips replaced by real source folders
+trinetra_detection.zip

@@ -7,6 +7,28 @@ Hybrid CCTV intelligence platform for the Gujarat Police Innovation Hackathon.
 | **cv-engine** | [`cv-engine/`](cv-engine/README.md) | AI/CV pipeline: Sentinel feed → YOLO11 detection → PTS-driven tracking → ANPR → sighting events (`POST /api/events`) |
 | Backend | `TRINETRAAI/backend/` | FastAPI: event ingestion, watchlist matching, alert dedup, GIS vehicle routes, Sentinel catalogue sync, WebSocket realtime |
 | Frontend | `trinetra-ai/` | Dashboard, camera grid, investigation & GIS views |
+| **Detection module** | [`trinetra_detection/`](trinetra_detection/README.md) | Standalone YOLO11 vehicle + number-plate detection (image / video / webcam-RTSP). Fully independent — no backend or DB needed |
+
+## Standalone detection module (YOLO11 vehicle + number-plate)
+
+[`trinetra_detection/`](trinetra_detection/README.md) is a **self-contained** demo
+your teammate can run as-is — trained model weights, sample images, output
+folders and one-click scripts, no backend/frontend/DB required:
+
+```bash
+cd trinetra_detection
+pip install -r requirements.txt            # ultralytics + torch + opencv
+
+python detect_image.py --input sample_data  # annotated images → outputs/annotated_images
+                                           # plate crops    → outputs/detected_plates
+python detect_video.py --video path/to/video.mp4
+python detect_webcam.py                     # or: --source "rtsp://user:pass@host:554/..."
+```
+
+- Classes: `0: vehicle`, `1: number_plate` — weights in `models/best.pt` (+ ONNX export).
+- Windows one-click demo: `run_demo.bat` / `run_demo.ps1`.
+- On headless servers cv2 may complain `libGL.so.1` missing → use
+  `opencv-python-headless` (see the libGL row in the error table below).
 
 ## The flow
 
