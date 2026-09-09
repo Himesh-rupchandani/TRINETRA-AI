@@ -111,8 +111,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    # File uploads
-    MAX_UPLOAD_SIZE_MB: int = 250
+    # File uploads — 2 GB ceiling; very large bodies should still travel via
+    # the chunked endpoints (or a Drive link) when a proxy caps request size.
+    MAX_UPLOAD_SIZE_MB: int = 2048
     UPLOAD_DIR: str = "uploads"
 
     @field_validator("CORS_ORIGINS", mode="before")
