@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Activity,
   ArrowRight,
   Bell,
   Car,
@@ -12,41 +11,32 @@ import {
   Users,
 } from 'lucide-react';
 import { KpiCard } from '@/components/dashboard/KpiCard';
-import { CameraActivityChart, DetectionTrend } from '@/components/dashboard/Charts';
-import { DetectionCard } from '@/components/events/DetectionCard';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { LazyMap } from '@/components/gis/LazyMap';
-import { CameraCard } from '@/components/camera/CameraCard';
-import { Panel, AsyncBoundary, EmptyState } from '@/components/common/Panel';
-import { ServiceStatusChip, StatusChip } from '@/components/common/Chips';
+import { Panel, EmptyState } from '@/components/common/Panel';
 import { useCameras } from '@/hooks/useCameras';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
-import { cn, formatNumber, formatPct, formatTime, prettyVehicleClass, relativeTime } from '@/lib/utils';
+import { cn, formatNumber, formatPct, relativeTime } from '@/lib/utils';
 import type { VehicleEvent } from '@/types';
 
 /**
- * COMMAND CENTER
- * Camera network (left) · live event feed (centre) · active alerts (right),
- * with GIS, trend and system health below. Everything is one click from an
- * investigation.
+ * COMMAND CENTER (tight home)
+ * Status board up top, then the only two live blocks that earn their place
+ * here - alerts that need action and the map - with the team story closing
+ * the page. Full lists live on their own pages, one click away.
  */
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { cameras, stats, loading: camsLoading, error: camsError, refresh } = useCameras();
+  const { cameras, stats } = useCameras();
   const { active: activeAlerts, acknowledge, resolve } = useAlerts();
   const recent = useAsync(() => eventService.recent(120), []);
   const kpis = useAsync(() => systemService.kpis(), []);
-  const health = useAsync(() => systemService.health(), []);
 
   const recentEvents = useMemo(() => recent.data ?? [], [recent.data]);
-  const watchCameras = useMemo(
-    () => [...cameras].sort((a, b) => (b.eventCount24h ?? 0) - (a.eventCount24h ?? 0)).slice(0, 4),
-    [cameras],
-  );
   const detectionPoints = useMemo(
     () => recentEvents.filter((e) => e.watchlistMatch).slice(0, 25),
     [recentEvents],
@@ -151,7 +141,7 @@ export default function Dashboard() {
           icon={Cctv}
           to="/registry"
           cta="View all cameras"
-          loading={kpis.loading && camsLoading}
+          loading={kpis.loading}
           extra={
             <div
               className="h-1.5 overflow-hidden rounded-full bg-slate-500/15"
@@ -221,61 +211,13 @@ export default function Dashboard() {
         />
       </section>
 
-      {/* Front view: cameras, detections and alerts as card grids. The long
-          lists live on their own pages - home shows the best of each. */}
-      <section className="grid gap-3 sm:gap-4" aria-label="Front view">
-        <Panel
-          title="Live Cameras"
-          icon={Cctv}
-          actions={
-            <button type="button" className="link-btn" onClick={() => navigate('/cameras')}>
-              View all <ArrowRight size={13} aria-hidden />
-            </button>
-          }
-        >
-          <AsyncBoundary
-            loading={camsLoading}
-            error={camsError}
-            onRetry={refresh}
-            isEmpty={!cameras.length}
-            loadingLabel="Loading camera registry"
-          >
-            <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-4">
-              {watchCameras.map((c) => (
-                <CameraCard key={c.id} camera={c} />
-              ))}
-            </div>
-          </AsyncBoundary>
-        </Panel>
-
-        <Panel
-          title="Recent Detections"
-          icon={Activity}
-          actions={
-            <button type="button" className="link-btn" onClick={() => navigate('/events')}>
-              View all <ArrowRight size={13} aria-hidden />
-            </button>
-          }
-        >
-          <AsyncBoundary
-            loading={recent.loading}
-            error={recent.error}
-            onRetry={recent.refresh}
-            isEmpty={recentEvents.length === 0}
-            emptyTitle="Awaiting detections"
-            emptyDetail="Live vehicle events will appear here as cameras report."
-          >
-            <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-              {recentEvents.slice(0, 6).map((e) => (
-                <DetectionCard key={e.id} event={e} />
-              ))}
-            </div>
-          </AsyncBoundary>
-        </Panel>
-
+      {/* The only two live blocks that earn home-page space: alerts that
+          need action, and the map. Full lists live on their own pages. */}
+      <section className="grid gap-3 sm:gap-4 xl:grid-cols-12" aria-label="Alerts and map">
         <Panel
           title="Recent Alerts"
           icon={Bell}
+          className="xl:col-span-7"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
               View all <ArrowRight size={13} aria-hidden />
@@ -285,17 +227,14 @@ export default function Dashboard() {
           {activeAlerts.length === 0 ? (
             <EmptyState title="No active alerts" detail="Nothing needs your attention right now." />
           ) : (
-            <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-3 p-3">
               {activeAlerts.slice(0, 3).map((a) => (
                 <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />
               ))}
             </div>
           )}
         </Panel>
-      </section>
 
-      {/* Bottom row: GIS · trend · health */}
-      <section className="grid gap-3 sm:gap-4 xl:grid-cols-12">
         <Panel
           title="Where vehicles are being seen"
           icon={MapIcon}
@@ -315,101 +254,7 @@ export default function Dashboard() {
             zoom={11}
           />
         </Panel>
-
-        <div className="grid gap-3 sm:gap-4 xl:col-span-4">
-          <Panel title="Vehicles seen each hour" icon={Activity} className="min-h-[160px]" bodyClassName="p-2.5">
-            <div className="h-[130px]">
-              <DetectionTrend events={recentEvents} />
-            </div>
-          </Panel>
-          <Panel title="Busiest cameras" icon={Cctv} className="min-h-[160px]" bodyClassName="p-2.5">
-            <div className="h-[150px]">
-              <CameraActivityChart events={recentEvents} />
-            </div>
-          </Panel>
-        </div>
-
-        <Panel
-          title="Is everything working?"
-          icon={Activity}
-          className="xl:col-span-3"
-          actions={
-            <button type="button" className="link-btn" onClick={() => navigate('/system')}>
-              Details <ArrowRight size={13} aria-hidden />
-            </button>
-          }
-        >
-          <AsyncBoundary loading={health.loading} error={health.error} onRetry={health.refresh}>
-            <ul className="divide-y divide-line/60">
-              {(health.data?.services ?? []).map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs text-ink">{s.name}</p>
-                    <p className="text-2xs text-ink-faint">
-                      {s.uptimePct.toFixed(2)}% · hb {formatTime(s.lastHeartbeat)}
-                    </p>
-                  </div>
-                  <ServiceStatusChip status={s.status} />
-                </li>
-              ))}
-            </ul>
-          </AsyncBoundary>
-        </Panel>
       </section>
-
-      {/* Recent detections table */}
-      <Panel
-        title="Latest vehicles seen"
-        icon={ScanLine}
-        actions={
-          <button type="button" className="link-btn" onClick={() => navigate('/events')}>
-            Open Event See all <ArrowRight size={13} aria-hidden />
-          </button>
-        }
-      >
-        <AsyncBoundary loading={recent.loading} error={recent.error} onRetry={recent.refresh}>
-          <div className="overflow-x-auto">
-            <table className="data-table data-table-page">
-              <thead>
-                <tr>
-                  <th scope="col">Time</th>
-                  <th scope="col">Camera</th>
-                  <th scope="col">Place</th>
-                  <th scope="col">Plate</th>
-                  <th scope="col">Vehicle type</th>
-                  <th scope="col">Plate match</th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentEvents.slice(0, 8).map((e) => (
-                  <tr
-                    key={e.id}
-                    className={e.plate ? 'cursor-pointer' : undefined}
-                    onClick={e.plate ? () => navigate(`/vehicles/${e.plate}`) : undefined}
-                  >
-                    <td className="font-mono tabular-nums text-ink-muted">{formatTime(e.timestamp)}</td>
-                    <td className="font-mono text-ink-muted">{e.cameraName}</td>
-                    <td className="max-w-[220px] truncate text-ink-muted">{e.location}</td>
-                    <td className="plate text-ink">{e.plate || '—'}</td>
-                    <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>
-                    <td className="font-mono tabular-nums text-ink-muted">
-                      {e.plateConfidence ? `${e.plateConfidence.toFixed(1)}%` : '—'}
-                    </td>
-                    <td>
-                      {e.watchlistMatch ? (
-                        <span className="chip border-critical/45 bg-critical/10 text-critical">Watchlist</span>
-                      ) : (
-                        <StatusChip status="ONLINE" showDot={false} />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBoundary>
-      </Panel>
 
       {/* Who built this and what it does — plain words, no jargon. */}
       <section className="panel overflow-hidden" aria-label="About the team and the project">
