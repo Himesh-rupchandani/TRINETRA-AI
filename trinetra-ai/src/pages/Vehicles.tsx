@@ -220,7 +220,7 @@ export default function Vehicles() {
                 <LoadingState label="Loading watchlist" />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="data-table">
+                  <table className="data-table data-table-page">
                     <thead>
                       <tr>
                         <th scope="col">Plate</th>

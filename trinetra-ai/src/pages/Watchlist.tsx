@@ -64,7 +64,7 @@ export default function Watchlist() {
             loadingLabel="Loading watchlist"
           >
             <div className="overflow-x-auto">
-              <table className="data-table">
+              <table className="data-table data-table-page">
                 <thead>
                   <tr>
                     <th scope="col">Plate</th>

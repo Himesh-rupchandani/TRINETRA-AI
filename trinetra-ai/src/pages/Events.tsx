@@ -215,7 +215,7 @@ export default function Events() {
             loadingLabel="Querying event index"
           >
             <div className="overflow-x-auto">
-              <table className="data-table">
+              <table className="data-table data-table-page">
                 <thead>
                   <tr>
                     <th scope="col">Date</th>

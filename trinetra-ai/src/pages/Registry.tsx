@@ -186,7 +186,7 @@ export default function Registry() {
             loadingLabel="Loading registry"
           >
             <div className="overflow-x-auto">
-              <table className="data-table">
+              <table className="data-table data-table-page">
                 <caption className="sr-only">Camera registry master records</caption>
                 <thead>
                   <tr>
