@@ -56,3 +56,9 @@ htmlcov/
 
 # OpenCV-annotated output videos
 outputs/
+
+# Runtime YOLO weights at backend root (downloaded/exported on the machine)
+/yolo11s.pt
+/yolo11s.onnx
+/*.pt
+/*.onnx
