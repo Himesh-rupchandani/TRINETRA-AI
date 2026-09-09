@@ -192,14 +192,17 @@ def crop_plate_region(frame, plate_box, pad_x: float = 0.10, pad_y: float = 0.20
         return None
 
 
-def annotate_frame(frame, bbox, plate: str, confidence: Optional[float]):
+def annotate_frame(frame, bbox, plate: str, confidence: Optional[float],
+                   plate_bbox=None):
     """
     Full video frame with the detection box and plate label drawn on it,
     returned as JPEG bytes (or None if anything goes wrong).
 
     This is the wide shot stored with every plate sighting so a number-plate
     search can show the whole scene — where the vehicle was in the frame and
-    which box the AI read — not just a tight crop.
+    which box the AI read — not just a tight crop. When the plate detector's
+    own bounding box is available it is highlighted too (amber), so the
+    searched plate is visibly identified inside the vehicle frame.
     """
     try:
         out = frame.copy()
@@ -211,6 +214,13 @@ def annotate_frame(frame, bbox, plate: str, confidence: Optional[float]):
             return None
         colour = (80, 220, 120)  # green BGR — matches the live detection overlay
         cv2.rectangle(out, (x1, y1), (x2, y2), colour, 2)
+        if plate_bbox is not None:
+            px1, py1, px2, py2 = (int(v) for v in (
+                plate_bbox.x1, plate_bbox.y1, plate_bbox.x2, plate_bbox.y2))
+            px1, py1 = max(0, px1), max(0, py1)
+            px2, py2 = min(w, px2), min(h, py2)
+            if px2 > px1 and py2 > py1:
+                cv2.rectangle(out, (px1, py1), (px2, py2), (60, 180, 250), 2)
         label = f"{plate} {confidence * 100:.0f}%" if confidence is not None else plate
         font = cv2.FONT_HERSHEY_SIMPLEX
         scale = max(0.45, min(out.shape[1] / 1280.0, 0.9))
@@ -808,6 +818,7 @@ def _run_video(video_id: str) -> None:
                             (track.x1, track.y1, track.x2, track.y2),
                             read.normalized,
                             float(read.confidence),
+                            plate_bbox=read.plate_box,
                         )
                         if annotated is not None:
                             best_frame[track.track_id] = annotated
