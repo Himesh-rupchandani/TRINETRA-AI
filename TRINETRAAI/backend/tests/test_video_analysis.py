@@ -477,7 +477,15 @@ def test_16_summary_statistics(analysed):
     assert r["total_videos"] == len(r["videos"])
     assert r["total_sightings"] == r["readable_sightings"] + r["unreadable_sightings"]
     assert r["unique_plates"] == len(r["vehicles"])
-    assert r["plates_in_multiple_videos"] == len(r["multi_video_vehicles"]) == 1
+    # The summary is global (dev DB may hold other analysed videos, e.g. the
+    # demo set) — the numbers must be internally consistent, and exactly one
+    # of THIS suite's scripted plates spans multiple videos.
+    assert r["plates_in_multiple_videos"] == len(r["multi_video_vehicles"])
+    mine_multi = [
+        m for m in r["multi_video_vehicles"]
+        if all(c.startswith(TEST_PREFIX) for c in m["cameras"])
+    ]
+    assert len(mine_multi) == 1
     video_ids = [v["video_id"] for v in r["videos"]]
     db = SessionLocal()
     try:
