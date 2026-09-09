@@ -20,6 +20,7 @@ export function UploadVideoModal({
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -30,6 +31,7 @@ export function UploadVideoModal({
     setFile(null);
     setError(null);
     setUploading(false);
+    setProgress(0);
     uploadService
       .nextCameraId()
       .then((id) => {
@@ -43,15 +45,22 @@ export function UploadVideoModal({
     e.preventDefault();
     if (!file || !cameraId.trim() || uploading) return;
     setUploading(true);
+    setProgress(0);
     setError(null);
     try {
-      const done = await uploadService.upload(file, cameraId.trim().toUpperCase(), name.trim());
+      const done = await uploadService.upload(
+        file,
+        cameraId.trim().toUpperCase(),
+        name.trim(),
+        setProgress,
+      );
       onUploaded(done.cameraId);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
+      setProgress(0);
     }
   };
 
@@ -73,7 +82,7 @@ export function UploadVideoModal({
             disabled={uploading || !file || !cameraId.trim()}
           >
             {uploading ? (
-              'Uploading…'
+              progress > 0 ? `Uploading… ${progress}%` : 'Uploading…'
             ) : (
               <>
                 <Upload size={13} aria-hidden /> Upload &amp; run detection
@@ -84,6 +93,17 @@ export function UploadVideoModal({
       }
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
+        {uploading && (
+          <div className="flex items-center gap-2" aria-live="polite">
+            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3" aria-hidden>
+              <span
+                className="block h-full rounded-full bg-brand transition-[width]"
+                style={{ width: `${progress}%` }}
+              />
+            </span>
+            <span className="font-mono text-2xs tabular-nums text-ink-muted">{progress}%</span>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="upload-camera-id">

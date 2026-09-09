@@ -108,13 +108,22 @@ class VehicleDetectionService:
         return self._model
 
     # -------------------------------------------------------------- inference
-    def detect(self, frame: np.ndarray) -> List[VehicleDetection]:
-        """Run the detector on one BGR frame and return real vehicle boxes."""
+    def detect(
+        self,
+        frame: np.ndarray,
+        imgsz: Optional[int] = None,
+        conf: Optional[float] = None,
+    ) -> List[VehicleDetection]:
+        """Run the detector on one BGR frame and return real vehicle boxes.
+
+        ``imgsz``/``conf`` let callers trade accuracy for speed per pipeline
+        (e.g. uploaded-video batch processing uses a smaller inference size).
+        """
         model = self._ensure_model()
         if model is None:
             return []
-        conf = float(getattr(settings, "CONFIDENCE_THRESHOLD", 0.45))
-        imgsz = int(getattr(settings, "DETECTION_IMGSZ", 640))
+        conf = float(conf if conf is not None else getattr(settings, "CONFIDENCE_THRESHOLD", 0.45))
+        imgsz = int(imgsz if imgsz is not None else getattr(settings, "DETECTION_IMGSZ", 640))
         iou = float(getattr(settings, "DETECTION_IOU", 0.55))
         t0 = time.perf_counter()
         try:

@@ -21,6 +21,20 @@ from ..core.logging_config import logger
 from .stream import CameraStream
 from .packet import FramePacket, CameraState
 
+# Bounded concurrent network capture attempts + short FFmpeg timeouts so a
+# grid of unreachable demo sources cannot hog CPU/threads (they fail in ~2.5s
+# instead of blocking for the FFmpeg default ~30s each).
+_net_open_sem = threading.BoundedSemaphore(6)
+_NET_TIMEOUT_US = 2500000  # 2.5s, microseconds (FFmpeg tcp/rtsp timeouts)
+
+
+def _ffmpeg_net_options(transport: Optional[str] = None) -> str:
+    opts = []
+    if transport:
+        opts.append(f"rtsp_transport;{transport}")
+    opts.extend([f"stimeout;{_NET_TIMEOUT_US}", f"timeout;{_NET_TIMEOUT_US}"])
+    return "|".join(opts)
+
 
 class CameraManager:
     """
@@ -290,13 +304,21 @@ class CameraManager:
 
     @staticmethod
     def _open_ondemand_capture(source: str) -> "cv2.VideoCapture":
-        """Open a source for on-demand decoding (RTSP forced over TCP)."""
+        """Open a source for on-demand decoding (RTSP forced over TCP).
+
+        Network opens are bounded by a semaphore and short timeouts so a grid
+        of unreachable demo sources cannot starve the CPU (upload processing
+        and the API stay responsive).
+        """
         if source.lower().startswith("rtsp://"):
             transport = getattr(settings, "RTSP_TRANSPORT", "tcp")
-            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{transport}"
-            return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _ffmpeg_net_options(transport)
+            with _net_open_sem:
+                return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
         if source.lower().startswith(("http://", "https://")):
-            return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _ffmpeg_net_options()
+            with _net_open_sem:
+                return cv2.VideoCapture(source, cv2.CAP_FFMPEG)
         return cv2.VideoCapture(source)
 
     @classmethod
@@ -313,7 +335,12 @@ class CameraManager:
                 time.sleep(0.4)  # do not hammer an unreachable network source
                 # Force the FFmpeg backend for network URLs (default backend
                 # probing spams CAP_IMAGES errors and can fail on Windows).
-                cap.open(source, cv2.CAP_FFMPEG)
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = _ffmpeg_net_options(
+                    getattr(settings, "RTSP_TRANSPORT", "tcp")
+                    if source.lower().startswith("rtsp://") else None
+                )
+                with _net_open_sem:
+                    cap.open(source, cv2.CAP_FFMPEG)
             else:
                 cap.open(source)
             ok, frame = cap.read()
@@ -370,7 +397,7 @@ class CameraManager:
                         # Network source not delivering: after a few misses, move
                         # on to the next candidate (e.g. RTSP blocked -> HLS).
                         ondemand_failures += 1
-                        if ondemand_failures >= 25 and ondemand_candidates:
+                        if ondemand_failures >= 6 and ondemand_candidates:
                             from ..services.sentinel_stream_service import redact as _redact
                             logger.warning(
                                 f"[{camera_id.upper()}] No frames from {_redact(ondemand_source)} — trying next source"

@@ -99,7 +99,12 @@ export const uploadService = {
     return (res ?? []).map(toUploadedVideo);
   },
 
-  async upload(file: File, cameraId: string, name?: string): Promise<UploadedVideo> {
+  async upload(
+    file: File,
+    cameraId: string,
+    name?: string,
+    onProgress?: (pct: number) => void,
+  ): Promise<UploadedVideo> {
     if (isMockMode) throw new Error(MOCK_GUARD);
     const form = new FormData();
     form.append('file', file);
@@ -109,7 +114,13 @@ export const uploadService = {
     const res = await http.post<UploadedVideoDto>('/uploads/videos', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 0,
+      onUploadProgress: (e) => {
+        if (!onProgress) return;
+        if (e.total) onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
+        else onProgress(99);
+      },
     });
+    onProgress?.(100);
     return toUploadedVideo(res.data);
   },
 

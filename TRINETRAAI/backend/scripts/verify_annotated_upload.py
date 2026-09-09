@@ -21,11 +21,14 @@ tmp = tempfile.mkdtemp(prefix="anpr_test_")
 os.environ["DATABASE_URL"] = f"sqlite:///{tmp}/test.db"
 os.environ["UPLOAD_DIR"] = f"{tmp}/uploads"
 os.environ["EVIDENCE_ROOT"] = f"{tmp}/evidence"
-os.environ["VEHICLE_DETECTION_ENABLED"] = "false"  # no torch in CI sandbox
 
 # --- 1. synthetic footage: a "car" sliding across, plate text on it ---------
+W = int(os.environ.get("BENCH_W", "640"))
+H = int(os.environ.get("BENCH_H", "360"))
+FPS = int(os.environ.get("BENCH_FPS", "25"))
+SECONDS = int(os.environ.get("BENCH_SEC", "3"))
 video_path = os.path.join(tmp, "test_car.mp4")
-w, h, fps, n = 640, 360, 25, 75
+w, h, fps, n = W, H, FPS, FPS * SECONDS
 vw = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
 for i in range(n):
     frame = np.full((h, w, 3), 40, dtype=np.uint8)

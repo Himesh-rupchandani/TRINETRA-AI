@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     YOLO_MODEL_PATH: str = "models/yolo11s.pt"
     CONFIDENCE_THRESHOLD: float = 0.45
     PROCESS_EVERY_N_FRAMES: int = 3
+    # Uploaded-video pipeline tuning (CPU-friendly defaults):
+    # target ~6 detection sweeps per second of video regardless of fps, and a
+    # smaller YOLO inference size than the live view (accuracy trade-off is
+    # negligible for ANPR because every track is OCRd across many frames).
+    UPLOAD_TARGET_DETECT_FPS: int = 6
+    UPLOAD_DETECTION_IMGSZ: int = 448
+    UPLOAD_DETECTION_CONF: float = 0.40
+    # Cap the annotated output video width (boxes/labels are scaled to match).
+    UPLOAD_ANNOTATED_MAX_WIDTH: int = 1280
     OCR_ENABLED: bool = True
     OCR_MIN_CONFIDENCE: float = 0.60
     # Above this the plate is trusted (HIGH); between OCR_MIN_CONFIDENCE and

@@ -66,7 +66,7 @@ export function UploadedVideoPanel({ cameraId }: { cameraId: string }) {
           if (!cancelled) setDetail(d);
         })
         .catch(() => undefined);
-    }, 2000);
+    }, 1500);
     return () => {
       cancelled = true;
       clearInterval(timer);

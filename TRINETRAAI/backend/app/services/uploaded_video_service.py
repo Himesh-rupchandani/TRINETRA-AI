@@ -391,6 +391,25 @@ def _process_video(camera_id: str) -> None:
 
 
         every_n = max(1, int(getattr(settings, "PROCESS_EVERY_N_FRAMES", 3)))
+        # Adaptive sweep rate: ~UPLOAD_TARGET_DETECT_FPS det steps per second
+        # of video (fps/6), clamped so short clips still track reliably and
+        # long clips never sweep more than every 2nd frame.
+        target_fps = int(getattr(settings, "UPLOAD_TARGET_DETECT_FPS", 6) or 6)
+        every_n = min(6, max(2, round(fps / target_fps)))
+        infer_imgsz = int(getattr(settings, "UPLOAD_DETECTION_IMGSZ", 448) or 448)
+        infer_conf = float(getattr(settings, "UPLOAD_DETECTION_CONF", 0.40))
+
+        # Annotated output is capped at UPLOAD_ANNOTATED_MAX_WIDTH to keep the
+        # per-frame encode cheap on 1080p/4K uploads; box coords are scaled.
+        max_w = int(getattr(settings, "UPLOAD_ANNOTATED_MAX_WIDTH", 1280) or 1280)
+        out_scale = min(1.0, max_w / max(1, frame_size[0]))
+        out_size = (
+            max(2, int(frame_size[0] * out_scale) // 2 * 2),
+            max(2, int(frame_size[1] * out_scale) // 2 * 2),
+        )
+        if writer is not None and (out_size[0], out_size[1]) != frame_size:
+            writer.release()
+            writer, encoder_used = _open_writer(out_path, out_size[0], out_size[1], fps)
         tracker = SimpleTracker(iou_threshold=0.25, max_misses=8)
         # track_id -> {normalized: [conf_sum, count, best_raw, best_conf]}
         plate_votes: Dict[int, Dict[str, list]] = {}
@@ -501,7 +520,7 @@ def _process_video(camera_id: str) -> None:
             if frame_idx % every_n == 0:
                 det_step += 1
                 dets = (
-                    vehicle_detection_service.detect(frame)
+                    vehicle_detection_service.detect(frame, imgsz=infer_imgsz, conf=infer_conf)
                     if detector_ok and vehicle_detection_service._model is not None
                     else []
                 )
@@ -526,7 +545,12 @@ def _process_video(camera_id: str) -> None:
                     area = max(track.x2 - track.x1, 0) * max(track.y2 - track.y1, 0)
                     if area < 2500:
                         continue
-                    ocr_cooldown[track.track_id] = 4
+                    # OCR is by far the slowest step (~0.5s/call on CPU):
+                    # stable tracks only, wide enough plate region, and a
+                    # longer cooldown between attempts per track.
+                    if (track.x2 - track.x1) < 64:
+                        continue
+                    ocr_cooldown[track.track_id] = 6
                     if not ocr_ok:
                         continue
                     reading = ocr_service.read_plate(
@@ -572,15 +596,37 @@ def _process_video(camera_id: str) -> None:
                     vehicles_seen=vehicles_seen,
                 )
             # Annotated output: overlay boxes + plate reads on EVERY frame so
-            # the output video plays at full original smoothness.
+            # the output video plays at full original smoothness. When the
+            # output is downscaled (UPLOAD_ANNOTATED_MAX_WIDTH), the frame and
+            # the box coordinates are scaled to match.
             if writer is not None:
+                draw_frame = frame
+                draw_tracks = current_tracks
+                if out_scale < 1.0:
+                    draw_frame = cv2.resize(
+                        frame, (out_size[0], out_size[1]), interpolation=cv2.INTER_AREA
+                    )
+                    draw_tracks = [
+                        TrackedBox(
+                            track_id=t.track_id,
+                            x1=int(t.x1 * out_scale),
+                            y1=int(t.y1 * out_scale),
+                            x2=int(t.x2 * out_scale),
+                            y2=int(t.y2 * out_scale),
+                            class_name=t.class_name,
+                            confidence=t.confidence,
+                            hits=t.hits,
+                            misses=t.misses,
+                        )
+                        for t in current_tracks
+                    ]
                 offset_str = format_video_offset(offset_sec)
                 header = (
                     f"TRINETRA AI  |  {header_cam}  |  {video_filename}  |  "
                     f"t {offset_str}  |  Vehicles: {len(current_tracks)}"
                 )
-                draw_overlay(frame, current_tracks, plate_labels, header)
-                writer.write(frame)
+                draw_overlay(draw_frame, draw_tracks, plate_labels, header)
+                writer.write(draw_frame)
             frame_idx += 1
 
         for track in tracker.flush():
