@@ -163,6 +163,11 @@ class PlateDetectorService:
 
         boxes = self._detect_model(crop, vx1, vy1)
         if not boxes:
+            # The fine-tuned model was trained on full scenes: a zoomed-in
+            # vehicle crop can miss plates it would find at scene scale.
+            # Retry on the whole frame and keep boxes inside the vehicle box.
+            boxes = self._detect_model_fullframe(frame, (vx1, vy1, vx2, vy2))
+        if not boxes:
             boxes = self._detect_classical(crop, vx1, vy1, vehicle_class)
         if not boxes:
             boxes = self._heuristic(vx1, vy1, vx2, vy2, vehicle_class)
@@ -185,13 +190,60 @@ class PlateDetectorService:
         if not results or results[0].boxes is None:
             return out
         b = results[0].boxes
-        for xyxy, c in zip(b.xyxy.cpu().numpy(), b.conf.cpu().numpy()):
+        # Keep only the model's plate class (best.pt: 0=vehicle, 1=number_plate)
+        # so whole-vehicle boxes never reach the OCR stage.
+        try:
+            names = getattr(model, "names", {}) or {}
+            plate_ids = [k for k, v in names.items() if "plate" in str(v).lower()]
+        except Exception:
+            plate_ids = []
+        for xyxy, c, k in zip(
+            b.xyxy.cpu().numpy(), b.conf.cpu().numpy(), b.cls.cpu().numpy()
+        ):
+            if plate_ids and int(k) not in plate_ids:
+                continue
             out.append(
                 PlateBox(
                     x1=int(xyxy[0]) + ox, y1=int(xyxy[1]) + oy,
                     x2=int(xyxy[2]) + ox, y2=int(xyxy[3]) + oy,
                     confidence=float(c), source="model",
                 )
+            )
+        return out
+
+    def _detect_model_fullframe(
+        self, frame: np.ndarray, vbox: Sequence[float]
+    ) -> List[PlateBox]:
+        """Run the learned plate detector on the FULL frame; keep plate-class
+        boxes whose centre falls inside ``vbox`` (absolute coordinates)."""
+        model = self._ensure_model()
+        if model is None:
+            return []
+        conf = float(getattr(settings, "PLATE_CONF_THRESHOLD", 0.25))
+        imgsz = int(getattr(settings, "PLATE_DETECTION_IMGSZ", 512))
+        try:
+            results = model.predict(frame, verbose=False, conf=conf, imgsz=imgsz, device="cpu")
+        except Exception as exc:
+            logger.error(f"[PLATE] Full-frame plate inference failed: {exc}")
+            return []
+        out: List[PlateBox] = []
+        if not results or results[0].boxes is None:
+            return out
+        b = results[0].boxes
+        names = getattr(model, "names", {}) or {}
+        plate_ids = [k for k, v in names.items() if "plate" in str(v).lower()]
+        vx1, vy1, vx2, vy2 = (float(v) for v in vbox)
+        for xyxy, c, k in zip(
+            b.xyxy.cpu().numpy(), b.conf.cpu().numpy(), b.cls.cpu().numpy()
+        ):
+            if plate_ids and int(k) not in plate_ids:
+                continue
+            x1, y1, x2, y2 = (int(v) for v in xyxy)
+            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            if not (vx1 <= cx <= vx2 and vy1 <= cy <= vy2):
+                continue
+            out.append(
+                PlateBox(x1=x1, y1=y1, x2=x2, y2=y2, confidence=float(c), source="model")
             )
         return out
 

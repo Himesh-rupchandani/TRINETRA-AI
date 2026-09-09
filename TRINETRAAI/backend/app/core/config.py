@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Cap the annotated output video width (boxes/labels are scaled to match).
     UPLOAD_ANNOTATED_MAX_WIDTH: int = 1280
     OCR_ENABLED: bool = True
-    OCR_MIN_CONFIDENCE: float = 0.60
+    OCR_MIN_CONFIDENCE: float = 0.50
     # Above this the plate is trusted (HIGH); between OCR_MIN_CONFIDENCE and
     # this mark it is kept but labelled LOW_CONFIDENCE — never silently upgraded.
     OCR_LOW_CONFIDENCE_MARK: float = 0.80
@@ -57,16 +57,17 @@ class Settings(BaseSettings):
     # When the file is absent the pipeline falls back to a classical OpenCV
     # plate proposer, so ANPR works out of the box either way.
     PLATE_MODEL_PATH: str = "models/plate_detector.pt"
-    PLATE_DETECTION_IMGSZ: int = 320
+    PLATE_DETECTION_IMGSZ: int = 512
     PLATE_CONF_THRESHOLD: float = 0.25
 
     # ---- Multi-video analysis ----
     ANALYSIS_DIR: str = "uploads/analysis"      # downloaded / uploaded analysis videos
     ANALYSIS_EVERY_N_FRAMES: int = 5            # frame sampling for offline analysis
     ANALYSIS_MAX_WORKERS: int = 2               # videos analysed in parallel
-    ANALYSIS_OCR_COOLDOWN_STEPS: int = 3        # detection steps between OCR attempts per track
+    ANALYSIS_OCR_COOLDOWN_STEPS: int = 6        # detection steps between OCR attempts per track
     ANALYSIS_MIN_TRACK_HITS: int = 2            # ignore single-frame detector flicker
     ANALYSIS_MIN_VEHICLE_AREA: int = 1200       # px^2; smaller boxes are not OCR-able
+    ANALYSIS_MAX_OCR_ATTEMPTS: int = 5          # OCR attempts per tracked vehicle (speed cap)
     # Cross-video fuzzy matching: only plates of equal length differing by at
     # most this many *visually confusable* characters may be flagged as a
     # possible match (never merged automatically).

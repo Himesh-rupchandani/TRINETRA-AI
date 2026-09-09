@@ -493,6 +493,31 @@ def _run_video(video_id: str) -> None:
         cooldown_steps = max(1, int(getattr(settings, "ANALYSIS_OCR_COOLDOWN_STEPS", 3)))
         min_hits = max(1, int(getattr(settings, "ANALYSIS_MIN_TRACK_HITS", 2)))
         min_area = int(getattr(settings, "ANALYSIS_MIN_VEHICLE_AREA", 1200))
+        # A track only needs a handful of reads to vote — cap OCR attempts per
+        # vehicle so a 30-vehicle dashcam clip doesn't OCR the same box for
+        # the whole video (the single biggest CPU cost on 2-core boxes).
+        max_ocr_attempts = max(1, int(getattr(settings, "ANALYSIS_MAX_OCR_ATTEMPTS", 5)))
+        min_plate_width = 64  # px; narrower vehicle boxes cannot yield a readable plate
+
+        # ---- OpenCV annotated output video --------------------------------
+        out_path = analysis_annotated_path(video.video_id)
+        delete_annotated(video.video_id)
+        writer = None
+        encoder_used = None
+        frame_size = (
+            int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+        )
+        max_w = int(getattr(settings, "UPLOAD_ANNOTATED_MAX_WIDTH", 1280) or 1280)
+        out_scale = min(1.0, max_w / max(1, frame_size[0]))
+        out_size = (
+            max(2, int(frame_size[0] * out_scale) // 2 * 2),
+            max(2, int(frame_size[1] * out_scale) // 2 * 2),
+        )
+        if frame_size[0] > 0 and frame_size[1] > 0:
+            writer, encoder_used = _open_writer(out_path, out_size[0], out_size[1], fps)
+            if writer is None:
+                logger.warning(f"[ANALYSIS:{video.camera_id}] Could not open VideoWriter — no annotated video.")
 
         # ---- OpenCV annotated output video --------------------------------
         out_path = analysis_annotated_path(video.video_id)
@@ -519,6 +544,7 @@ def _run_video(video_id: str) -> None:
         # track_id -> dict of the best frame seen for this vehicle
         track_meta: Dict[int, dict] = {}
         cooldown: Dict[int, int] = {}
+        ocr_attempts: Dict[int, int] = {}
         best_crop: Dict[int, bytes] = {}
 
         counters = {"vehicles": 0, "plates": 0, "unknown": 0}
@@ -535,6 +561,8 @@ def _run_video(video_id: str) -> None:
             meta = track_meta.pop(track_id, None)
             acc = accum.pop(track_id, None)
             cooldown.pop(track_id, None)
+            ocr_attempts.pop(track_id, None)
+            plate_labels.pop(track_id, None)
             crop_bytes = best_crop.pop(track_id, None)
             if meta is None or meta["hits"] < min_hits:
                 return  # detector flicker, not a real vehicle sighting
@@ -653,11 +681,16 @@ def _run_video(video_id: str) -> None:
 
                     if not ocr_ok or track.hits < min_hits or area < min_area:
                         continue
+                    if (track.x2 - track.x1) < min_plate_width:
+                        continue
+                    if ocr_attempts.get(track.track_id, 0) >= max_ocr_attempts:
+                        continue  # enough votes collected for this vehicle
                     left = cooldown.get(track.track_id, 0)
                     if left > 0:
                         cooldown[track.track_id] = left - 1
                         continue
                     cooldown[track.track_id] = cooldown_steps
+                    ocr_attempts[track.track_id] = ocr_attempts.get(track.track_id, 0) + 1
 
                     read = read_plate_for_vehicle(
                         frame, (track.x1, track.y1, track.x2, track.y2), track.class_name
@@ -683,6 +716,9 @@ def _run_video(video_id: str) -> None:
                     video.vehicles_detected = counters["vehicles"]
                     video.plates_read = counters["plates"]
                     video.unknown_plates = counters["unknown"]
+                    # Re-assert: a stray terminal write from a killed run must
+                    # never outlive the live worker's progress.
+                    video.status = PROCESSING
                     db.commit()
             # Annotated output: overlay on EVERY frame at original smoothness.
             if writer is not None:

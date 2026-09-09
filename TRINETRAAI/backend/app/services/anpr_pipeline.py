@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -65,6 +65,34 @@ def format_score(normalized: str) -> float:
         return 0.7
     return 0.45
 
+# Confusable-glyph repair, applied per character class (letters stay letters,
+# digit runs become digits): O/Q->0, I->1, Z->2, S->5, G->6, B->8, T->7 and the
+# inverse. This is what turns "GJO3P"+"C3535" into GJ03PC3535.
+_DIGIT_CONF = str.maketrans({"O": "0", "Q": "0", "I": "1", "Z": "2", "S": "5", "G": "6", "B": "8", "T": "7"})
+_LETTER_CONF = str.maketrans({"0": "O", "1": "I", "5": "S", "8": "B", "6": "G", "2": "Z", "7": "T"})
+_STRUCTURE_RE = re.compile(r"^([A-Z]{2})([A-Z0-9]{1,2})([A-Z]{0,3})([A-Z0-9]{3,4})$")
+
+
+def canonical_variants(norm: str) -> List[Tuple[str, bool]]:
+    """((canonical, repaired)) variants of one normalised candidate.
+
+    First entry is the text as-is; the optional second repairs confusable
+    glyphs per structure (SS DD LL NNNN) when the layout matches.
+    """
+    variants = [(norm, False)]
+    m = _STRUCTURE_RE.match(norm)
+    if m:
+        ss, dd, ll, nn = m.groups()
+        fixed = (
+            ss.translate(_LETTER_CONF)
+            + dd.translate(_DIGIT_CONF)
+            + ll.translate(_LETTER_CONF)
+            + nn.translate(_DIGIT_CONF)
+        )
+        if fixed != norm:
+            variants.append((fixed, True))
+    return variants
+
 
 def read_plate_for_vehicle(
     frame: np.ndarray,
@@ -86,8 +114,15 @@ def read_plate_for_vehicle(
     reject = float(getattr(settings, "OCR_MIN_CONFIDENCE", 0.60))
     regions = plate_detector_service.detect(frame, vehicle_bbox, vehicle_class,
                                             max_candidates=max_regions)
+    # When the learned plate model sees no plate-shaped region here, OCR can
+    # only burn CPU producing garbage — skip it (classical/heuristic
+    # proposals keep a chance because they are not confidence-calibrated).
+    if regions and regions[0].source == "model":
+        best_region_conf = max(r.confidence for r in regions)
+        min_region = float(getattr(settings, "PLATE_CONF_THRESHOLD", 0.25))
+        if best_region_conf < max(0.30, min_region + 0.05):
+            return None
     best: Optional[PlateRead] = None
-
     for region in regions:
         crop = frame[region.y1:region.y2, region.x1:region.x2]
         if crop is None or crop.size == 0:
@@ -95,26 +130,63 @@ def read_plate_for_vehicle(
         if crop.shape[1] < 24 or crop.shape[0] < 8:
             continue
         for variant in preprocess_variants(crop):
-            for text, ocr_conf in ocr_service.read_lines(variant):
+            lines = list(ocr_service.read_lines(variant))
+            for text, ocr_conf in lines:
                 norm = candidate_from_text(text)
                 if norm is None:
                     continue
-                fscore = format_score(norm)
-                if fscore <= 0.0:
-                    continue
-                conf = float(ocr_conf) * fscore
-                if conf < reject:
-                    continue
-                read = PlateRead(
-                    raw=text,
-                    normalized=norm,
-                    confidence=round(min(conf, 1.0), 4),
-                    ocr_confidence=round(float(ocr_conf), 4),
-                    indian_format=bool(INDIAN_PLATE_RE.match(norm)),
-                    plate_box=region,
-                )
-                if best is None or read.confidence > best.confidence:
-                    best = read
+                for canon, repaired in canonical_variants(norm):
+                    fscore = format_score(canon)
+                    if fscore <= 0.0:
+                        continue
+                    conf = float(ocr_conf) * fscore * (0.95 if repaired else 1.0)
+                    if conf < reject:
+                        continue
+                    read = PlateRead(
+                        raw=text,
+                        normalized=canon,
+                        confidence=round(min(conf, 1.0), 4),
+                        ocr_confidence=round(float(ocr_conf), 4),
+                        indian_format=bool(INDIAN_PLATE_RE.match(canon)),
+                        plate_box=region,
+                    )
+                    if best is None or read.confidence > best.confidence:
+                        best = read
+            # Two-line plates (Indian commercial: "GJ 03 P" / "C 3535"): OCR
+            # reads each row (or row piece — "C3535" often splits into "35"
+            # + "35") as fragments that alone are never a valid plate. Merge
+            # ordered pairs and the full concatenation, then score.
+            raw_frags = [(t, float(c)) for t, c in lines if t and t.strip()]
+            if len(raw_frags) >= 2:
+                texts = [t for t, _ in raw_frags]
+                confs = [c for _, c in raw_frags]
+                combos = {texts[i] + texts[j]
+                          for i in range(len(texts))
+                          for j in range(len(texts)) if i != j}
+                combos.add("".join(texts))
+                for combo in combos:
+                    merged = candidate_from_text(combo)
+                    if merged is None:
+                        continue
+                    used = [c for t, c in raw_frags if combo.find(t) != -1]
+                    base = min(used) if used else min(confs)
+                    for canon, repaired in canonical_variants(merged):
+                        fscore = format_score(canon)
+                        if fscore <= 0.0:
+                            continue
+                        conf = base * fscore * (0.9 if repaired else 1.0)
+                        if conf < reject:
+                            continue
+                        read = PlateRead(
+                            raw=" ".join(texts),
+                            normalized=canon,
+                            confidence=round(min(conf, 1.0), 4),
+                            ocr_confidence=round(base, 4),
+                            indian_format=bool(INDIAN_PLATE_RE.match(canon)),
+                            plate_box=region,
+                        )
+                        if best is None or read.confidence > best.confidence:
+                            best = read
             # A confident canonical plate is good enough — stop burning CPU.
             if best is not None and best.indian_format and best.confidence >= 0.92:
                 return best
