@@ -224,6 +224,22 @@
   /* New markers ease in — opacity only, Leaflet owns the transform. */
   animation: trinetra-dot-in 0.25s ease both;
 }
+/* Menu cards rise in one after another on load. */
+.trinetra-card-in {
+  animation: trinetra-card-in 0.45s ease both;
+}
+@keyframes trinetra-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trinetra-card-in,
+  .trinetra-live-dot span {
+    animation: none;
+  }
+}
 @keyframes trinetra-dot-in {
   from {
     opacity: 0;

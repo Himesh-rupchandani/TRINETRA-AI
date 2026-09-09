@@ -11,6 +11,8 @@ interface TopNavItem {
   hint: string;
   icon: typeof Video;
   tone: TileTone;
+  /** Shows a live pulse dot on the icon (only the Live Cameras card). */
+  live?: boolean;
 }
 
 /**
@@ -22,7 +24,7 @@ interface TopNavItem {
  */
 const PRIMARY: TopNavItem[] = [
   { to: '/video-analysis', label: 'Video Analysis', hint: 'Upload and analyse CCTV or video files', icon: Video, tone: 'blue' },
-  { to: '/cameras', label: 'Live Cameras', hint: 'Watch live CCTV feeds', icon: Cctv, tone: 'green' },
+  { to: '/cameras', label: 'Live Cameras', hint: 'Watch live CCTV feeds', icon: Cctv, tone: 'green', live: true },
   { to: '/vehicles', label: 'Find Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
   { to: '/gis', label: 'Map', hint: 'Cameras & vehicles on the map', icon: Map, tone: 'orange' },
   { to: '/events', label: 'Vehicle Log', hint: 'Full vehicle history', icon: ListTree, tone: 'purple' },
@@ -34,55 +36,63 @@ const PRIMARY: TopNavItem[] = [
  */
 const CARD_TONES: Record<
   TileTone,
-  { idle: string; active: string; icon: string; arrow: string }
+  { idle: string; active: string; icon: string; arrow: string; chipHover: string }
 > = {
   blue: {
     idle: 'border-blue-200 bg-blue-100 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md',
     active: 'border-blue-400 bg-blue-200/60 shadow-md ring-2 ring-blue-500/25',
     icon: 'text-blue-600',
     arrow: 'text-blue-600',
+    chipHover: 'group-hover:bg-blue-600 group-hover:text-white group-hover:shadow-md',
   },
   sky: {
     idle: 'border-sky-200 bg-sky-100 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md',
     active: 'border-sky-400 bg-sky-200/60 shadow-md ring-2 ring-sky-500/25',
     icon: 'text-sky-600',
     arrow: 'text-sky-600',
+    chipHover: 'group-hover:bg-sky-600 group-hover:text-white group-hover:shadow-md',
   },
   green: {
     idle: 'border-emerald-200 bg-emerald-100 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md',
     active: 'border-emerald-400 bg-emerald-200/60 shadow-md ring-2 ring-emerald-500/25',
     icon: 'text-emerald-600',
     arrow: 'text-emerald-600',
+    chipHover: 'group-hover:bg-emerald-600 group-hover:text-white group-hover:shadow-md',
   },
   orange: {
     idle: 'border-orange-200 bg-orange-100 hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md',
     active: 'border-orange-400 bg-orange-200/60 shadow-md ring-2 ring-orange-500/25',
     icon: 'text-orange-600',
     arrow: 'text-orange-600',
+    chipHover: 'group-hover:bg-orange-600 group-hover:text-white group-hover:shadow-md',
   },
   amber: {
     idle: 'border-amber-200 bg-amber-100 hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md',
     active: 'border-amber-400 bg-amber-200/60 shadow-md ring-2 ring-amber-500/25',
     icon: 'text-amber-600',
     arrow: 'text-amber-600',
+    chipHover: 'group-hover:bg-amber-600 group-hover:text-white group-hover:shadow-md',
   },
   purple: {
     idle: 'border-violet-200 bg-violet-100 hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md',
     active: 'border-violet-400 bg-violet-200/60 shadow-md ring-2 ring-violet-500/25',
     icon: 'text-violet-600',
     arrow: 'text-violet-600',
+    chipHover: 'group-hover:bg-violet-600 group-hover:text-white group-hover:shadow-md',
   },
   red: {
     idle: 'border-rose-200 bg-rose-100 hover:-translate-y-0.5 hover:border-rose-300 hover:shadow-md',
     active: 'border-rose-400 bg-rose-200/60 shadow-md ring-2 ring-rose-500/25',
     icon: 'text-rose-600',
     arrow: 'text-rose-600',
+    chipHover: 'group-hover:bg-rose-600 group-hover:text-white group-hover:shadow-md',
   },
   slate: {
     idle: 'border-slate-200 bg-slate-100 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md',
     active: 'border-slate-400 bg-slate-200/60 shadow-md ring-2 ring-slate-500/25',
     icon: 'text-slate-600',
     arrow: 'text-slate-600',
+    chipHover: 'group-hover:bg-slate-600 group-hover:text-white group-hover:shadow-md',
   },
 };
 
@@ -106,11 +116,11 @@ export function TopNav() {
     <nav ref={navRef} aria-label="Primary" className="sticky top-14 z-10 shrink-0 border-b border-line bg-surface-0">
       {/* Primary workflow cards — all five fit a single screen row. */}
       <ul className="no-scrollbar mx-auto flex max-w-[1600px] gap-2.5 overflow-x-auto px-3 py-2.5 sm:px-5">
-        {PRIMARY.map((item) => {
+        {PRIMARY.map((item, i) => {
           const Icon = item.icon;
           const tone = CARD_TONES[item.tone];
           return (
-            <li key={item.to} className="min-w-[220px] flex-1">
+            <li key={item.to} className="trinetra-card-in min-w-[220px] flex-1" style={{ animationDelay: `${i * 70}ms` }}>
               <NavLink
                 to={item.to}
                 end={false}
@@ -122,8 +132,14 @@ export function TopNav() {
                   )
                 }
               >
-                <span className={cn('grid h-12 w-12 shrink-0 place-items-center', tone.icon)} aria-hidden>
+                <span className={cn('relative grid h-12 w-12 shrink-0 place-items-center transition-transform duration-150 group-hover:scale-110', tone.icon)} aria-hidden>
                   <Icon size={28} strokeWidth={2.25} />
+                  {item.live && (
+                    <span className="trinetra-live-dot absolute right-1 top-1 flex h-2 w-2" aria-hidden>
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white/70" />
+                    </span>
+                  )}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px] font-extrabold leading-tight tracking-tight text-ink">
@@ -133,8 +149,9 @@ export function TopNav() {
                 </span>
                 <span
                   className={cn(
-                    'grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/80 shadow-sm transition-transform duration-150 group-hover:translate-x-0.5',
+                    'grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/80 shadow-sm transition-all duration-150 group-hover:translate-x-0.5',
                     tone.arrow,
+                    tone.chipHover,
                   )}
                   aria-hidden
                 >
