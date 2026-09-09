@@ -45,6 +45,12 @@ from .anpr_pipeline import (
     read_plate_for_vehicle,
 )
 from .simple_tracker import SimpleTracker
+from .uploaded_video_service import (
+    _open_writer,
+    _reencode_h264,
+    annotated_dir,
+    draw_overlay,
+)
 
 ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 ANALYSIS_ZONE = "Video Analysis"
@@ -107,6 +113,26 @@ def _evidence_root() -> Path:
         root = (_backend_root() / root).resolve()
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def analysis_annotated_path(video_id: str) -> Path:
+    """OpenCV-annotated output video for one analysis video."""
+    return annotated_dir() / f"analysis_{video_id}.mp4"
+
+
+def has_annotated(video_id: str) -> bool:
+    try:
+        p = analysis_annotated_path(video_id)
+        return p.is_file() and p.stat().st_size > 0
+    except Exception:
+        return False
+
+
+def delete_annotated(video_id: str) -> None:
+    try:
+        analysis_annotated_path(video_id).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def safe_filename(name: str) -> str:
@@ -317,11 +343,13 @@ def register_gdrive(db, url: str, batch_id: str, camera_id: Optional[str] = None
 
 
 def delete_video(db, video_id: str) -> None:
+    delete_annotated(video_id)
     video = db.query(VideoSource).filter(VideoSource.video_id == video_id).first()
     if not video:
         raise AnalysisError(f"Video '{video_id}' not found.")
-    if video.status in (PROCESSING, QUEUED, DOWNLOADING):
-        raise AnalysisError("This video is being processed — wait for it to finish first.")
+    with _worker_lock:
+        if video_id in _active_workers:
+            raise AnalysisError("This video is being processed — wait for it to finish first.")
     db.query(VehicleEvent).filter(VehicleEvent.video_id == video_id).delete(synchronize_session=False)
     cam = db.query(Camera).filter(Camera.camera_id == video.camera_id).first()
     if cam is not None and (cam.zone or "") == ANALYSIS_ZONE:
@@ -352,8 +380,10 @@ def start_analysis(db, video_ids: Optional[List[str]] = None) -> List[VideoSourc
         raise AnalysisError("No videos to analyse. Upload a file or add a Google Drive link first.")
 
     queued: List[VideoSource] = []
+    with _worker_lock:
+        active = set(_active_workers)
     for video in videos:
-        if video.status in (QUEUED, PROCESSING, DOWNLOADING):
+        if video.video_id in active:
             continue
         if not video.file_path or not os.path.isfile(video.file_path):
             video.status = FAILED
@@ -404,6 +434,7 @@ def _run_video(video_id: str) -> None:
     slots.acquire()  # the video stays QUEUED until a CPU slot is free
     db = SessionLocal()
     cap = None
+    writer = None
     try:
         from .event_service import create_watchlist_alert, match_watchlist
         from .ocr_service import ocr_service
@@ -452,10 +483,36 @@ def _run_video(video_id: str) -> None:
         if fps <= 0:
             fps = 25.0
         total = int(video.frames_total or cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        every_n = max(1, int(getattr(settings, "ANALYSIS_EVERY_N_FRAMES", 5)))
+        # Adaptive sweep rate (~6 detection sweeps per second of video, clamp
+        # 2-6) + a smaller YOLO inference size: same accuracy for ANPR (each
+        # track is read across many sweeps), roughly twice as fast on CPU.
+        target_fps = int(getattr(settings, "UPLOAD_TARGET_DETECT_FPS", 6) or 6)
+        every_n = min(6, max(2, round(fps / target_fps)))
+        infer_imgsz = int(getattr(settings, "UPLOAD_DETECTION_IMGSZ", 448) or 448)
+        infer_conf = float(getattr(settings, "UPLOAD_DETECTION_CONF", 0.40))
         cooldown_steps = max(1, int(getattr(settings, "ANALYSIS_OCR_COOLDOWN_STEPS", 3)))
         min_hits = max(1, int(getattr(settings, "ANALYSIS_MIN_TRACK_HITS", 2)))
         min_area = int(getattr(settings, "ANALYSIS_MIN_VEHICLE_AREA", 1200))
+
+        # ---- OpenCV annotated output video --------------------------------
+        out_path = analysis_annotated_path(video.video_id)
+        delete_annotated(video.video_id)
+        writer = None
+        encoder_used = None
+        frame_size = (
+            int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+        )
+        max_w = int(getattr(settings, "UPLOAD_ANNOTATED_MAX_WIDTH", 1280) or 1280)
+        out_scale = min(1.0, max_w / max(1, frame_size[0]))
+        out_size = (
+            max(2, int(frame_size[0] * out_scale) // 2 * 2),
+            max(2, int(frame_size[1] * out_scale) // 2 * 2),
+        )
+        if frame_size[0] > 0 and frame_size[1] > 0:
+            writer, encoder_used = _open_writer(out_path, out_size[0], out_size[1], fps)
+            if writer is None:
+                logger.warning(f"[ANALYSIS:{video.camera_id}] Could not open VideoWriter — no annotated video.")
 
         tracker = SimpleTracker(iou_threshold=0.25, max_misses=8)
         accum: Dict[int, TrackPlateAccumulator] = {}
@@ -469,6 +526,10 @@ def _run_video(video_id: str) -> None:
         frame_idx = 0
         analyzed = 0
         video_filename = os.path.basename(video.file_path or "")
+        # Annotated-video state: last live tracks (redrawn between sweeps) and
+        # the best plate reading so far per track for the gold label.
+        current_tracks = []
+        plate_labels: Dict[int, str] = {}
 
         def finalize(track_id: int) -> None:
             meta = track_meta.pop(track_id, None)
@@ -561,10 +622,11 @@ def _run_video(video_id: str) -> None:
             offset_sec = frame_idx / fps
             if frame_idx % every_n == 0:
                 analyzed += 1
-                detections = vehicle_detection_service.detect(frame)
+                detections = vehicle_detection_service.detect(frame, imgsz=infer_imgsz, conf=infer_conf)
                 live, retired = tracker.update(
                     [(d.x1, d.y1, d.x2, d.y2, d.class_name, d.confidence) for d in detections]
                 )
+                current_tracks = live
                 for track in retired:
                     finalize(track.track_id)
 
@@ -603,6 +665,7 @@ def _run_video(video_id: str) -> None:
                     if read is None:
                         continue
                     accum.setdefault(track.track_id, TrackPlateAccumulator()).add(read)
+                    plate_labels[track.track_id] = read.normalized
                     # Snapshot the vehicle at the best read for evidence.
                     try:
                         crop = frame[max(0, track.y1):track.y2, max(0, track.x1):track.x2]
@@ -613,7 +676,7 @@ def _run_video(video_id: str) -> None:
                     except Exception:
                         pass
 
-                if analyzed % 10 == 0:
+                if analyzed % 5 == 0:
                     video.frames_read = frame_idx + 1
                     video.frames_analyzed = analyzed
                     video.progress_pct = round((frame_idx + 1) / total * 100, 1) if total else 0.0
@@ -621,10 +684,43 @@ def _run_video(video_id: str) -> None:
                     video.plates_read = counters["plates"]
                     video.unknown_plates = counters["unknown"]
                     db.commit()
+            # Annotated output: overlay on EVERY frame at original smoothness.
+            if writer is not None:
+                draw_frame = frame
+                draw_tracks = current_tracks
+                if out_scale < 1.0:
+                    draw_frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
+                    draw_tracks = [
+                        type(t)(
+                            track_id=t.track_id,
+                            x1=int(t.x1 * out_scale),
+                            y1=int(t.y1 * out_scale),
+                            x2=int(t.x2 * out_scale),
+                            y2=int(t.y2 * out_scale),
+                            class_name=t.class_name,
+                            confidence=t.confidence,
+                            hits=t.hits,
+                            misses=t.misses,
+                        )
+                        for t in current_tracks
+                    ]
+                header = (
+                    f"TRINETRA AI  |  {video.camera_id}  |  {video_filename}  |  "
+                    f"t {format_offset(offset_sec)}  |  Vehicles: {len(current_tracks)}"
+                )
+                draw_overlay(draw_frame, draw_tracks, plate_labels, header)
+                writer.write(draw_frame)
             frame_idx += 1
 
         for track in tracker.flush():
             finalize(track.track_id)
+
+        if writer is not None:
+            writer.release()
+            writer = None
+            if encoder_used != "avc1" and _reencode_h264(out_path):
+                logger.info(f"[ANALYSIS:{video.camera_id}] Annotated video re-encoded to H.264.")
+            logger.info(f"[ANALYSIS:{video.camera_id}] Annotated video saved: {out_path}")
 
         video.frames_read = frame_idx
         video.frames_analyzed = analyzed
@@ -664,12 +760,18 @@ def _run_video(video_id: str) -> None:
                 video.error = str(exc) or "Processing failed."
                 video.completed_at = datetime.now(timezone.utc)
                 db.commit()
+            delete_annotated(video_id)
         except Exception:
             pass
     finally:
         try:
             if cap is not None:
                 cap.release()
+        except Exception:
+            pass
+        try:
+            if writer is not None:
+                writer.release()
         except Exception:
             pass
         try:
@@ -684,6 +786,40 @@ def _run_video(video_id: str) -> None:
 # ---------------------------------------------------------------------------
 # Serialisation
 # ---------------------------------------------------------------------------
+
+def recover_orphaned_jobs() -> int:
+    """Fail analysis videos whose worker died (backend restart mid-job).
+
+    Called once at startup when ``_active_workers`` is provably empty, so any
+    row still QUEUED/PROCESSING/DOWNLOADING is an orphan. Returns the count.
+    """
+    with _worker_lock:
+        if _active_workers:
+            return 0
+    db = SessionLocal()
+    n = 0
+    try:
+        stuck = (
+            db.query(VideoSource)
+            .filter(VideoSource.status.in_([QUEUED, PROCESSING, DOWNLOADING]))
+            .all()
+        )
+        for video in stuck:
+            video.status = FAILED
+            video.error = "Analysis was interrupted by a backend restart — press Run analysis to try again."
+            video.completed_at = datetime.now(timezone.utc)
+            delete_annotated(video.video_id)
+            n += 1
+        if n:
+            db.commit()
+            logger.warning(f"[ANALYSIS] Recovered {n} orphaned video(s) left {QUEUED}/{PROCESSING} by a restart.")
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"[ANALYSIS] Orphan recovery failed: {exc}")
+    finally:
+        db.close()
+    return n
+
 
 def video_to_dict(video: VideoSource) -> dict:
     return {
@@ -711,6 +847,7 @@ def video_to_dict(video: VideoSource) -> dict:
         "created_at": video.created_at,
         "started_at": video.started_at,
         "completed_at": video.completed_at,
+        "annotated_available": has_annotated(video.video_id),
     }
 
 

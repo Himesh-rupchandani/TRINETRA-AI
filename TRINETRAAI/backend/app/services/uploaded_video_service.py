@@ -50,6 +50,8 @@ FAILED = "FAILED"
 
 _jobs_lock = threading.Lock()
 _jobs: Dict[str, dict] = {}
+# Serialises cv2.VideoWriter opens (FFmpeg backend is not thread-safe on open).
+_writer_lock = threading.Lock()
 
 
 def _backend_root() -> Path:
@@ -133,12 +135,17 @@ def draw_overlay(frame, tracks: List[TrackedBox], plate_labels: Dict[int, str], 
 
 
 def _open_writer(path: Path, width: int, height: int, fps: float):
-    """VideoWriter preferring a browser-playable H.264 ('avc1'), then mp4v."""
-    for fourcc in ("avc1", "mp4v"):
-        writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*fourcc), fps, (width, height))
-        if writer.isOpened():
-            return writer, fourcc
-        writer.release()
+    """VideoWriter preferring a browser-playable H.264 ('avc1'), then mp4v.
+
+    Opened under a process-wide lock: concurrent VideoWriter opens from
+    multiple worker threads can deadlock inside OpenCV's FFmpeg backend.
+    """
+    with _writer_lock:
+        for fourcc in ("avc1", "mp4v"):
+            writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*fourcc), fps, (width, height))
+            if writer.isOpened():
+                return writer, fourcc
+            writer.release()
     return None, None
 
 

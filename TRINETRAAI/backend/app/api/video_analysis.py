@@ -13,6 +13,7 @@ Multi-video analysis API.
     GET    /api/analysis/vehicles/{plate}   — full vehicle history
     GET    /api/analysis/videos/{id}/detections — raw detections of one video
     GET    /api/analysis/videos/{id}/file   — stream the stored video back
+    GET    /api/analysis/videos/{id}/annotated-video — OpenCV output video (boxes + plates)
 
 Mounted under both /api and /api/v1 like every other router in this backend.
 No existing endpoint is modified.
@@ -262,6 +263,24 @@ def video_detections(
             for e in events
         ],
     }
+
+
+@router.get(
+    "/videos/{video_id}/annotated-video",
+    summary="Stream the OpenCV-annotated output video (boxes + plate reads)",
+)
+def get_annotated_video(video_id: str, db: Session = Depends(get_db)):
+    """AI-annotated output for one analysis video — produced by the job."""
+    video = db.query(VideoSource).filter(VideoSource.video_id == video_id).first()
+    if not video:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Video not found.")
+    if not vas.has_annotated(video_id):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Annotated video not ready yet — run the analysis first.",
+        )
+    path = vas.analysis_annotated_path(video_id)
+    return FileResponse(path, media_type="video/mp4", filename=f"{video.camera_id}_annotated.mp4")
 
 
 @router.get("/videos/{video_id}/file", summary="Stream a stored analysis video")

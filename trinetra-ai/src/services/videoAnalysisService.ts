@@ -1,4 +1,5 @@
 import { get, http, isMockMode, post } from './api';
+import { config } from '@/lib/config';
 
 /* ------------------------------------------------------------------ types */
 
@@ -39,6 +40,8 @@ export interface AnalysisVideo {
   createdAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
+  /** OpenCV-annotated output video (boxes + plate reads burned in) is ready. */
+  annotatedAvailable?: boolean;
 }
 
 export interface AnalysisStatus {
@@ -227,6 +230,7 @@ interface AnalysisVideoDto {
   created_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  annotated_available?: boolean;
 }
 
 function toVideo(d: AnalysisVideoDto): AnalysisVideo {
@@ -255,6 +259,7 @@ function toVideo(d: AnalysisVideoDto): AnalysisVideo {
     createdAt: d.created_at,
     startedAt: d.started_at,
     completedAt: d.completed_at,
+    annotatedAvailable: Boolean(d.annotated_available),
   };
 }
 
@@ -269,6 +274,14 @@ const MOCK_GUARD =
  * Every figure returned here comes from real analysis of the submitted files —
  * there is no demo/sample path in this service.
  */
+/** Absolute URL of the OpenCV-annotated output video for one analysis video. */
+export function analysisAnnotatedVideoUrl(videoId: string): string {
+  const path = `/analysis/videos/${encodeURIComponent(videoId)}/annotated-video`;
+  return config.apiBaseUrl.startsWith('http')
+    ? `${config.apiBaseUrl.replace(/\/$/, '')}${path}`
+    : `${window.location.origin}${config.apiBaseUrl.replace(/\/$/, '')}${path}`;
+}
+
 export const videoAnalysisService = {
   async list(batchId?: string): Promise<AnalysisVideo[]> {
     if (isMockMode) throw new Error(MOCK_GUARD);

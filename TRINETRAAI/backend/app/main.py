@@ -63,6 +63,14 @@ async def lifespan(app: FastAPI):
 
     # 2. Sync the env-configured REAL live camera (.env -> registry), then
     # register existing cameras into CameraManager
+    # Fail any analysis job orphaned by the previous shutdown so the UI shows
+    # a retryable error instead of an eternal "Analysing…" chip.
+    try:
+        from .services.video_analysis_service import recover_orphaned_jobs
+        recover_orphaned_jobs()
+    except Exception as e:
+        logger.error(f"Analysis orphan recovery failed: {e}")
+
     db = SessionLocal()
     try:
         try:

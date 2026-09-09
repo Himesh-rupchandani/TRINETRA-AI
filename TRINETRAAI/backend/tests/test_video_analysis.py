@@ -64,7 +64,7 @@ def _camera_of(video_path: str) -> str:
     return Path(video_path).stem.upper()
 
 
-def _fake_detect(frame):
+def _fake_detect(frame, imgsz=None, conf=None):
     """One steadily moving vehicle — enough for the tracker to hold one id."""
     h, w = frame.shape[:2]
     x1 = 40

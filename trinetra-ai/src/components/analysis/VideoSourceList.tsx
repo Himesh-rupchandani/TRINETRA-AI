@@ -1,7 +1,13 @@
-import { Cctv, FileVideo, HardDriveDownload, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Cctv, Clapperboard, FileVideo, HardDriveDownload, Trash2 } from 'lucide-react';
 import { Panel, EmptyState } from '@/components/common/Panel';
+import { Modal } from '@/components/common/Modal';
 import { cn } from '@/lib/utils';
-import type { AnalysisVideo, VideoStatus } from '@/services/videoAnalysisService';
+import {
+  analysisAnnotatedVideoUrl,
+  type AnalysisVideo,
+  type VideoStatus,
+} from '@/services/videoAnalysisService';
 
 const TONE: Record<VideoStatus, string> = {
   PENDING: 'border-line bg-surface-3 text-ink-muted',
@@ -18,10 +24,41 @@ const LABEL: Record<VideoStatus, string> = {
   DOWNLOADING: 'Downloading',
   READY: 'Ready to analyse',
   QUEUED: 'Queued',
-  PROCESSING: 'Analysing…',
+  PROCESSING: 'Analysing',
   DONE: 'Analysed',
   FAILED: 'Failed',
 };
+
+function StatusCell({ v }: { v: AnalysisVideo }) {
+  const busy =
+    v.status === 'PROCESSING' || v.status === 'QUEUED' || v.status === 'DOWNLOADING';
+  return (
+    <div className="min-w-[132px]">
+      <span className={cn('chip border', TONE[v.status])}>
+        {LABEL[v.status]}
+        {busy && v.progressPct > 0 ? ` ${v.progressPct.toFixed(0)}%` : busy ? '…' : ''}
+      </span>
+      {busy && (
+        <span className="mt-1.5 flex items-center gap-1.5">
+          <span className="h-1 flex-1 overflow-hidden rounded-full bg-surface-3" aria-hidden>
+            <span
+              className="block h-full rounded-full bg-brand transition-[width]"
+              style={{ width: `${Math.min(100, Math.max(2, v.progressPct))}%` }}
+            />
+          </span>
+          <span className="font-mono text-2xs tabular-nums text-ink-faint">
+            {v.progressPct.toFixed(0)}%
+          </span>
+        </span>
+      )}
+      {v.error && (
+        <span className="mt-1 block max-w-[260px] whitespace-normal text-2xs leading-snug text-critical/90">
+          {v.error}
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** The list of videos added to this analysis run + their live processing state. */
 export function VideoSourceList({
@@ -33,13 +70,16 @@ export function VideoSourceList({
   onRemove: (videoId: string) => void;
   removing: string | null;
 }) {
+  const [playing, setPlaying] = useState<AnalysisVideo | null>(null);
+  const done = videos.filter((v) => v.status === 'DONE').length;
+
   return (
     <Panel
       title={`Videos in this analysis — ${videos.length}`}
       icon={Cctv}
       actions={
         <span className="chip border-line bg-surface-3 text-ink-muted">
-          {videos.filter((v) => v.status === 'DONE').length} analysed
+          {done} / {videos.length} analysed
         </span>
       }
     >
@@ -50,89 +90,88 @@ export function VideoSourceList({
           detail="Upload local CCTV videos or paste a shared Google Drive link above, then start the analysis."
         />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="data-table data-table-page">
-            <thead>
-              <tr>
-                <th scope="col">Camera</th>
-                <th scope="col">Source</th>
-                <th scope="col">Video</th>
-                <th scope="col">Status</th>
-                <th scope="col">Vehicles</th>
-                <th scope="col">Plates</th>
-                <th scope="col" className="text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {videos.map((v) => {
-                const busy = v.status === 'PROCESSING' || v.status === 'QUEUED' || v.status === 'DOWNLOADING';
-                return (
-                  <tr key={v.videoId}>
-                    <td className="plate text-xs text-ink">{v.cameraId}</td>
-                    <td>
-                      <span className="inline-flex items-center gap-1.5 text-2xs text-ink-muted">
-                        {v.sourceType === 'GDRIVE' ? (
-                          <HardDriveDownload size={12} aria-hidden />
-                        ) : (
-                          <FileVideo size={12} aria-hidden />
-                        )}
-                        {v.sourceType === 'GDRIVE' ? 'Google Drive' : 'Upload'}
-                      </span>
-                    </td>
-                    <td className="max-w-[220px]">
-                      <span className="block truncate text-xs text-ink">{v.sourceName}</span>
-                      <span className="block text-2xs text-ink-faint">
-                        {v.width && v.height ? `${v.width}×${v.height}` : '—'}
-                        {v.fps ? ` · ${Math.round(v.fps)} fps` : ''}
-                        {v.durationLabel ? ` · ${v.durationLabel}` : ''}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={cn('chip border', TONE[v.status])}>{LABEL[v.status]}</span>
-                      {busy && (
-                        <span className="mt-1 flex items-center gap-1.5">
-                          <span className="h-1 w-16 overflow-hidden rounded-full bg-surface-3" aria-hidden>
-                            <span
-                              className="block h-full rounded-full bg-brand transition-[width]"
-                              style={{ width: `${Math.min(100, Math.max(0, v.progressPct))}%` }}
-                            />
-                          </span>
-                          <span className="font-mono text-2xs tabular-nums text-ink-faint">
-                            {v.progressPct.toFixed(0)}%
-                          </span>
-                        </span>
+        <ul className="divide-y divide-line/60">
+          {videos.map((v) => {
+            const busy =
+              v.status === 'PROCESSING' || v.status === 'QUEUED' || v.status === 'DOWNLOADING';
+            return (
+              <li
+                key={v.videoId}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors hover:bg-surface-2/60 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]"
+              >
+                {/* Camera + source */}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="plate truncate text-xs text-ink">{v.cameraId}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-2xs text-ink-faint">
+                      {v.sourceType === 'GDRIVE' ? (
+                        <HardDriveDownload size={11} aria-hidden />
+                      ) : (
+                        <FileVideo size={11} aria-hidden />
                       )}
-                      {v.error && (
-                        <span className="mt-1 block max-w-[240px] whitespace-normal text-2xs text-ink-faint">
-                          {v.error}
-                        </span>
-                      )}
-                    </td>
-                    <td className="font-mono tabular-nums text-ink-muted">{v.vehiclesDetected}</td>
-                    <td className="font-mono tabular-nums text-ink-muted">
-                      {v.platesRead}
-                      {v.unknownPlates > 0 && (
-                        <span className="ml-1 text-2xs text-ink-faint">(+{v.unknownPlates} unknown)</span>
-                      )}
-                    </td>
-                    <td className="text-right">
-                      <button
-                        type="button"
-                        className="btn-ghost btn-xs"
-                        onClick={() => onRemove(v.videoId)}
-                        disabled={busy || removing === v.videoId}
-                        aria-label={`Remove ${v.cameraId}`}
-                      >
-                        <Trash2 size={11} aria-hidden /> Remove
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      {v.sourceType === 'GDRIVE' ? 'Drive' : 'Upload'}
+                    </span>
+                  </div>
+                  <span className="mt-0.5 block truncate text-2xs text-ink-muted" title={v.sourceName}>
+                    {v.sourceName}
+                  </span>
+                  <span className="block text-2xs text-ink-faint">
+                    {v.width && v.height ? `${v.width}×${v.height}` : '—'}
+                    {v.fps ? ` · ${Math.round(v.fps)} fps` : ''}
+                    {v.durationLabel ? ` · ${v.durationLabel}` : ''}
+                  </span>
+                </div>
+
+                {/* Status + progress */}
+                <div className="order-3 sm:order-none">
+                  <StatusCell v={v} />
+                </div>
+
+                {/* Actions */}
+                <div className="order-2 flex items-center gap-1.5 self-start sm:self-center">
+                  {v.annotatedAvailable && (
+                    <button
+                      type="button"
+                      className="btn-ghost btn-xs text-brand"
+                      onClick={() => setPlaying(v)}
+                      title="Play the AI-annotated output video"
+                    >
+                      <Clapperboard size={11} aria-hidden /> AI video
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-ghost btn-xs"
+                    onClick={() => onRemove(v.videoId)}
+                    disabled={busy || removing === v.videoId}
+                    aria-label={`Remove ${v.cameraId}`}
+                  >
+                    <Trash2 size={11} aria-hidden /> Remove
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
+
+      <Modal
+        open={playing !== null}
+        onClose={() => setPlaying(null)}
+        title={`AI-annotated video — ${playing?.cameraId ?? ''}`}
+        subtitle={playing?.sourceName}
+        size="lg"
+      >
+        {playing && (
+          <video
+            key={playing.videoId}
+            src={analysisAnnotatedVideoUrl(playing.videoId)}
+            controls
+            autoPlay
+            className="max-h-[70vh] w-full rounded-md border border-line bg-black"
+          />
+        )}
+      </Modal>
     </Panel>
   );
 }
