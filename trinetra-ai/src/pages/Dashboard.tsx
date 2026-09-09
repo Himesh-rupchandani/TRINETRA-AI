@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { CameraActivityChart, DetectionTrend } from '@/components/dashboard/Charts';
-import { LiveEventFeed } from '@/components/events/LiveEventFeed';
+import { DetectionCard } from '@/components/events/DetectionCard';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { CameraCard } from '@/components/camera/CameraCard';
@@ -44,7 +44,7 @@ export default function Dashboard() {
 
   const recentEvents = useMemo(() => recent.data ?? [], [recent.data]);
   const watchCameras = useMemo(
-    () => [...cameras].sort((a, b) => (b.eventCount24h ?? 0) - (a.eventCount24h ?? 0)).slice(0, 12),
+    () => [...cameras].sort((a, b) => (b.eventCount24h ?? 0) - (a.eventCount24h ?? 0)).slice(0, 4),
     [cameras],
   );
   const detectionPoints = useMemo(
@@ -221,13 +221,12 @@ export default function Dashboard() {
         />
       </section>
 
-      {/* Main three-column operations row */}
-      <section className="grid gap-3 sm:gap-4 xl:grid-cols-12">
+      {/* Front view: cameras, detections and alerts as card grids. The long
+          lists live on their own pages - home shows the best of each. */}
+      <section className="grid gap-3 sm:gap-4" aria-label="Front view">
         <Panel
           title="Live Cameras"
           icon={Cctv}
-          className="max-h-[720px] xl:col-span-5"
-          bodyClassName="overflow-y-auto"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/cameras')}>
               View all <ArrowRight size={13} aria-hidden />
@@ -241,9 +240,9 @@ export default function Dashboard() {
             isEmpty={!cameras.length}
             loadingLabel="Loading camera registry"
           >
-            <div className="flex flex-col gap-2.5 p-3">
+            <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-4">
               {watchCameras.map((c) => (
-                <CameraCard key={c.id} camera={c} variant="list" />
+                <CameraCard key={c.id} camera={c} />
               ))}
             </div>
           </AsyncBoundary>
@@ -252,22 +251,31 @@ export default function Dashboard() {
         <Panel
           title="Recent Detections"
           icon={Activity}
-          className="min-h-[340px] xl:col-span-3"
-          bodyClassName="flex flex-col min-h-0"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/events')}>
               View all <ArrowRight size={13} aria-hidden />
             </button>
           }
         >
-          <LiveEventFeed seed={recentEvents.slice(0, 25)} max={40} />
+          <AsyncBoundary
+            loading={recent.loading}
+            error={recent.error}
+            onRetry={recent.refresh}
+            isEmpty={recentEvents.length === 0}
+            emptyTitle="Awaiting detections"
+            emptyDetail="Live vehicle events will appear here as cameras report."
+          >
+            <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+              {recentEvents.slice(0, 6).map((e) => (
+                <DetectionCard key={e.id} event={e} />
+              ))}
+            </div>
+          </AsyncBoundary>
         </Panel>
 
         <Panel
           title="Recent Alerts"
           icon={Bell}
-          className="min-h-[340px] xl:col-span-4"
-          bodyClassName="overflow-y-auto"
           actions={
             <button type="button" className="link-btn" onClick={() => navigate('/alerts')}>
               View all <ArrowRight size={13} aria-hidden />
@@ -277,8 +285,8 @@ export default function Dashboard() {
           {activeAlerts.length === 0 ? (
             <EmptyState title="No active alerts" detail="Nothing needs your attention right now." />
           ) : (
-            <div className="space-y-3 p-3">
-              {activeAlerts.slice(0, 4).map((a) => (
+            <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
+              {activeAlerts.slice(0, 3).map((a) => (
                 <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />
               ))}
             </div>
