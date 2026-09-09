@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CircleDot, Loader2, Play, RotateCw, ScanSearch, ShieldAlert, Square } from 'lucide-react';
 import type { Camera, CameraStreamTicket } from '@/types';
 import { cameraService } from '@/services/cameraService';
-import { useWhepStream } from '@/hooks/useWhepStream';
+import { useWhepStream, type StreamStats } from '@/hooks/useWhepStream';
+import { useHlsStream, whepUrlToHls } from '@/hooks/useHlsStream';
 import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
 import { config } from '@/lib/config';
@@ -19,7 +20,26 @@ import { StatusChip } from '@/components/common/Chips';
  *    are measured from the live decoder;
  *  - inter-frame gaps are tolerated, drops trigger backoff reconnection;
  *  - the loop-point scene cut is counted and survived, not treated as an error.
+ *  - when WebRTC cannot get through (or the codec is undecodable over it),
+ *    playback steps down to the HLS compatibility stream (guide §1).
  */
+/** Zeroed stats for the HLS path — the OSD falls back to catalogue values. */
+const HLS_ZERO_STATS: StreamStats = {
+  fps: null,
+  width: null,
+  height: null,
+  codec: null,
+  bitrateKbps: null,
+  packetsLost: 0,
+  jitterMs: null,
+  framesDecoded: 0,
+  bytesReceived: 0,
+  keyframeRequests: 0,
+  waitingSecs: 0,
+  mediaTime: 0,
+  discontinuities: 0,
+};
+
 export function CameraPlayer({
   camera,
   poster,
@@ -51,14 +71,55 @@ export function CameraPlayer({
   const detectionActive = aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
   const useImg = isMjpeg || detectionActive;
 
+  // Transport ladder: WebRTC first, HLS compatibility stream when WebRTC
+  // cannot get through (guide §1: HLS is the restricted-network fallback).
+  const [transport, setTransport] = useState<'whep' | 'hls'>('whep');
+  const hlsUrl = useMemo(() => whepUrlToHls(ticket?.streamUrl), [ticket?.streamUrl]);
+
   // Checked before negotiating: an undecodable codec must not retry-loop.
   const decodable = canDecodeOverWebRtc(camera.codec);
   const rtcOk = webRtcAvailable();
 
-  const { videoRef, phase, error, stats, attempt, retryAt, retryNow } = useWhepStream(
-    useImg ? null : ticket?.streamUrl || null,
-    wanted,
-  );
+  const hlsActive = transport === 'hls';
+  const {
+    videoRef: whepRef,
+    phase: whepPhase,
+    error: whepError,
+    stats: whepStats,
+    attempt: whepAttempt,
+    retryAt: whepRetryAt,
+    retryNow: whepRetry,
+  } = useWhepStream(useImg || hlsActive ? null : ticket?.streamUrl || null, wanted && !hlsActive);
+  const {
+    videoRef: hlsRef,
+    phase: hlsPhase,
+    error: hlsError,
+    mediaTime: hlsMediaTime,
+    retryNow: hlsRetry,
+  } = useHlsStream(useImg || !hlsActive ? null : hlsUrl, wanted && hlsActive);
+
+  // The UI below always reads the active transport through these selectors.
+  const videoRef = hlsActive ? hlsRef : whepRef;
+  const phase = hlsActive ? hlsPhase : whepPhase;
+  const error = hlsActive ? hlsError : whepError;
+  const stats = hlsActive ? { ...HLS_ZERO_STATS, mediaTime: hlsMediaTime } : whepStats;
+  const attempt = hlsActive ? 0 : whepAttempt;
+  const retryAt = hlsActive ? null : whepRetryAt;
+  const retryNow = hlsActive ? hlsRetry : whepRetry;
+  /** Manual "start over": back to WebRTC with a reset backoff ladder. */
+  const restartChain = () => {
+    setTransport('whep');
+    hlsRetry();
+    whepRetry();
+  };
+
+  // WebRTC exhausted without ever going live: step down to HLS once.
+  useEffect(() => {
+    if (transport !== 'whep' || useImg || !wanted || !hlsUrl) return;
+    if (whepPhase === 'UNAVAILABLE' || (whepPhase === 'RECONNECTING' && whepAttempt >= 2)) {
+      setTransport('hls');
+    }
+  }, [transport, useImg, wanted, hlsUrl, whepPhase, whepAttempt]);
 
   // Prefer the CV engine's annotated live view; fall back to the backend's
   // own MJPEG mirror of the same source when the CV engine is not running.
@@ -73,21 +134,25 @@ export function CameraPlayer({
   }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id]);
 
   const requestStream = async () => {
-    if (!rtcOk) {
-      setTicketError('This browser cannot play live video. Please use Chrome, Edge or Safari.');
-      return;
-    }
-    if (!decodable) {
-      setTicketError(
-        'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.',
-      );
-      return;
-    }
     setRequesting(true);
     setTicketError(null);
     try {
       const t = await cameraService.stream(camera.id);
       setTicket(t);
+      const hls = whepUrlToHls(t.streamUrl);
+      // No WebRTC, or a codec this browser cannot decode over it: step
+      // straight onto the HLS compatibility stream instead of failing.
+      if ((!rtcOk || !decodable) && hls) {
+        setTransport('hls');
+      } else if (!rtcOk) {
+        setTicketError('This browser cannot play live video. Please use Chrome, Edge or Safari.');
+        return;
+      } else if (!decodable) {
+        setTicketError(
+          'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.',
+        );
+        return;
+      }
       setWanted(true);
     } catch (e) {
       setTicketError(e instanceof Error ? e.message : 'Could not connect to this camera.');
@@ -99,6 +164,7 @@ export function CameraPlayer({
   const stopStream = () => {
     setWanted(false);
     setTicket(null);
+    setTransport('whep');
     setDetectionFailed(false);
   };
 
@@ -106,6 +172,7 @@ export function CameraPlayer({
   useEffect(() => {
     setWanted(false);
     setTicket(null);
+    setTransport('whep');
     setTicketError(null);
     if (autoRequest && camera.status !== 'OFFLINE') void requestStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -252,7 +319,7 @@ export function CameraPlayer({
                   type="button"
                   className="btn-ghost btn-xs border-white/30 text-white/85"
                   onClick={() => {
-                    if (ticket?.streamUrl) retryNow();
+                    if (ticket?.streamUrl) restartChain();
                     else void requestStream();
                   }}
                 >
@@ -328,7 +395,7 @@ export function CameraPlayer({
                     type="button"
                     className="btn-ghost btn-xs mt-2.5 border-white/30 text-white/85"
                     onClick={() => {
-                      if (ticket?.streamUrl) retryNow();
+                      if (ticket?.streamUrl) restartChain();
                       else void requestStream();
                     }}
                   >
@@ -348,14 +415,13 @@ export function CameraPlayer({
                     type="button"
                     className="btn-solid mx-auto"
                     onClick={requestStream}
-                    disabled={!decodable || !rtcOk}
                   >
                     <Play size={15} aria-hidden /> Watch live video
                   </button>
                   <p className="mt-2 text-2xs text-white/60">
                     {decodable && rtcOk
                       ? 'Video only starts when you ask for it, so the network stays fast.'
-                      : 'This camera uses a video format your browser cannot play.'}
+                      : 'Your browser will use the compatibility stream for this camera.'}
                   </p>
                 </>
               )}
@@ -416,7 +482,7 @@ export function CameraPlayer({
               <div>
                 <dt className="inline">Transport </dt>
                 <dd className="inline text-ink-muted">
-                  {detectionActive ? 'MJPEG (AI detection)' : (ticket?.streamType ?? 'WEBRTC')}
+                  {detectionActive ? 'MJPEG (AI detection)' : transport === 'hls' ? 'HLS (compatibility)' : (ticket?.streamType ?? 'WEBRTC')}
                 </dd>
               </div>
               <div>
