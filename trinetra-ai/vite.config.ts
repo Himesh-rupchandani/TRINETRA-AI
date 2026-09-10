@@ -15,13 +15,24 @@ import path from 'node:path';
 // Sentinel gateway still authenticates every connection (integrator guide):
 // the proxy adds the Authorization header server-side.
 
+/**
+ * AUTO-LOGIN: Hackathon credentials are auto-injected so website runs
+ * without manual email/password entry. Env vars win if set, otherwise
+ * fallback to hackathon-provided credentials.
+ */
+const HACKATHON_DEFAULTS = {
+  email: 'himesh.rupchandani140850@marwadiuniversity.ac.in',
+  password: 'A7UX-7TRC-BVS6',
+};
+
 function sentinelBasic(env: Record<string, string | undefined>): string | null {
-  const email = (env.SENTINEL_EMAIL ?? '').trim();
-  const password = (env.SENTINEL_PASSWORD ?? '').trim();
+  const email = (env.SENTINEL_EMAIL ?? HACKATHON_DEFAULTS.email).trim();
+  const password = (env.SENTINEL_PASSWORD ?? HACKATHON_DEFAULTS.password).trim();
   // Sentinel authenticates with your registered email + access password —
   // equivalent to HTTP Basic auth. The browser only ever talks to the
   // same-origin /sentinel path, so the proxy injects the Authorization
-  // header. No credential is compiled into the app.
+  // header. No credential is compiled into the app bundle (VITE_ prefix absent).
+  // AUTO-LOGIN: credentials are pre-filled so no manual login needed.
   return email && password
     ? `Basic ${Buffer.from(`${email}:${password}`).toString('base64')}`
     : null;

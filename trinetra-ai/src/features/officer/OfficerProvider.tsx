@@ -19,14 +19,30 @@ interface OfficerContextValue {
 
 const OfficerContext = createContext<OfficerContextValue | null>(null);
 
+const STORAGE_KEY = 'trinetra.currentOfficerId';
+
 /**
  * Owns the officer roster and the currently selected officer so the header,
  * sidebar and Profile section all reflect the same person.
+ * AUTO-LOGIN: persists selected officer in localStorage so website run pe
+ * mail/password ya officer selection dubara nahi karna padta.
  */
 export function OfficerProvider({ children }: { children: ReactNode }) {
   const [officers, setOfficers] = useState<OfficerProfile[]>([]);
-  const [currentId, setCurrentId] = useState<string | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [currentId, setCurrentId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -40,8 +56,21 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const roster = list.some((o) => o.officerId === current.officerId) ? list : [current, ...list];
         setOfficers(roster);
-        setCurrentId(current.officerId);
-        setActiveId((prev) => (prev && roster.some((o) => o.officerId === prev) ? prev : current.officerId));
+        // AUTO-LOGIN: if we have a saved officer, keep it; otherwise use current
+        const saved = (() => {
+          try {
+            return localStorage.getItem(STORAGE_KEY);
+          } catch {
+            return null;
+          }
+        })();
+        const preferred = saved && roster.some((o) => o.officerId === saved) ? saved : current.officerId;
+        setCurrentId(preferred);
+        setActiveId((prev) => {
+          if (prev && roster.some((o) => o.officerId === prev)) return prev;
+          if (saved && roster.some((o) => o.officerId === saved)) return saved;
+          return preferred;
+        });
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Request failed');
@@ -54,13 +83,29 @@ export function OfficerProvider({ children }: { children: ReactNode }) {
     };
   }, [nonce]);
 
+  // Persist selection for auto-login next time
+  useEffect(() => {
+    if (!currentId) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, currentId);
+    } catch {
+      /* ignore */
+    }
+  }, [currentId]);
+
   /**
    * Selecting an officer makes them the current officer everywhere: the
    * header, sidebar and Profile section all follow the selection.
+   * Auto-saved for next launch.
    */
   const selectOfficer = useCallback((officerId: string) => {
     setActiveId(officerId);
     setCurrentId(officerId);
+    try {
+      localStorage.setItem(STORAGE_KEY, officerId);
+    } catch {
+      /* ignore */
+    }
   }, []);
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 

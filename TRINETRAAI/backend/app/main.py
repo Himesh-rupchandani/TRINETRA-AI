@@ -38,6 +38,7 @@ from .api.evidence import router as evidence_router
 from .api.stats import router as stats_router
 from .api.stream import router as sse_router
 from .api.websocket import router as ws_router
+from .api.ingest import router as ingest_router
 
 
 @asynccontextmanager
@@ -193,6 +194,7 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(video_analysis_router)
     r.include_router(evidence_router)
     r.include_router(sse_router)
+    r.include_router(ingest_router)
     app.include_router(r)
     app.include_router(ws_router, prefix=prefix)
 

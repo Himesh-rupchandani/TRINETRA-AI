@@ -92,14 +92,35 @@ def get_authenticated_hls_url(camera_id: str) -> str:
     return f"{scheme}://{email}:{password}@{host}/{cid}/index.m3u8"
 
 
+def get_whep_gateway_url(camera_id: str) -> str:
+    """Full gateway WHEP URL: http://<host>:8889/stream/<id>/whep (user requested 🌐)"""
+    cid = validate_camera_id(camera_id)
+    host = settings.SENTINEL_RTSP_HOST.strip()
+    return f"http://{host}:8889/stream/{cid}/whep"
+
+
 def get_whep_path(camera_id: str) -> str:
     """Same-origin WHEP signalling PATH for the frontend (no credentials).
 
     The dev server / reverse proxy forwards /sentinel/* to the media gateway;
     browsers must never see an authenticated URL.
+    Frontend: /sentinel/stream/<id>/whep -> proxy -> http://<host>:8889/stream/<id>/whep
     """
     cid = validate_camera_id(camera_id)
     return f"/sentinel/stream/{cid}/whep"
+
+
+def get_hls_live_gateway_url(camera_id: str) -> str:
+    """Live HLS gateway URL: http://<host>/live/stream/<id>/index.m3u8 (user requested 📺)"""
+    cid = validate_camera_id(camera_id)
+    host = settings.SENTINEL_RTSP_HOST.strip()
+    return f"http://{host}/live/stream/{cid}/index.m3u8"
+
+
+def get_hls_live_path(camera_id: str) -> str:
+    """Same-origin HLS path for dashboard/mobile: /sentinel/live/stream/<id>/index.m3u8"""
+    cid = validate_camera_id(camera_id)
+    return f"/sentinel/live/stream/{cid}/index.m3u8"
 
 
 def is_sentinel_camera(stream_url: str) -> bool:
