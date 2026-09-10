@@ -177,7 +177,7 @@ export default function GIS() {
           title="Network map"
           icon={Layers}
           actions={
-            <div className="flex flex-wrap items-center gap-2.5 text-2xs text-ink-muted">
+            <div className="flex flex-wrap items-center gap-2.5 text-2xs text-ink-muted" data-tour="map-layers">
               <label className="flex cursor-pointer items-center gap-1">
                 <input type="checkbox" className="h-3 w-3" checked={showCameras} onChange={(e) => setShowCameras(e.target.checked)} />
                 Cameras
@@ -237,7 +237,7 @@ export default function GIS() {
           {/* Live feed docked to the map: opens for the camera selected on the
               map (marker click / popup "Watch Live") or a route stop. */}
           {liveCamera && (
-            <div className="absolute right-3 top-[104px] z-[1200] w-[360px] max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-line bg-surface-1 shadow-2xl">
+            <div className="absolute right-3 top-[104px] z-[1200] w-[360px] max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-line bg-surface-1 shadow-2xl" data-tour="live-feed">
               <div className="flex items-center justify-between gap-2 border-b border-line bg-surface-2/60 px-3 py-1.5">
                 <p className="min-w-0 truncate text-2xs font-bold text-ink">
                   <span className="font-mono">{liveCamera.id.toUpperCase()}</span>
@@ -263,7 +263,7 @@ export default function GIS() {
           )}
         </Panel>
 
-        <div className="flex min-h-0 flex-col gap-3 sm:gap-4 xl:col-span-3">
+        <div className="flex min-h-0 flex-col gap-3 sm:gap-4 xl:col-span-3" data-tour="camera-list">
           {points.length > 0 ? (
             <Panel
               title={`Route — ${result?.plate}`}

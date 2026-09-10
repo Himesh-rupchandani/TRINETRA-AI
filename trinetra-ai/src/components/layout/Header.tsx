@@ -1,20 +1,12 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import {
-  Activity,
-  ArrowLeft,
-  Bell,
-  LayoutDashboard,
-  ScrollText,
-  Search,
-  ShieldCheck,
-  UserRound,
-} from 'lucide-react';
+import { Activity, ArrowLeft, Bell, LayoutDashboard, ScrollText, Search, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { cn, isValidPlate, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { config } from '@/lib/config';
 import { useOfficer } from '@/features/officer/OfficerProvider';
+import { tourStore } from '@/features/tour/tourStore';
 
 const CONNECTION_TONE: Record<string, string> = {
   LIVE: 'text-online',
@@ -229,6 +221,18 @@ export function Header() {
                 ? 'Connecting'
                 : 'Offline'}
         </span>
+
+        <button
+          type="button"
+          onClick={() => tourStore.start()}
+          data-tour="tour-launch"
+          className="grid h-9 w-9 place-items-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-brand/10 hover:text-brand sm:w-auto sm:gap-1.5 sm:px-2.5"
+          aria-label="Start the guided walkthrough"
+          title="Guided walkthrough"
+        >
+          <Sparkles size={14} aria-hidden />
+          <span className="hidden text-2xs font-semibold sm:inline">Tour</span>
+        </button>
 
         <button
           type="button"

@@ -523,7 +523,7 @@ export function MapView({
     // (tiles/markers/controls, z-index up to 1000) are confined to the map and
     // never paint over the panel content above or below it. `overflow-hidden`
     // additionally guarantees the map stays boxed inside its container.
-    <div ref={rootRef} className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
+    <div ref={rootRef} data-tour="gis-map" className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
       {mapInner}
     </div>
   );

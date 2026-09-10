@@ -169,7 +169,7 @@ export default function VehicleInvestigation() {
         </>
       }
     >
-      <div className="grid gap-3 p-4 sm:gap-4 sm:p-5">
+      <div className="grid gap-3 p-4 sm:gap-4 sm:p-5" data-tour="trace">
         {/* LEFT — GIS */}
         <Panel
           title="Route on the map"

@@ -150,7 +150,7 @@ export default function Alerts() {
             />
           </div>
         ) : tab === 'ACTIVE' ? (
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="alerts-list">
             {(['NEW', 'ACKNOWLEDGED'] as const).map((status) =>
               grouped[status].length ? (
                 <section key={status}>
