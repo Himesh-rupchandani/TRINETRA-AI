@@ -18,6 +18,7 @@ import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { useRoutePlayback } from '@/hooks/useRoutePlayback';
 import { cameraIcon, eventIcon, playbackIcon, routeIcon } from './mapIcons';
+import { GujaratFocus, type GujaratFocusProps } from './GujaratFocus';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
 /** Transparent placeholder so a blocked tile server degrades gracefully. */
@@ -111,6 +112,8 @@ export interface MapViewProps {
   onPlaybackStop?: (point: RoutePoint) => void;
   /** Open this camera's live feed on the map (floating player). */
   onWatchCamera?: (camera: Camera) => void;
+  /** Gujarat state outline / focus mask / district overlay. */
+  gujarat?: GujaratFocusProps;
 }
 
 /**
@@ -135,6 +138,7 @@ export function MapView({
   showCoverage = false,
   onPlaybackStop,
   onWatchCamera,
+  gujarat,
 }: MapViewProps) {
   const [basemap, setBasemap] = useState<BasemapId>(config.map.defaultBasemap);
   const [mapZoom, setMapZoom] = useState(zoom);
@@ -241,6 +245,7 @@ export function MapView({
       <MapContainer
         center={center}
         zoom={zoom}
+        maxZoom={20}
         scrollWheelZoom
         preferCanvas
         zoomControl
@@ -257,6 +262,7 @@ export function MapView({
         {tiles.labels && (
           <TileLayer url={tiles.labels} maxZoom={tiles.maxZoom ?? 19} errorTileUrl={ERROR_TILE} />
         )}
+        <GujaratFocus {...(gujarat ?? { boundary: true })} />
         <ScaleControl position="bottomright" imperial={false} />
         <ResizeGuard />
         <ZoomTracker onZoom={setMapZoom} />

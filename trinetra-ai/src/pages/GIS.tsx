@@ -29,6 +29,9 @@ export default function GIS() {
   const [showCameras, setShowCameras] = useState(true);
   const [showDetections, setShowDetections] = useState(true);
   const [showCoverage, setShowCoverage] = useState(false);
+  // Gujarat thematic layers: state focus (dim outside) + district boundaries.
+  const [gujaratFocus, setGujaratFocus] = useState(true);
+  const [gujaratDistricts, setGujaratDistricts] = useState(true);
   const [activeSequence, setActiveSequence] = useState<number | null>(null);
   const [panTo, setPanTo] = useState<[number, number] | null>(null);
   /** Camera whose live feed is docked on the map (null = no player open). */
@@ -152,6 +155,14 @@ export default function GIS() {
                 <input type="checkbox" className="h-3 w-3" checked={showCoverage} onChange={(e) => setShowCoverage(e.target.checked)} />
                 Camera range
               </label>
+              <label className="flex cursor-pointer items-center gap-1" title="Dim everything outside the Gujarat state border">
+                <input type="checkbox" className="h-3 w-3" checked={gujaratFocus} onChange={(e) => setGujaratFocus(e.target.checked)} />
+                State focus
+              </label>
+              <label className="flex cursor-pointer items-center gap-1" title="Draw Census-2011 district boundaries (hover for names)">
+                <input type="checkbox" className="h-3 w-3" checked={gujaratDistricts} onChange={(e) => setGujaratDistricts(e.target.checked)} />
+                Districts
+              </label>
             </div>
           }
         >
@@ -166,6 +177,7 @@ export default function GIS() {
             onPlaybackStop={(pt) => setActiveSequence(pt.sequence)}
             onSelectCamera={focusCameraOnMap}
             onWatchCamera={(c) => setLiveCameraId(c.id)}
+            gujarat={{ boundary: true, mask: gujaratFocus, districts: gujaratDistricts }}
             panTo={panTo}
             showCoverage={showCoverage}
             className="absolute inset-0"
