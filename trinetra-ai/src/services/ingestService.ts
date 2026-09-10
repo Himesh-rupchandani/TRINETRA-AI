@@ -79,7 +79,7 @@ export const ingestService = {
    */
   async catalogue(sync = false): Promise<{ cameras: Camera[]; raw: CatalogueResponse }> {
     if (isMockMode) {
-      const cams = mock.getCameras();
+      const cams = await mock.getCameras();
       return {
         cameras: cams,
         raw: {
@@ -100,7 +100,7 @@ export const ingestService = {
    */
   async syncCatalogue(): Promise<CatalogueResponse> {
     if (isMockMode) {
-      const cams = mock.getCameras();
+      const cams = await mock.getCameras();
       return {
         source: 'mock',
         total_cameras: cams.length,
