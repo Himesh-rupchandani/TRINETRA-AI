@@ -500,7 +500,15 @@ def main() -> None:
     settings = Settings.from_env()
     if args.backend:
         settings.backend_base_url = args.backend
-    settings.model_path = str(CV_ROOT / "models" / "yolo11s.pt")
+    # Model resolution: explicit MODEL_PATH env wins (Settings.from_env set it);
+    # then the locally fetched yolo11s; then the repo's shared YOLO11 weights
+    # in trinetra_detection/models (COCO classes, ships with the repo).
+    _default_model = CV_ROOT / "models" / "yolo11s.pt"
+    _shared_model = CV_ROOT.parent / "trinetra_detection" / "models" / "yolo11n.pt"
+    if not os.environ.get("MODEL_PATH") and not _default_model.exists() and _shared_model.exists():
+        settings.model_path = str(_shared_model)
+    else:
+        settings.model_path = str(settings.model_path or _default_model)
     settings.anpr_enabled = bool(args.anpr)
     # Demo-feed tuning: local clips loop every ~14s, shorter than the default
     # 20s hold-emit, so long-lived tracks would never produce sightings.

@@ -17,7 +17,8 @@ import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { useRoutePlayback } from '@/hooks/useRoutePlayback';
-import { cameraIcon, eventIcon, playbackIcon, routeIcon } from './mapIcons';
+import { cameraIcon, districtBubbleIcon, eventIcon, playbackIcon, routeIcon } from './mapIcons';
+import { GujaratFocus, type GujaratFocusProps } from './GujaratFocus';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
 /** Transparent placeholder so a blocked tile server degrades gracefully. */
@@ -89,6 +90,58 @@ function ResizeGuard() {
   return null;
 }
 
+/** One district bubble at state-level zoom (overview clustering). */
+export interface DistrictCluster {
+  name: string;
+  centroid: [number, number];
+  cameras: number;
+  offline: number;
+  events: number;
+  bounds: [number, number][];
+}
+
+/**
+ * District bubbles shown instead of 30+ pins at statewide zoom.
+ * Click: select the district (GIS filters cameras/lists) and fly to its
+ * member cameras; clicking the selected bubble again clears the focus.
+ */
+function DistrictClusterLayer({
+  clusters,
+  selected,
+  onSelect,
+}: {
+  clusters: DistrictCluster[];
+  selected: string | null;
+  onSelect?: (name: string | null) => void;
+}) {
+  const map = useMap();
+  return (
+    <>
+      {clusters.map((c) => (
+        <Marker
+          key={c.name}
+          position={c.centroid}
+          zIndexOffset={400}
+          icon={districtBubbleIcon(c.cameras, c.offline, c.events, selected === c.name)}
+          title={`${c.name} — ${c.cameras} camera${c.cameras === 1 ? '' : 's'} · ${c.events} sighting${c.events === 1 ? '' : 's'}`}
+          eventHandlers={{
+            click: () => {
+              if (selected === c.name) {
+                onSelect?.(null);
+                return;
+              }
+              onSelect?.(c.name);
+              if (c.bounds.length > 1)
+                map.flyToBounds(L.latLngBounds(c.bounds), { padding: [56, 56], maxZoom: 12, duration: 0.7 });
+              else if (c.bounds[0]) map.flyTo(c.bounds[0], Math.max(map.getZoom(), 12), { duration: 0.7 });
+            },
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
 export interface MapViewProps {
   cameras?: Camera[];
   events?: VehicleEvent[];
@@ -109,6 +162,14 @@ export interface MapViewProps {
   showCoverage?: boolean;
   /** Fired as the replay dot reaches each stop (timeline sync). */
   onPlaybackStop?: (point: RoutePoint) => void;
+  /** Open this camera's live feed on the map (floating player). */
+  onWatchCamera?: (camera: Camera) => void;
+  /** Gujarat state outline / focus mask / district overlay. */
+  gujarat?: GujaratFocusProps;
+  /** District bubbles that replace camera pins at statewide zoom. */
+  districtClusters?: DistrictCluster[];
+  selectedDistrict?: string | null;
+  onSelectDistrict?: (name: string | null) => void;
 }
 
 /**
@@ -132,8 +193,13 @@ export function MapView({
   className,
   showCoverage = false,
   onPlaybackStop,
+  onWatchCamera,
+  gujarat,
+  districtClusters = [],
+  selectedDistrict = null,
+  onSelectDistrict,
 }: MapViewProps) {
-  const [basemap, setBasemap] = useState<BasemapId>('street');
+  const [basemap, setBasemap] = useState<BasemapId>(config.map.defaultBasemap);
   const [mapZoom, setMapZoom] = useState(zoom);
   const tiles = config.map.tiles[basemap];
   /**
@@ -221,6 +287,9 @@ export function MapView({
       enterFake();
     }
   };
+  // Below this zoom the 30+ pins collapse into per-district bubbles.
+  const clustered = districtClusters.length > 0 && mapZoom < DETECTION_ZOOM && !selectedDistrict;
+
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],
@@ -238,6 +307,7 @@ export function MapView({
       <MapContainer
         center={center}
         zoom={zoom}
+        maxZoom={20}
         scrollWheelZoom
         preferCanvas
         zoomControl
@@ -248,10 +318,13 @@ export function MapView({
           key={basemap}
           url={tiles.base}
           attribution={config.map.attribution[basemap]}
-          maxZoom={19}
+          maxZoom={tiles.maxZoom ?? 19}
           errorTileUrl={ERROR_TILE}
         />
-        {tiles.labels && <TileLayer url={tiles.labels} maxZoom={19} errorTileUrl={ERROR_TILE} />}
+        {tiles.labels && (
+          <TileLayer url={tiles.labels} maxZoom={tiles.maxZoom ?? 19} errorTileUrl={ERROR_TILE} />
+        )}
+        <GujaratFocus {...(gujarat ?? { boundary: true })} />
         <ScaleControl position="bottomright" imperial={false} />
         <ResizeGuard />
         <ZoomTracker onZoom={setMapZoom} />
@@ -273,20 +346,24 @@ export function MapView({
             />
           ))}
 
-        {cameras.map((c) => (
-          <Marker
-            key={c.id}
-            position={[c.latitude, c.longitude]}
-            icon={cameraIcon(c.status, c.id === selectedCameraId)}
-            eventHandlers={{ click: () => onSelectCamera?.(c) }}
-            keyboard
-            title={`${c.name} — ${c.location}`}
-          >
-            <Popup>
-              <CameraPopup camera={c} />
-            </Popup>
-          </Marker>
-        ))}
+        {clustered ? (
+          <DistrictClusterLayer clusters={districtClusters} selected={selectedDistrict} onSelect={onSelectDistrict} />
+        ) : (
+          cameras.map((c) => (
+            <Marker
+              key={c.id}
+              position={[c.latitude, c.longitude]}
+              icon={cameraIcon(c.status, c.id === selectedCameraId)}
+              eventHandlers={{ click: () => onSelectCamera?.(c) }}
+              keyboard
+              title={`${c.name} — ${c.location}`}
+            >
+              <Popup>
+                <CameraPopup camera={c} onWatch={onWatchCamera} />
+              </Popup>
+            </Marker>
+          ))
+        )}
 
         {mapZoom >= DETECTION_ZOOM &&
           events.map((e) => (
@@ -345,34 +422,32 @@ export function MapView({
           Zoom in to see {events.length} sighting{events.length === 1 ? '' : 's'}
         </div>
       )}
+      {clustered && (
+        <div className="absolute bottom-3 right-3 z-[1001] rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-2xs font-semibold text-brand shadow-md backdrop-blur">
+          Grouped by district — click a bubble to focus
+        </div>
+      )}
       <div className="absolute right-3 top-3 z-[1001] flex flex-col items-end gap-2">
         <div
           className="flex overflow-hidden rounded-lg border border-line bg-surface-1/95 shadow-md backdrop-blur"
           role="group"
           aria-label="Basemap style"
         >
-          <button
-            type="button"
-            onClick={() => setBasemap('street')}
-            aria-pressed={basemap === 'street'}
-            className={cn(
-              'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
-              basemap === 'street' ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-            )}
-          >
-            Map
-          </button>
-          <button
-            type="button"
-            onClick={() => setBasemap('satellite')}
-            aria-pressed={basemap === 'satellite'}
-            className={cn(
-              'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
-              basemap === 'satellite' ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-            )}
-          >
-            Satellite
-          </button>
+          {config.map.basemaps.map((b, i) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setBasemap(b.id)}
+              aria-pressed={basemap === b.id}
+              className={cn(
+                'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
+                i > 0 && 'border-l border-line',
+                basemap === b.id ? 'bg-brand text-white' : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+              )}
+            >
+              {b.label}
+            </button>
+          ))}
         </div>
         <button
           type="button"
@@ -448,7 +523,7 @@ export function MapView({
     // (tiles/markers/controls, z-index up to 1000) are confined to the map and
     // never paint over the panel content above or below it. `overflow-hidden`
     // additionally guarantees the map stays boxed inside its container.
-    <div ref={rootRef} className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
+    <div ref={rootRef} data-tour="gis-map" className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
       {mapInner}
     </div>
   );

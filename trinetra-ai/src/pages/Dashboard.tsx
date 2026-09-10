@@ -123,6 +123,7 @@ export default function Dashboard() {
       <section
         className="kpi-stagger grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-6"
         aria-label="Operations status board"
+        data-tour="kpis"
       >
         <KpiCard
           label="Alerts to Action"
