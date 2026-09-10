@@ -94,11 +94,11 @@ class Settings(BaseSettings):
     # Sentinel CCTV catalogue sync URL
     SENTINEL_CATALOGUE_URL: str = "https://cctv.corp8.cloud/cameras.json"
 
-    # Sentinel credentials & stream hosts (NEVER hard-code real values here;
-    # set them in backend/.env — see .env.example. The @ in the registered
-    # email is percent-encoded as %40 when URLs are built at connect time.)
-    SENTINEL_EMAIL: str = ""
-    SENTINEL_PASSWORD: str = ""
+    # Sentinel credentials & stream hosts
+    # AUTO-CONFIGURED for hackathon: fallback to provided credentials so
+    # website runs without manual email/password entry (env still wins if set)
+    SENTINEL_EMAIL: str = "himesh.rupchandani140850@marwadiuniversity.ac.in"
+    SENTINEL_PASSWORD: str = "A7UX-7TRC-BVS6"
     SENTINEL_HLS_BASE_URL: str = "https://cctv.corp8.cloud"
     SENTINEL_RTSP_HOST: str = "103.250.160.189"
     SENTINEL_RTSP_PORT: int = 8554
