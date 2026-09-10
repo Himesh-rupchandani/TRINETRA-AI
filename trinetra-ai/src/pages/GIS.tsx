@@ -9,6 +9,7 @@ import { StatusChip } from '@/components/common/Chips';
 import { CameraPlayer } from '@/components/camera/CameraPlayer';
 import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { useCameras } from '@/hooks/useCameras';
+import { aggregateByDistrict, districtAt } from '@/lib/geo/districtIndex';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAsync } from '@/hooks/useAsync';
@@ -32,6 +33,8 @@ export default function GIS() {
   // Gujarat thematic layers: state focus (dim outside) + district boundaries.
   const [gujaratFocus, setGujaratFocus] = useState(true);
   const [gujaratDistricts, setGujaratDistricts] = useState(true);
+  /** District drill-down: pins/list narrowed to one district. */
+  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
   const [activeSequence, setActiveSequence] = useState<number | null>(null);
   const [panTo, setPanTo] = useState<[number, number] | null>(null);
   /** Camera whose live feed is docked on the map (null = no player open). */
@@ -71,6 +74,38 @@ export default function GIS() {
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return showDetections ? list.filter((e) => e.plate !== '—').slice(0, 60) : [];
   }, [recent.data, liveEvents, showDetections]);
+
+  // District membership for cameras + sightings: powers density shading,
+  // clustering bubbles and the click-to-focus filter — all client-side.
+  const { mapCameras, mapDetections, districtCounts, districtClusters } = useMemo(() => {
+    const camDistrict = new Map<string, string | null>();
+    for (const c of cameras) camDistrict.set(c.id, districtAt(c.latitude, c.longitude));
+    const detDistrict = new Map<string, string | null>();
+    for (const e of detections) detDistrict.set(e.id, districtAt(e.latitude, e.longitude));
+
+    const fCameras = selectedDistrict
+      ? cameras.filter((c) => camDistrict.get(c.id) === selectedDistrict)
+      : cameras;
+    const fDetections = selectedDistrict
+      ? detections.filter((e) => detDistrict.get(e.id) === selectedDistrict)
+      : detections;
+
+    const agg = aggregateByDistrict(cameras, detections);
+    const counts = Object.fromEntries(
+      [...agg.values()].map((a) => [a.name, { cameras: a.cameras, events: a.events }]),
+    );
+    const clusters = [...agg.values()]
+      .filter((a) => a.cameras > 0 && a.centroid)
+      .map((a) => ({
+        name: a.name,
+        centroid: a.centroid as [number, number],
+        cameras: a.cameras,
+        offline: a.offlineCameras,
+        events: a.events,
+        bounds: a.bounds,
+      }));
+    return { mapCameras: fCameras, mapDetections: fDetections, districtCounts: counts, districtClusters: clusters };
+  }, [cameras, detections, selectedDistrict]);
 
   const selectPoint = (p: RoutePoint) => {
     setActiveSequence(p.sequence);
@@ -163,12 +198,23 @@ export default function GIS() {
                 <input type="checkbox" className="h-3 w-3" checked={gujaratDistricts} onChange={(e) => setGujaratDistricts(e.target.checked)} />
                 Districts
               </label>
+              {selectedDistrict && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDistrict(null)}
+                  className="flex items-center gap-1 rounded-full border border-brand/50 bg-brand/10 px-2 py-0.5 text-2xs font-bold text-brand hover:bg-brand/20"
+                  title="Clear district focus"
+                >
+                  {selectedDistrict}
+                  <X size={10} aria-hidden />
+                </button>
+              )}
             </div>
           }
         >
           <LazyMap
-            cameras={showCameras ? cameras : []}
-            events={detections}
+            cameras={showCameras ? mapCameras : []}
+            events={mapDetections}
             route={points}
             routePlate={result?.plate}
             activeRouteSequence={activeSequence}
@@ -177,13 +223,16 @@ export default function GIS() {
             onPlaybackStop={(pt) => setActiveSequence(pt.sequence)}
             onSelectCamera={focusCameraOnMap}
             onWatchCamera={(c) => setLiveCameraId(c.id)}
-            gujarat={{ boundary: true, mask: gujaratFocus, districts: gujaratDistricts }}
+            gujarat={{ boundary: true, mask: gujaratFocus, districts: gujaratDistricts, counts: districtCounts, selected: selectedDistrict, onSelect: setSelectedDistrict }}
+            districtClusters={showCameras ? districtClusters : []}
+            selectedDistrict={selectedDistrict}
+            onSelectDistrict={setSelectedDistrict}
             panTo={panTo}
             showCoverage={showCoverage}
             className="absolute inset-0"
             zoom={12}
           />
-          <MapLegend showRoute={points.length > 0} />
+          <MapLegend showRoute={points.length > 0} density={gujaratDistricts} />
 
           {/* Live feed docked to the map: opens for the camera selected on the
               map (marker click / popup "Watch Live") or a route stop. */}
@@ -234,12 +283,17 @@ export default function GIS() {
               <MovementTimeline points={points} activeSequence={activeSequence} onSelect={selectPoint} />
             </Panel>
           ) : (
-            <Panel title="All cameras" icon={MapIcon} className="min-h-0 flex-1" bodyClassName="overflow-y-auto">
+            <Panel
+              title={selectedDistrict ? `Cameras — ${selectedDistrict}` : 'All cameras'}
+              icon={MapIcon}
+              className="min-h-0 flex-1"
+              bodyClassName="overflow-y-auto"
+            >
               {cameras.length === 0 ? (
-                <EmptyState title="Loading network" />
+                <EmptyState title={selectedDistrict ? 'No cameras in this district' : 'Loading network'} />
               ) : (
                 <ul className="divide-y divide-line/60">
-                  {cameras.map((c) => (
+                  {mapCameras.map((c) => (
                     <li key={c.id}>
                       <button
                         type="button"

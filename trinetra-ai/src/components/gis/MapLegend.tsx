@@ -1,7 +1,7 @@
 import { Camera as CameraIcon, Cctv, CircleDot, Radio, Wifi } from 'lucide-react';
 import { cameraStatusHex } from '@/lib/utils';
 
-export function MapLegend({ showRoute = false }: { showRoute?: boolean }) {
+export function MapLegend({ showRoute = false, density = false }: { showRoute?: boolean; density?: boolean }) {
   const items = [
     { color: cameraStatusHex.ONLINE, label: 'Camera working', icon: Cctv },
     { color: cameraStatusHex.DEGRADED, label: 'Poor quality', icon: Wifi },
@@ -18,6 +18,16 @@ export function MapLegend({ showRoute = false }: { showRoute?: boolean }) {
           {i.label}
         </li>
       ))}
+      {density && (
+        <li className="flex items-center gap-1.5 pt-0.5 text-[10px] text-ink-muted">
+          <span
+            className="h-2 w-6 rounded-sm"
+            style={{ background: 'linear-gradient(to right, rgba(249,115,22,.08), rgba(249,115,22,.5))' }}
+            aria-hidden
+          />
+          More cameras = darker
+        </li>
+      )}
     </ul>
   );
 }

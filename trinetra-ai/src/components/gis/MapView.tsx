@@ -17,7 +17,7 @@ import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { useRoutePlayback } from '@/hooks/useRoutePlayback';
-import { cameraIcon, eventIcon, playbackIcon, routeIcon } from './mapIcons';
+import { cameraIcon, districtBubbleIcon, eventIcon, playbackIcon, routeIcon } from './mapIcons';
 import { GujaratFocus, type GujaratFocusProps } from './GujaratFocus';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
@@ -90,6 +90,58 @@ function ResizeGuard() {
   return null;
 }
 
+/** One district bubble at state-level zoom (overview clustering). */
+export interface DistrictCluster {
+  name: string;
+  centroid: [number, number];
+  cameras: number;
+  offline: number;
+  events: number;
+  bounds: [number, number][];
+}
+
+/**
+ * District bubbles shown instead of 30+ pins at statewide zoom.
+ * Click: select the district (GIS filters cameras/lists) and fly to its
+ * member cameras; clicking the selected bubble again clears the focus.
+ */
+function DistrictClusterLayer({
+  clusters,
+  selected,
+  onSelect,
+}: {
+  clusters: DistrictCluster[];
+  selected: string | null;
+  onSelect?: (name: string | null) => void;
+}) {
+  const map = useMap();
+  return (
+    <>
+      {clusters.map((c) => (
+        <Marker
+          key={c.name}
+          position={c.centroid}
+          zIndexOffset={400}
+          icon={districtBubbleIcon(c.cameras, c.offline, c.events, selected === c.name)}
+          title={`${c.name} — ${c.cameras} camera${c.cameras === 1 ? '' : 's'} · ${c.events} sighting${c.events === 1 ? '' : 's'}`}
+          eventHandlers={{
+            click: () => {
+              if (selected === c.name) {
+                onSelect?.(null);
+                return;
+              }
+              onSelect?.(c.name);
+              if (c.bounds.length > 1)
+                map.flyToBounds(L.latLngBounds(c.bounds), { padding: [56, 56], maxZoom: 12, duration: 0.7 });
+              else if (c.bounds[0]) map.flyTo(c.bounds[0], Math.max(map.getZoom(), 12), { duration: 0.7 });
+            },
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
 export interface MapViewProps {
   cameras?: Camera[];
   events?: VehicleEvent[];
@@ -114,6 +166,10 @@ export interface MapViewProps {
   onWatchCamera?: (camera: Camera) => void;
   /** Gujarat state outline / focus mask / district overlay. */
   gujarat?: GujaratFocusProps;
+  /** District bubbles that replace camera pins at statewide zoom. */
+  districtClusters?: DistrictCluster[];
+  selectedDistrict?: string | null;
+  onSelectDistrict?: (name: string | null) => void;
 }
 
 /**
@@ -139,6 +195,9 @@ export function MapView({
   onPlaybackStop,
   onWatchCamera,
   gujarat,
+  districtClusters = [],
+  selectedDistrict = null,
+  onSelectDistrict,
 }: MapViewProps) {
   const [basemap, setBasemap] = useState<BasemapId>(config.map.defaultBasemap);
   const [mapZoom, setMapZoom] = useState(zoom);
@@ -228,6 +287,9 @@ export function MapView({
       enterFake();
     }
   };
+  // Below this zoom the 30+ pins collapse into per-district bubbles.
+  const clustered = districtClusters.length > 0 && mapZoom < DETECTION_ZOOM && !selectedDistrict;
+
   const routeLine = useMemo(
     () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],
@@ -284,20 +346,24 @@ export function MapView({
             />
           ))}
 
-        {cameras.map((c) => (
-          <Marker
-            key={c.id}
-            position={[c.latitude, c.longitude]}
-            icon={cameraIcon(c.status, c.id === selectedCameraId)}
-            eventHandlers={{ click: () => onSelectCamera?.(c) }}
-            keyboard
-            title={`${c.name} — ${c.location}`}
-          >
-            <Popup>
-              <CameraPopup camera={c} onWatch={onWatchCamera} />
-            </Popup>
-          </Marker>
-        ))}
+        {clustered ? (
+          <DistrictClusterLayer clusters={districtClusters} selected={selectedDistrict} onSelect={onSelectDistrict} />
+        ) : (
+          cameras.map((c) => (
+            <Marker
+              key={c.id}
+              position={[c.latitude, c.longitude]}
+              icon={cameraIcon(c.status, c.id === selectedCameraId)}
+              eventHandlers={{ click: () => onSelectCamera?.(c) }}
+              keyboard
+              title={`${c.name} — ${c.location}`}
+            >
+              <Popup>
+                <CameraPopup camera={c} onWatch={onWatchCamera} />
+              </Popup>
+            </Marker>
+          ))
+        )}
 
         {mapZoom >= DETECTION_ZOOM &&
           events.map((e) => (
@@ -354,6 +420,11 @@ export function MapView({
         <div className="absolute left-3 top-[76px] z-[1001] flex items-center gap-1.5 rounded-full border border-line bg-surface-1/95 px-3 py-1.5 text-2xs font-semibold text-ink-muted shadow-md backdrop-blur">
           <ZoomIn size={12} aria-hidden />
           Zoom in to see {events.length} sighting{events.length === 1 ? '' : 's'}
+        </div>
+      )}
+      {clustered && (
+        <div className="absolute bottom-3 right-3 z-[1001] rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-2xs font-semibold text-brand shadow-md backdrop-blur">
+          Grouped by district — click a bubble to focus
         </div>
       )}
       <div className="absolute right-3 top-3 z-[1001] flex flex-col items-end gap-2">

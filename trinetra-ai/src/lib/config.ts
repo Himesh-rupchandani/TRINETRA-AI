@@ -5,7 +5,7 @@
  */
 const env = import.meta.env;
 
-export type BasemapId = 'street' | 'satellite' | 'mapbox' | 'mapbox-hybrid' | 'mapbox-satellite';
+export type BasemapId = 'street' | 'satellite' | 'mapbox' | 'mapbox-night' | 'mapbox-hybrid' | 'mapbox-satellite';
 
 /**
  * Mapbox access token (public/scope-restricted token is fine — tile requests
@@ -29,9 +29,14 @@ const mapTiles: Record<BasemapId, { base: string; labels?: string; maxZoom?: num
       'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
   },
   // Mapbox raster tiles (styles rendered server-side): streets keeps labels
-  // baked in, satellite is pure imagery, hybrid is imagery + Mapbox labels.
+  // baked in, satellite is pure imagery, hybrid is imagery + Mapbox labels,
+  // night is the dark control-room style.
   mapbox: {
     base: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
+    maxZoom: 20,
+  },
+  'mapbox-night': {
+    base: `https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
     maxZoom: 20,
   },
   'mapbox-satellite': {
@@ -49,6 +54,7 @@ export const basemaps: { id: BasemapId; label: string }[] = [
   ...(mapboxEnabled
     ? ([
         { id: 'mapbox', label: 'Mapbox' },
+        { id: 'mapbox-night', label: 'Night' },
         { id: 'mapbox-hybrid', label: 'Hybrid' },
         { id: 'mapbox-satellite', label: 'Satellite' },
       ] as { id: BasemapId; label: string }[])
@@ -95,6 +101,7 @@ export const config = {
       satellite:
         'Imagery &copy; Esri, Maxar, Earthstar Geographics &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',
       mapbox: MAPBOX_ATTRIBUTION,
+      'mapbox-night': MAPBOX_ATTRIBUTION,
       'mapbox-satellite': MAPBOX_ATTRIBUTION,
       'mapbox-hybrid': MAPBOX_ATTRIBUTION,
     },
