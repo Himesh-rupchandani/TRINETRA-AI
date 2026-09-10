@@ -9,9 +9,11 @@ import {
   ScanLine,
   ShieldAlert,
   Users,
+  Video,
 } from 'lucide-react';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { AlertCard } from '@/components/alerts/AlertCard';
+import { CameraPlayer } from '@/components/camera/CameraPlayer';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { Panel, EmptyState } from '@/components/common/Panel';
 import { useCameras } from '@/hooks/useCameras';
@@ -20,6 +22,7 @@ import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
 import { cn, formatNumber, formatPct, relativeTime } from '@/lib/utils';
+import { config } from '@/lib/config';
 import type { VehicleEvent } from '@/types';
 
 /**
@@ -84,8 +87,37 @@ export default function Dashboard() {
     kpis.data?.anprReads24h != null && kpis.data?.vehicleDetections24h
       ? kpis.data.anprReads24h / kpis.data.vehicleDetections24h
       : undefined;
+
+  // AUTO LIVE: pick default live camera (hackathon provided) — auto-plays on dashboard
+  const liveCamera = useMemo(() => {
+    if (!cameras.length) return null;
+    const preferred = cameras.find((c) => c.id === config.defaultLiveCameraId.toLowerCase());
+    if (preferred) return preferred;
+    // fallback: first ONLINE camera
+    return cameras.find((c) => c.status === 'ONLINE') ?? cameras[0] ?? null;
+  }, [cameras]);
+
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-5 xl:p-6">
+      {/* AUTO LIVE CAMERA — hackathon provided feed, auto-starts, no email/password needed */}
+      {liveCamera && (
+        <section aria-label="Live camera — auto">
+          <Panel
+            title={`Live — ${liveCamera.name} • ${liveCamera.location}`}
+            icon={Video}
+            actions={
+              <button type="button" className="link-btn" onClick={() => navigate(`/cameras/${liveCamera.id}`)}>
+                Open full view <ArrowRight size={13} aria-hidden />
+              </button>
+            }
+          >
+            <CameraPlayer camera={liveCamera} autoRequest />
+            <p className="px-3 py-2 text-2xs text-ink-faint">
+              Hackathon live feed — auto-connected with saved credentials. No manual login needed.
+            </p>
+          </Panel>
+        </section>
+      )}
 
       {/* Ops status board: alerts hero first, then network health and 24h counters. */}
       <section

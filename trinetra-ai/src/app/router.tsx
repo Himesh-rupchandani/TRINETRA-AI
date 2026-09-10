@@ -18,6 +18,7 @@ const Registry = lazy(() => import('@/pages/Registry'));
 const Watchlist = lazy(() => import('@/pages/Watchlist'));
 const SystemHealth = lazy(() => import('@/pages/SystemHealth'));
 const Profile = lazy(() => import('@/pages/Profile'));
+const Ingest = lazy(() => import('@/pages/Ingest'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 
 const page = (el: React.ReactNode) => (
@@ -53,6 +54,7 @@ const routes: RouteObject[] = [
       { path: 'watchlist', element: page(<Watchlist />) },
       { path: 'system', element: page(<SystemHealth />) },
       { path: 'profile', element: page(<Profile />) },
+      { path: 'ingest', element: page(<Ingest />) },
       { path: 'dashboard', element: <Navigate to="/" replace /> },
       { path: '*', element: page(<NotFound />) },
     ],

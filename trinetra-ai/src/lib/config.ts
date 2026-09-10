@@ -34,6 +34,9 @@ export const config = {
    */
   streamBasePath: env.VITE_STREAM_BASE_PATH ?? '/sentinel/stream',
   liveStreams: (env.VITE_LIVE_STREAMS ?? 'true') !== 'false',
+  autoLogin: (env.VITE_AUTO_LOGIN ?? 'true') !== 'false',
+  // Default live camera to auto-show on dashboard when website runs
+  defaultLiveCameraId: (env.VITE_DEFAULT_LIVE_CAMERA ?? 'cam04') as string,
   map: {
     center: [
       Number(env.VITE_MAP_CENTER_LAT ?? 22.3),

@@ -25,6 +25,7 @@ interface TopNavItem {
 const PRIMARY: TopNavItem[] = [
   { to: '/video-analysis', label: 'Video Analysis', hint: 'Upload and analyse CCTV or video files', icon: Video, tone: 'blue' },
   { to: '/cameras', label: 'Live Cameras', hint: 'Watch live CCTV feeds', icon: Cctv, tone: 'green', live: true },
+  { to: '/ingest', label: 'Ingest API', hint: 'RTSP • WHEP • HLS • Catalogue', icon: ListTree, tone: 'amber' },
   { to: '/vehicles', label: 'Find Vehicle', hint: 'Search by number plate', icon: Car, tone: 'sky' },
   { to: '/gis', label: 'Map', hint: 'Cameras & vehicles on the map', icon: Map, tone: 'orange' },
   { to: '/events', label: 'Vehicle Log', hint: 'Full vehicle history', icon: ListTree, tone: 'purple' },

@@ -428,43 +428,75 @@ class CameraStream:
                 logger.error(f"[{self.camera_id}] {self.last_error}. Marking RECONNECTING.")
 
     def _generate_synthetic_cctv_frame(self) -> np.ndarray:
-        """Generate high-quality synthetic CCTV traffic scene for demo mode."""
+        """Generate high-quality synthetic CCTV traffic scene for demo mode.
+        
+        FIXED: Now clearly watermarked as DEMO FEED — NOT LIVE, so officers
+        never mistake synthetic for real Sentinel live. In sandbox/offline
+        networks (TLS blocked), this is expected — real network shows live.
+        """
         self._synthetic_step += 1
-        h, w = 480, 640
+        h, w = 720, 1280  # HD for better preview
         frame = np.zeros((h, w, 3), dtype=np.uint8)
-        frame[:] = (35, 40, 45)
+        # Dark asphalt background
+        frame[:] = (38, 42, 48)
 
-        # Draw road lanes
-        cv2.rectangle(frame, (100, 0), (540, h), (55, 60, 65), -1)
-        dash_offset = (self._synthetic_step * 8) % 60
-        for y in range(-60 + dash_offset, h + 60, 60):
-            cv2.line(frame, (320, max(0, y)), (320, min(h, y + 30)), (230, 230, 230), 3)
+        # Road surface
+        cv2.rectangle(frame, (200, 0), (1080, h), (58, 62, 68), -1)
+        # Center dashed line (moving)
+        dash_offset = (self._synthetic_step * 8) % 80
+        for y in range(-80 + dash_offset, h + 80, 80):
+            cv2.line(frame, (640, max(0, y)), (640, min(h, y + 40)), (235, 235, 235), 4)
+        # Side solid lines
+        cv2.line(frame, (200, 0), (200, h), (255, 255, 255), 5)
+        cv2.line(frame, (1080, 0), (1080, h), (255, 255, 255), 5)
 
-        cv2.line(frame, (100, 0), (100, h), (255, 255, 255), 4)
-        cv2.line(frame, (540, 0), (540, h), (255, 255, 255), 4)
+        # Simulated moving vehicles (more realistic)
+        car1_y = ((self._synthetic_step * 6) % (h + 300)) - 150
+        if -100 < car1_y < h + 100:
+            # Car body shadow
+            cv2.ellipse(frame, (420, int(car1_y + 145)), (80, 15), 0, 0, 360, (20, 20, 20), -1)
+            # Car
+            cv2.rectangle(frame, (340, int(car1_y)), (500, int(car1_y + 140)), (185, 60, 50), -1)
+            cv2.rectangle(frame, (340, int(car1_y)), (500, int(car1_y + 140)), (255, 255, 255), 2)
+            cv2.rectangle(frame, (350, int(car1_y + 15)), (490, int(car1_y + 55)), (35, 35, 35), -1)
+            cv2.rectangle(frame, (370, int(car1_y + 120)), (470, int(car1_y + 135)), (250, 250, 250), -1)
+            cv2.putText(frame, "GJ01AB1234", (375, int(car1_y + 132)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+            # Headlights
+            cv2.circle(frame, (360, int(car1_y + 10)), 6, (255, 255, 200), -1)
+            cv2.circle(frame, (480, int(car1_y + 10)), 6, (255, 255, 200), -1)
 
-        # Simulated moving vehicles
-        car1_y = ((self._synthetic_step * 5) % (h + 200)) - 100
-        if -80 < car1_y < h + 80:
-            cv2.rectangle(frame, (170, int(car1_y)), (270, int(car1_y + 130)), (180, 50, 40), -1)
-            cv2.rectangle(frame, (170, int(car1_y)), (270, int(car1_y + 130)), (230, 230, 230), 2)
-            cv2.rectangle(frame, (180, int(car1_y + 20)), (260, int(car1_y + 50)), (30, 30, 30), -1)
-            cv2.rectangle(frame, (195, int(car1_y + 115)), (245, int(car1_y + 128)), (255, 255, 255), -1)
-            cv2.putText(frame, "GJ01AB1234", (197, int(car1_y + 125)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (0, 0, 0), 1)
+        car2_y = h - (((self._synthetic_step * 5) % (h + 350)) - 150)
+        if -100 < car2_y < h + 100:
+            cv2.ellipse(frame, (860, int(car2_y + 155)), (80, 15), 0, 0, 360, (20, 20, 20), -1)
+            cv2.rectangle(frame, (780, int(car2_y)), (940, int(car2_y + 150)), (50, 110, 190), -1)
+            cv2.rectangle(frame, (780, int(car2_y)), (940, int(car2_y + 150)), (255, 255, 255), 2)
+            cv2.rectangle(frame, (790, int(car2_y + 85)), (930, int(car2_y + 120)), (35, 35, 35), -1)
+            cv2.rectangle(frame, (810, int(car2_y + 15)), (910, int(car2_y + 32)), (250, 250, 250), -1)
+            cv2.putText(frame, "MH02CD5678", (815, int(car2_y + 28)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+            cv2.circle(frame, (800, int(car2_y + 140)), 6, (255, 50, 50), -1)
+            cv2.circle(frame, (920, int(car2_y + 140)), 6, (255, 50, 50), -1)
 
-        car2_y = h - (((self._synthetic_step * 4) % (h + 250)) - 100)
-        if -80 < car2_y < h + 80:
-            cv2.rectangle(frame, (370, int(car2_y)), (470, int(car2_y + 140)), (40, 120, 200), -1)
-            cv2.rectangle(frame, (370, int(car2_y)), (470, int(car2_y + 140)), (230, 230, 230), 2)
-            cv2.rectangle(frame, (380, int(car2_y + 80)), (460, int(car2_y + 110)), (30, 30, 30), -1)
-            cv2.rectangle(frame, (395, int(car2_y + 10)), (445, int(car2_y + 23)), (255, 255, 255), -1)
-            cv2.putText(frame, "MH02CD5678", (397, int(car2_y + 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (0, 0, 0), 1)
-
-        # HUD Overlay
+        # --- CLEAR DEMO WATERMARK (so user knows why it looks like this) ---
+        # Top banner
+        cv2.rectangle(frame, (0, 0), (w, 85), (0, 0, 0), -1)
+        cv2.rectangle(frame, (0, 0), (w, 85), (255, 193, 7), 3)
+        cv2.putText(frame, f"TRINETRA AI CCTV [{self.camera_id}] ({self.state.value})", (20, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 180), 2)
         curr_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        cv2.putText(frame, f"TRINETRA AI CCTV [{self.camera_id}] ({self.state.value})", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 180), 2)
-        cv2.putText(frame, f"TIME: {curr_time}", (15, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        cv2.putText(frame, f"FRAMES: {self.frame_count} | SEQ: {self.sequence_number}", (15, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1)
+        cv2.putText(frame, f"TIME: {curr_time} | FRAMES: {self.frame_count} | SEQ: {self.sequence_number}", (20, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1)
+
+        # Big DEMO label center
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (w//2 - 220, h//2 - 50), (w//2 + 220, h//2 + 50), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
+        cv2.rectangle(frame, (w//2 - 220, h//2 - 50), (w//2 + 220, h//2 + 50), (255, 193, 7), 2)
+        cv2.putText(frame, "DEMO FEED", (w//2 - 140, h//2 - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (255, 193, 7), 3)
+        cv2.putText(frame, "NOT LIVE - Network blocked", (w//2 - 165, h//2 + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+
+        # Bottom explanation
+        cv2.rectangle(frame, (0, h-70), (w, h), (0, 0, 0), -1)
+        cv2.putText(frame, "Sandbox: cctv.corp8.cloud unreachable (TLS blocked) -> DEMO_MODE=True", (20, h-40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 193, 7), 1)
+        cv2.putText(frame, "Real venue network: auto-login with SENTINEL_EMAIL/PASSWORD -> LIVE WebRTC/HLS", (20, h-15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+
         return frame
 
     def is_alive(self) -> bool:

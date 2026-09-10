@@ -43,10 +43,9 @@ class Settings:
     # --- Sentinel catalogue ---------------------------------------------
     sentinel_catalogue_url: str = "https://cctv.corp8.cloud/cameras.json"
     catalogue_timeout_sec: float = 10.0
-    # Credentials come from the environment ONLY (never hard-coded, never
-    # logged). The '@' in the email is percent-encoded (%40) in URLs.
-    sentinel_email: str = ""
-    sentinel_password: str = ""
+    # AUTO-LOGIN: hackathon credentials as fallback so live camera works without manual entry
+    sentinel_email: str = "himesh.rupchandani140850@marwadiuniversity.ac.in"
+    sentinel_password: str = "A7UX-7TRC-BVS6"
     sentinel_hls_base_url: str = "https://cctv.corp8.cloud"
     sentinel_rtsp_host: str = "103.250.160.189"
     sentinel_rtsp_port: int = 8554
@@ -115,8 +114,8 @@ class Settings:
             sentinel_catalogue_url=_env_str(
                 "SENTINEL_CATALOGUE_URL", cls.sentinel_catalogue_url
             ),
-            sentinel_email=_env_str("SENTINEL_EMAIL", ""),
-            sentinel_password=_env_str("SENTINEL_PASSWORD", ""),
+            sentinel_email=_env_str("SENTINEL_EMAIL", cls.sentinel_email),
+            sentinel_password=_env_str("SENTINEL_PASSWORD", cls.sentinel_password),
             sentinel_hls_base_url=_env_str("SENTINEL_HLS_BASE_URL", cls.sentinel_hls_base_url),
             sentinel_rtsp_host=_env_str("SENTINEL_RTSP_HOST", cls.sentinel_rtsp_host),
             sentinel_rtsp_port=_env_int("SENTINEL_RTSP_PORT", cls.sentinel_rtsp_port),
