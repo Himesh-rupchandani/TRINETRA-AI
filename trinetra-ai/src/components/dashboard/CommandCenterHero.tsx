@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Zap, Activity, Cctv, MapPin, Radio, Lock } from 'lucide-react';
+import { Shield, Zap, Activity, Cctv, MapPin, Lock } from 'lucide-react';
 import { useAsync } from '@/hooks/useAsync';
 
 interface ThreatLevel {
@@ -10,7 +10,7 @@ interface ThreatLevel {
 }
 
 interface BandwidthData {
-  savings: { bandwidth_savings_percent: number; tb_saved_per_day: number; cost_saved_per_year_inr: number };
+  savings: { bandwidth_savings_percent: number; tb_saved_per_day: number };
   gujarat_network: { total_cameras: number; total_bandwidth_required: { centralized_gbps: number; edge_ai_mbps: number } };
 }
 
@@ -33,7 +33,7 @@ export function CommandCenterHero() {
       return (await res.json()) as BandwidthData;
     } catch {
       return {
-        savings: { bandwidth_savings_percent: 99.98, tb_saved_per_day: 3142, cost_saved_per_year_inr: 4807679507 },
+        savings: { bandwidth_savings_percent: 99.98, tb_saved_per_day: 3142 },
         gujarat_network: { total_cameras: 80000, total_bandwidth_required: { centralized_gbps: 320, edge_ai_mbps: 65 } }
       } as BandwidthData;
     }
@@ -54,138 +54,86 @@ export function CommandCenterHero() {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-[20px] border border-slate-200 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-6 text-white shadow-2xl">
-      <div className="absolute inset-0 opacity-[0.07]">
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-6 text-white shadow-xl">
+      <div className="absolute inset-0 opacity-[0.05]">
         <div className="h-full w-full" style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-          backgroundSize: '30px 30px'
+          backgroundImage: `linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)`,
+          backgroundSize: '32px 32px'
         }} />
       </div>
-      <div className="absolute -top-20 -right-20 h-60 w-60 rounded-full bg-blue-500/20 blur-[80px]" />
-      <div className="absolute -bottom-20 -left-20 h-60 w-60 rounded-full bg-violet-500/20 blur-[80px]" />
+      <div className="absolute -top-20 -right-20 h-60 w-60 rounded-full bg-blue-500/15 blur-[80px]" />
+      <div className="absolute -bottom-20 -left-20 h-60 w-60 rounded-full bg-violet-500/10 blur-[80px]" />
 
       <div className="relative z-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 shadow-[0_0_20px_rgba(59,130,246,0.5)]">
-              <Shield size={28} className="text-white" />
+            <div className="grid h-12 w-12 place-items-center rounded-xl bg-white text-blue-700 shadow-md">
+              <Shield size={24} />
             </div>
             <div>
-              <h1 className="flex items-center gap-2 text-[22px] font-black tracking-tight">
-                TRINETRA AI
-                <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-bold tracking-widest">COMMAND CENTER</span>
-              </h1>
-              <p className="mt-0.5 flex items-center gap-2 text-[13px] text-blue-200">
-                <MapPin size={12} /> Gujarat Police — Integrated CCTV Intelligence & Investigation Platform • 80,000 Camera Federation
-                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> LIVE OPERATIONS
-                </span>
+              <h1 className="text-[20px] font-bold tracking-tight">TRINETRA AI</h1>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-blue-200">
+                <MapPin size={11} /> Gujarat Police — Integrated CCTV Intelligence Platform
               </p>
             </div>
           </div>
           
           <div className="flex items-center gap-3">
-            <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-blue-200">System Time (IST)</p>
-              <p className="font-mono text-sm font-bold">{time.toLocaleTimeString()} IST</p>
-              <p className="font-mono text-[10px] text-blue-200">{time.toLocaleDateString()}</p>
+            <div className="rounded-xl border border-white/10 bg-white/[0.08] px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200">System Time</p>
+              <p className="font-mono text-sm font-semibold">{time.toLocaleTimeString()} IST</p>
             </div>
-            
-            <div className={`rounded-xl border px-4 py-2.5 text-center font-black shadow-lg backdrop-blur ${threatStyles[threatLevel] || threatStyles.LOW}`}>
+            <div className={`rounded-xl border px-4 py-2 text-center font-bold shadow-md ${threatStyles[threatLevel] || threatStyles.LOW}`}>
               <p className="text-[10px] uppercase tracking-widest opacity-90">Threat Level</p>
-              <p className="text-[15px] tracking-wide">{threatLevel}</p>
-              <p className="text-[10px] font-mono opacity-80">{threat.data?.counts?.total_active ?? 0} active alerts</p>
+              <p className="text-sm tracking-wide">{threatLevel}</p>
+              <p className="text-[10px] font-mono opacity-80">{threat.data?.counts?.total_active ?? 0} active</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] p-3 backdrop-blur">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3">
             <div className="flex items-center gap-2.5">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-500/20">
-                <Cctv size={18} className="text-blue-300" />
-              </div>
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-blue-500/20"><Cctv size={16} className="text-blue-300" /></div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-200">Camera Federation</p>
-                <p className="font-mono text-[13px] font-bold">80,000 Cameras</p>
-                <p className="text-[10px] text-blue-300">26 Departments • 33 Districts</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200">Federation</p>
+                <p className="font-mono text-[12px] font-semibold">80,000 Cameras</p>
+                <p className="text-[10px] text-blue-300">26 Departments</p>
               </div>
             </div>
           </div>
-          
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] p-3 backdrop-blur">
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3">
             <div className="flex items-center gap-2.5">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/20">
-                <Zap size={18} className="text-emerald-300" />
-              </div>
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/20"><Zap size={16} className="text-emerald-300" /></div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-200">Bandwidth Optimized</p>
-                <p className="font-mono text-[13px] font-bold">{bandwidth.data?.savings?.bandwidth_savings_percent ?? 99.98}% Saved</p>
-                <p className="text-[10px] text-emerald-300">{bandwidth.data?.savings?.tb_saved_per_day ?? 3142} TB/day • Edge AI</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-200">Optimization</p>
+                <p className="font-mono text-[12px] font-semibold">{bandwidth.data?.savings?.bandwidth_savings_percent ?? 99.98}% Saved</p>
+                <p className="text-[10px] text-emerald-300">Edge AI • 65 Mbps total</p>
               </div>
             </div>
           </div>
-          
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] p-3 backdrop-blur">
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3">
             <div className="flex items-center gap-2.5">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-violet-500/20">
-                <Activity size={18} className="text-violet-300" />
-              </div>
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-violet-500/20"><Activity size={16} className="text-violet-300" /></div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-violet-200">AI Performance</p>
-                <p className="font-mono text-[13px] font-bold">94.2% mAP • 120ms</p>
-                <p className="text-[10px] text-violet-300">YOLO11 + OCR + ByteTrack</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-200">AI Performance</p>
+                <p className="font-mono text-[12px] font-semibold">94.2% mAP • 120ms</p>
+                <p className="text-[10px] text-violet-300">YOLO11 • OCR • Tracking</p>
               </div>
             </div>
           </div>
-          
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] p-3 backdrop-blur">
+          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3">
             <div className="flex items-center gap-2.5">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-500/20">
-                <Lock size={18} className="text-amber-300" />
-              </div>
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500/20"><Lock size={16} className="text-amber-300" /></div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-200">Evidence Security</p>
-                <p className="font-mono text-[13px] font-bold">BSA 2023 • SHA256</p>
-                <p className="text-[10px] text-amber-300">Sec 63 + 65B • Court-admissible</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-200">Evidence</p>
+                <p className="font-mono text-[12px] font-semibold">BSA 2023 • SHA256</p>
+                <p className="text-[10px] text-amber-300">Court-admissible</p>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <div className="grid h-6 w-6 place-items-center rounded-full bg-blue-500">
-              <Shield size={12} className="text-white" />
-            </div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-blue-200">Platform Capabilities:</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-blue-100">Speed Violation Engine • Haversine GPS • Optical Velocity</span>
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-blue-100">Evidence Vault • SHA256 Hash Chain • BSA 2023 Certificate</span>
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-blue-100">AI Insights • Anomaly Detection • Threat Level • Predictive ETA 87%</span>
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-blue-100">Real-time • SSE/WS • Voice Alerts • Printable Reports • PWA</span>
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center gap-2 overflow-hidden rounded-lg border border-white/10 bg-black/30 px-3 py-2">
-          <Radio size={12} className="shrink-0 animate-pulse text-red-400" />
-          <div className="flex animate-[marquee_30s_linear_infinite] gap-8 whitespace-nowrap text-[11px] font-mono text-blue-100">
-            <span>🔴 LIVE: GJ01AB1234 journey reconstructed — 359 km across 4 cameras • 5h 37m • Section speed analysis • BSA 2023 compliant</span>
-            <span>⚡ FEDERATION: 80,000 cameras • 26 departments • Edge AI 65 Mbps • 99.98% bandwidth optimized • ₹480 Cr saved / 10 years</span>
-            <span>🛡️ EVIDENCE: SHA256 hash chain • Digital signature • Chain of custody • Tamper detection • Court-admissible certificate • Sec 65B</span>
-            <span>🎯 PREDICTIVE: Next-camera prediction with ETA • Direction-aware • 87% accuracy • Interception recommendation • Threat auto-calculated</span>
-            <span>📡 INTEGRATION: Sentinel RTSP/HLS/WHEP secure proxy • PTS timing • Reconnect 2s→30s • Evidence writer • Catalogue sync • Production ready</span>
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-      `}</style>
     </div>
   );
 }
