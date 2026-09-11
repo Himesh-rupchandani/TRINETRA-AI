@@ -97,8 +97,10 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-5 p-4 sm:p-5 xl:p-6">
-      {/* Professional Command Center Header */}
-      <CommandCenterHero />
+      {/* Command Center — Tour: command-center */}
+      <div data-tour="command-center">
+        <CommandCenterHero />
+      </div>
 
       {/* System Controls */}
       <div className="flex items-center justify-between">
@@ -110,9 +112,9 @@ export default function Dashboard() {
         <VoiceAlertSystem />
       </div>
 
-      {/* Live Camera — Auto Connected */}
+      {/* Live Camera — Tour: live-camera */}
       {liveCamera && (
-        <section aria-label="Live camera">
+        <section aria-label="Live camera" data-tour="live-camera">
           <Panel
             title={`Live Feed — ${liveCamera.name} • ${liveCamera.location}`}
             icon={Video}
@@ -131,7 +133,7 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* Operations KPIs */}
+      {/* Operations KPIs — Tour: kpis */}
       <section
         className="kpi-stagger grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-6"
         aria-label="Operations status"
@@ -153,7 +155,7 @@ export default function Dashboard() {
                 {sevCounts.CRITICAL > 0 && <span className="chip border-red-200 bg-red-500/10 text-red-700">{sevCounts.CRITICAL} critical</span>}
                 {sevCounts.HIGH > 0 && <span className="chip border-orange-200 bg-orange-500/10 text-orange-700">{sevCounts.HIGH} high</span>}
                 {sevCounts.MEDIUM > 0 && <span className="chip border-amber-200 bg-amber-500/10 text-amber-700">{sevCounts.MEDIUM} medium</span>}
-                {sevCounts.LOW > 0 && <span className="chip border-slate-200 bg-slate-500/10 text-slate-600">{sevCounts.LOW} low</span>}
+                {sevCounts.LOW > 0 && <span className="chip border-slate-200 bg-slate-500/10 text-slate-600\">{sevCounts.LOW} low</span>}
               </div>
             ) : undefined
           }
@@ -175,10 +177,10 @@ export default function Dashboard() {
         />
         <KpiCard label="Vehicle Detections" value={formatNumber(kpis.data?.vehicleDetections24h)} sub={latestSeen ? <>Last seen {relativeTime(latestSeen)} · {lastHourCount} last hour</> : 'Last 24 hours'} tile="blue" icon={Car} to="/events" cta="View events" loading={kpis.loading} />
         <KpiCard label="ANPR Reads" value={formatNumber(kpis.data?.anprReads24h)} sub={readRate != null ? `${formatPct(readRate)} read rate` : 'Automated recognition'} tile="sky" icon={ScanLine} to="/events" cta="View logs" loading={kpis.loading} />
-        <KpiCard label="Watchlist Matches" value={formatNumber(kpis.data?.watchlistMatches24h)} sub={lastMatch?.plate ? <>Last: <span className="font-mono">{lastMatch.plate}</span> · {relativeTime(lastMatch.timestamp)}</> : 'No matches 24h'} tone={kpis.data?.watchlistMatches24h ? 'critical' : 'neutral'} tile="orange" icon={ShieldAlert} to="/watchlist" cta="Watchlist" loading={kpis.loading} />
+        <KpiCard label="Watchlist Matches" value={formatNumber(kpis.data?.watchlistMatches24h)} sub={lastMatch?.plate ? <>Last: <span className="font-mono\">{lastMatch.plate}</span> · {relativeTime(lastMatch.timestamp)}</> : 'No matches 24h'} tone={kpis.data?.watchlistMatches24h ? 'critical' : 'neutral'} tile="orange" icon={ShieldAlert} to="/watchlist" cta="Watchlist" loading={kpis.loading} />
       </section>
 
-      {/* Intelligence Modules — Professional */}
+      {/* Intelligence Modules — Tour: bandwidth-engine + ai-insights */}
       <section className="grid gap-4">
         <div className="flex items-center gap-2">
           <Brain size={18} className="text-violet-600" />
@@ -186,23 +188,33 @@ export default function Dashboard() {
           <span className="chip border-violet-200 bg-violet-50 text-violet-700 text-[10px] font-bold">PRODUCTION READY • 80K SCALE</span>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
-          <BandwidthEngine />
-          <AIInsightsDashboard />
+          <div data-tour="bandwidth-engine">
+            <BandwidthEngine />
+          </div>
+          <div data-tour="ai-insights">
+            <AIInsightsDashboard />
+          </div>
         </div>
       </section>
 
-      {/* Alerts + Map */}
+      {/* Alerts + Map — Tour: alerts-panel + map-panel */}
       <section className="grid gap-3 sm:gap-4 xl:grid-cols-12" aria-label="Alerts and map">
-        <Panel title="Active Alerts" icon={Bell} className="xl:col-span-7" actions={<button type="button" className="link-btn" onClick={() => navigate('/alerts')}>View all <ArrowRight size={13} aria-hidden /></button>}>
-          {activeAlerts.length === 0 ? <EmptyState title="No active alerts" detail="System is monitoring — no threats detected." /> : <div className="space-y-3 p-3">{activeAlerts.slice(0, 3).map((a) => <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />)}</div>}
-        </Panel>
-        <Panel title="Live Vehicle Sightings" icon={MapIcon} className="min-h-[380px] xl:col-span-5" bodyClassName="relative isolate" actions={<button type="button" className="link-btn" onClick={() => navigate('/gis')}>Open GIS <ArrowRight size={13} aria-hidden /></button>}>
-          <LazyMap cameras={cameras} events={detectionPoints} className="absolute inset-0" onSelectCamera={(c) => navigate(`/cameras/${c.id}`)} zoom={11} />
-        </Panel>
+        <div className="xl:col-span-7" data-tour="alerts-panel">
+          <Panel title="Active Alerts" icon={Bell} actions={<button type="button" className="link-btn" onClick={() => navigate('/alerts')}>View all <ArrowRight size={13} aria-hidden /></button>}>
+            {activeAlerts.length === 0 ? <EmptyState title="No active alerts" detail="System is monitoring — no threats detected." /> : <div className="space-y-3 p-3">{activeAlerts.slice(0, 3).map((a) => <AlertCard key={a.id} alert={a} onAcknowledge={acknowledge} onResolve={resolve} compact />)}</div>}
+          </Panel>
+        </div>
+        <div className="xl:col-span-5" data-tour="map-panel">
+          <Panel title="Live Vehicle Sightings" icon={MapIcon} className="min-h-[380px]" bodyClassName="relative isolate" actions={<button type="button" className="link-btn" onClick={() => navigate('/gis')}>Open GIS <ArrowRight size={13} aria-hidden /></button>}>
+            <div className="relative h-[340px]">
+              <LazyMap cameras={cameras} events={detectionPoints} className="absolute inset-0" onSelectCamera={(c) => navigate(`/cameras/${c.id}`)} zoom={11} />
+            </div>
+          </Panel>
+        </div>
       </section>
 
-      {/* Live Investigation Demo — Professional */}
-      <section className="panel overflow-hidden border-blue-200">
+      {/* Live Investigation Demo — Tour: investigation-demo */}
+      <section className="panel overflow-hidden border-blue-200" data-tour="investigation-demo">
         <div className="panel-header bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-white shadow-sm">
@@ -245,7 +257,7 @@ export default function Dashboard() {
         </div>
         <div className="border-t border-line bg-slate-50 px-4 py-2.5">
           <p className="text-[11px] text-ink-muted">
-            <span className="font-bold">Technical:</span> Haversine GPS distance calculation, PTS-based timing, SHA256 hash chain per segment, BSA 2023 Section 63 + Section 65B compliance, 
+            <span className="font-bold">Technical:</span> Haversine GPS distance calculation, PTS-based timing, SHA256 hash chain per segment, BSA 2023 Section 63 + Section 65B compliance,
             printable court-admissible certificate, predictive next-camera with ETA, threat level auto-calculated. Full investigation at <span className="font-mono font-bold">/vehicles/GJ01AB1234</span> with speed engine + evidence vault.
           </p>
         </div>

@@ -173,8 +173,8 @@ export default function VehicleInvestigation() {
       }
     >
       <div className="grid gap-3 p-4 sm:gap-4 sm:p-5" data-tour="trace">
-        {/* SUPERIOR: Speed Violation Engine */}
-        <div className="xl:col-span-12">
+        {/* Speed Violation Engine — Tour: speed-engine */}
+        <div className="xl:col-span-12" data-tour="speed-engine">
           <SpeedViolationPanel plate={plate} />
         </div>
 
@@ -267,9 +267,9 @@ export default function VehicleInvestigation() {
           <EvidencePanel event={activeEvent} />
         </Panel>
 
-        {/* SUPERIOR: Evidence Vault - BSA 2023 */}
+        {/* Evidence Vault — Tour: evidence-vault */}
         {activeEvent && (
-          <div className="xl:col-span-12">
+          <div className="xl:col-span-12" data-tour="evidence-vault">
             <EvidenceVault eventId={activeEvent.id} />
           </div>
         )}
