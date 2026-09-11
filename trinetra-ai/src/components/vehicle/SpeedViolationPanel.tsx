@@ -1,5 +1,5 @@
 import { useAsync } from '@/hooks/useAsync';
-import { AlertTriangle, Gauge, MapPin, Clock, Shield, FileCheck } from 'lucide-react';
+import { Gauge, MapPin, Clock, Shield, FileCheck } from 'lucide-react';
 
 interface SpeedSegment {
   from_camera: string;
@@ -27,9 +27,9 @@ interface SpeedAnalysis {
   critical_violations: number;
   is_overspeeding: boolean;
   segments: SpeedSegment[];
-  violations: SpeedSegment[];
   bsa_compliant: boolean;
   court_admissible: boolean;
+  speed_limit_kmh: number;
 }
 
 export function SpeedViolationPanel({ plate }: { plate: string }) {
@@ -43,16 +43,14 @@ export function SpeedViolationPanel({ plate }: { plate: string }) {
     }
   }, [plate]);
 
-  if (analysis.loading) {
-    return <div className="panel p-4"><div className="skeleton h-32 w-full" /></div>;
-  }
+  if (analysis.loading) return <div className="panel p-4"><div className="skeleton h-32 w-full" /></div>;
 
   if (analysis.error || !analysis.data) {
     return (
       <div className="panel p-4">
         <div className="flex items-center gap-2 text-ink-faint">
           <Gauge size={16} />
-          <p className="text-xs">Need 2+ GPS-tagged sightings for speed analysis — try GJ01AB1234</p>
+          <p className="text-xs">Speed analysis requires 2+ GPS-tagged sightings — try demo plate GJ01AB1234</p>
         </div>
       </div>
     );
@@ -64,29 +62,17 @@ export function SpeedViolationPanel({ plate }: { plate: string }) {
 
   return (
     <div className="panel overflow-hidden">
-      <div className="panel-header bg-gradient-to-r from-orange-50 to-red-50">
-        <div className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-orange-500 text-white">
-            <Gauge size={16} />
-          </div>
+      <div className="panel-header bg-gradient-to-r from-blue-50 to-indigo-50">
+        <div className="flex items-center gap-2.5">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white"><Gauge size={16} /></div>
           <div>
-            <h3 className="panel-title">Speed Violation Engine</h3>
-            <p className="text-[11px] text-ink-faint">Haversine GPS + BSA 2023 Compliant</p>
+            <h3 className="panel-title">Speed & Section Control Analysis</h3>
+            <p className="text-[11px] text-ink-faint">Haversine GPS • Optical Velocity • BSA 2023 Compliant • Court-Admissible</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {data.is_overspeeding ? (
-            <span className="chip border-red-200 bg-red-500 text-white font-bold animate-pulse">
-              <AlertTriangle size={10} /> {violationCount} VIOLATIONS
-            </span>
-          ) : (
-            <span className="chip border-emerald-200 bg-emerald-500 text-white font-bold">✅ NO VIOLATION</span>
-          )}
-          {data.court_admissible && (
-            <span className="chip border-blue-200 bg-blue-500 text-white font-bold">
-              <FileCheck size={10} /> COURT-ADMISSIBLE
-            </span>
-          )}
+          {data.is_overspeeding ? <span className="chip border-red-200 bg-red-600 text-white font-bold text-[10px]">{violationCount} VIOLATIONS DETECTED</span> : <span className="chip border-emerald-200 bg-emerald-600 text-white font-bold text-[10px]">✓ COMPLIANT • NO VIOLATION</span>}
+          {data.bsa_compliant && <span className="chip border-blue-200 bg-blue-600 text-white font-bold text-[10px]"><FileCheck size={10} /> BSA 2023</span>}
         </div>
       </div>
 
@@ -94,86 +80,45 @@ export function SpeedViolationPanel({ plate }: { plate: string }) {
         <div className="rounded-xl border border-line bg-surface-2 p-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-ink-faint">Total Distance</p>
           <p className="font-mono text-lg font-bold">{data.total_distance_km ?? 0} km</p>
-          <p className="text-[11px] text-ink-faint">{data.total_duration_human ?? '—'}</p>
+          <p className="text-[11px] text-ink-faint">{data.total_duration_human ?? '—'} • {segments.length} segments</p>
         </div>
         <div className="rounded-xl border border-line bg-surface-2 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-faint">Avg Speed</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-faint">Average Speed</p>
           <p className="font-mono text-lg font-bold">{data.avg_speed_kmh ?? 0} km/h</p>
-          <p className="text-[11px] text-ink-faint">Max {data.max_speed_kmh ?? 0} km/h</p>
+          <p className="text-[11px] text-ink-faint">Max {data.max_speed_kmh ?? 0} km/h • Limit {data.speed_limit_kmh ?? 80} km/h</p>
         </div>
         <div className="rounded-xl border border-line bg-surface-2 p-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-ink-faint">Violations</p>
-          <p className={`font-mono text-lg font-bold ${violationCount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-            {violationCount}
-          </p>
-          <p className="text-[11px] text-ink-faint">{data.critical_violations ?? 0} critical</p>
+          <p className={`font-mono text-lg font-bold ${violationCount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{violationCount}</p>
+          <p className="text-[11px] text-ink-faint">{data.critical_violations ?? 0} critical • Court: {data.court_admissible ? 'Yes' : 'No'}</p>
         </div>
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-blue-700">BSA 2023</p>
-          <p className="font-mono text-[13px] font-bold text-blue-700">COMPLIANT</p>
-          <p className="text-[11px] text-blue-600">Sec 63 + 65B</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-blue-700">Legal Compliance</p>
+          <p className="font-mono text-[13px] font-bold text-blue-700">BSA 2023 Sec 63</p>
+          <p className="text-[11px] text-blue-600">Sec 65B • SHA256 • Hash Chain</p>
         </div>
       </div>
 
       {segments.length > 0 && (
         <div className="border-t border-line">
-          <div className="max-h-[280px] overflow-y-auto">
+          <div className="max-h-[320px] overflow-y-auto">
             <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Route</th>
-                  <th>Distance</th>
-                  <th>Time</th>
-                  <th>Speed</th>
-                  <th>Status</th>
-                  <th>Evidence</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Route Segment</th><th>Distance</th><th>Duration</th><th>Avg Speed</th><th>Status</th><th>Evidence Hash</th></tr></thead>
               <tbody>
                 {segments.map((seg, i) => (
-                  <tr key={i} className={seg.is_violation ? 'bg-red-50' : ''}>
+                  <tr key={i} className={seg.is_violation ? 'bg-red-50/70' : ''}>
                     <td>
-                      <div className="flex items-center gap-1 text-[11px]">
-                        <MapPin size={10} className="text-ink-faint" />
-                        <span className="font-mono">{seg.from_camera}</span>
-                        <span>→</span>
-                        <span className="font-mono">{seg.to_camera}</span>
-                      </div>
-                      <div className="text-[10px] text-ink-faint truncate max-w-[160px]">
-                        {seg.from_name} → {seg.to_name}
-                      </div>
+                      <div className="flex items-center gap-1 text-[11px]"><MapPin size={10} className="text-ink-faint" /><span className="font-mono font-bold">{seg.from_camera}</span><span>→</span><span className="font-mono font-bold">{seg.to_camera}</span></div>
+                      <div className="text-[10px] text-ink-faint truncate max-w-[180px]">{seg.from_name} → {seg.to_name}</div>
                     </td>
-                    <td className="font-mono text-xs">{seg.distance_km} km</td>
+                    <td className="font-mono text-xs font-semibold">{seg.distance_km} km</td>
+                    <td><span className="flex items-center gap-1 text-xs"><Clock size={10} /> {seg.time_delta_human}</span></td>
                     <td>
-                      <span className="flex items-center gap-1 text-xs">
-                        <Clock size={10} /> {seg.time_delta_human}
-                      </span>
+                      <span className={`font-mono text-xs font-bold ${seg.is_violation ? 'text-red-600' : 'text-emerald-600'}`}>{seg.avg_speed_kmh} km/h</span>
+                      {seg.is_violation && <div className="text-[10px] font-bold text-red-600">+{seg.overspeed_by_kmh} over limit</div>}
                     </td>
-                    <td>
-                      <span className={`font-mono text-xs font-bold ${seg.is_violation ? 'text-red-600' : 'text-emerald-600'}`}>
-                        {seg.avg_speed_kmh} km/h
-                      </span>
-                      {seg.is_violation && (
-                        <div className="text-[10px] text-red-600">+{seg.overspeed_by_kmh} over limit</div>
-                      )}
-                    </td>
-                    <td>
-                      {seg.is_violation ? (
-                        <span className={`chip text-[10px] font-bold ${
-                          seg.severity === 'CRITICAL' ? 'bg-red-500 text-white border-red-600' :
-                          seg.severity === 'HIGH' ? 'bg-orange-500 text-white border-orange-600' :
-                          'bg-amber-500 text-white border-amber-600'
-                        }`}>
-                          {seg.severity}
-                        </span>
-                      ) : (
-                        <span className="chip border-emerald-200 bg-emerald-500/10 text-emerald-700 text-[10px]">OK</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className="font-mono text-[10px] text-ink-faint">{seg.evidence_hash}</span>
-                      {seg.bsa_compliant && <Shield size={10} className="ml-1 inline text-blue-500" />}
-                    </td>
+                    <td>{seg.is_violation ? <span className={`chip text-[10px] font-bold ${seg.severity === 'CRITICAL' ? 'bg-red-600 text-white border-red-700' : seg.severity === 'HIGH' ? 'bg-orange-500 text-white' : 'bg-amber-500 text-white'}`}>{seg.severity}</span> : <span className="chip border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-bold">✓ OK</span>}</td>
+                    <td><span className="font-mono text-[10px] text-ink-faint">{seg.evidence_hash}</span>{seg.bsa_compliant && <Shield size={10} className="ml-1 inline text-blue-600" />}</td>
                   </tr>
                 ))}
               </tbody>
@@ -182,18 +127,13 @@ export function SpeedViolationPanel({ plate }: { plate: string }) {
         </div>
       )}
 
-      <div className="border-t border-line bg-amber-50 p-3">
-        <div className="flex gap-2">
-          <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-          <div className="text-[11px]">
-            <p className="font-bold text-amber-800">🎯 Why This Beats Competitors:</p>
-            <p className="text-amber-700">
-              Competitors only show plate detections. TRINETRA calculates court-admissible speed violations using Haversine GPS distance 
-              (not estimation), with BSA 2023 Sec 63 certificate + Sec 65B compliance. Can directly issue challan. 
-              Optical velocity also available for single-camera overspeed detection.
-            </p>
-          </div>
-        </div>
+      <div className="border-t border-line bg-slate-50 px-4 py-3">
+        <p className="text-[11px] leading-relaxed text-ink-muted">
+          <span className="font-bold">Methodology:</span> Inter-camera section speed calculated via Haversine great-circle distance (GPS) divided by time delta (PTS-based). 
+          Optical velocity via single-camera bbox centroid tracking with perspective calibration (15-78 km/h compliant range, &gt;80 km/h violation). 
+          Each segment includes SHA256 evidence hash linked in chain, BSA 2023 Section 63 compliant certificate, and Section 65B Indian Evidence Act compliance for court admissibility. 
+          Enables direct challan issuance for overspeeding.
+        </p>
       </div>
     </div>
   );
