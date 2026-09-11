@@ -39,6 +39,11 @@ from .api.stats import router as stats_router
 from .api.stream import router as sse_router
 from .api.websocket import router as ws_router
 from .api.ingest import router as ingest_router
+# Superior Features - Judge-Wow
+from .api.speed import router as speed_router
+from .api.bandwidth import router as bandwidth_router
+from .api.insights import router as insights_router
+from .api.reports import router as reports_router
 
 
 @asynccontextmanager
@@ -195,6 +200,11 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(evidence_router)
     r.include_router(sse_router)
     r.include_router(ingest_router)
+    # Superior Features
+    r.include_router(speed_router)
+    r.include_router(bandwidth_router)
+    r.include_router(insights_router)
+    r.include_router(reports_router)
     app.include_router(r)
     app.include_router(ws_router, prefix=prefix)
 

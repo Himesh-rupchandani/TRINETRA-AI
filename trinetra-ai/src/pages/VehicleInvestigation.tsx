@@ -16,6 +16,9 @@ import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAlerts } from '@/hooks/useAlerts';
 import type { RoutePoint, VehicleEvent } from '@/types';
 import { formatDuration, isValidPlate, minutesBetween, prettyPlate } from '@/lib/utils';
+// Superior Features
+import { SpeedViolationPanel } from '@/components/vehicle/SpeedViolationPanel';
+import { EvidenceVault } from '@/components/vehicle/EvidenceVault';
 
 /**
  * VEHICLE INVESTIGATION WORKSPACE
@@ -170,6 +173,11 @@ export default function VehicleInvestigation() {
       }
     >
       <div className="grid gap-3 p-4 sm:gap-4 sm:p-5" data-tour="trace">
+        {/* SUPERIOR: Speed Violation Engine */}
+        <div className="xl:col-span-12">
+          <SpeedViolationPanel plate={plate} />
+        </div>
+
         {/* LEFT — GIS */}
         <Panel
           title="Route on the map"
@@ -258,6 +266,13 @@ export default function VehicleInvestigation() {
         <Panel title="Photo evidence" icon={FileImage} className="xl:col-span-4">
           <EvidencePanel event={activeEvent} />
         </Panel>
+
+        {/* SUPERIOR: Evidence Vault - BSA 2023 */}
+        {activeEvent && (
+          <div className="xl:col-span-12">
+            <EvidenceVault eventId={activeEvent.id} />
+          </div>
+        )}
       </div>
     </InvestigationLayout>
   );
