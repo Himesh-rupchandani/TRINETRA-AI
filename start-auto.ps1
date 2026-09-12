@@ -67,7 +67,7 @@ if (-not (Test-Path $trinetraDb1) -and -not (Test-Path $trinetraDb2)) {
     Push-Location $Backend
     try { python -m scripts.seed_demo } catch { Write-Host "Seed skipped" }
     Pop-Location
-}
+
 
 Write-Host ""
 Write-Host "🎬 Starting backend (8000) and frontend (5173)..." -ForegroundColor Green
