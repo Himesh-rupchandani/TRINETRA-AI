@@ -12,12 +12,48 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.orm import declarative_base
+from sqlalchemy.types import TypeDecorator
 
 Base = declarative_base()
 
 
 def get_utc_now():
     return datetime.now(timezone.utc)
+
+
+class UTCDateTime(TypeDecorator):
+    """Timezone-safe ``DateTime`` for every backend timestamp column.
+
+    Problem this solves: SQLite has no timezone-aware datetime type, so a plain
+    ``DateTime(timezone=True)`` column round-tripped **naive** values. The API
+    then serialized ``2026-09-12T08:17:28`` with no offset and every browser
+    read that UTC instant as *local* time, shifting all clocks, timelines and
+    "x minutes ago" labels by the viewer's UTC offset.
+
+    Contract enforced here:
+
+    * values are stored as UTC wall time (aware input is converted with
+      ``astimezone``; naive input is *assumed* to be UTC, never shifted);
+    * values read back are always timezone-aware UTC, so serialization keeps
+      the offset and no timezone information is silently dropped.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 class Camera(Base):
@@ -40,8 +76,8 @@ class Camera(Base):
     height = Column(Integer, nullable=True, default=1080)
     fps = Column(Integer, nullable=True)
     status = Column(String(20), default="OFFLINE", index=True)  # ONLINE, OFFLINE, CONNECTING, ERROR
-    last_seen = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+    last_seen = Column(UTCDateTime(), nullable=True)
+    created_at = Column(UTCDateTime(), default=get_utc_now, nullable=False)
 
     __table_args__ = (
         Index("idx_cameras_status", "status"),
@@ -57,7 +93,7 @@ class Detection(Base):
     track_id = Column(Integer, index=True, nullable=True)
     object_type = Column(String(50), index=True, nullable=False)  # car, motorcycle, bus, truck, person, bicycle
     confidence = Column(Float, nullable=False)
-    timestamp = Column(DateTime(timezone=True), default=get_utc_now, index=True, nullable=False)
+    timestamp = Column(UTCDateTime(), default=get_utc_now, index=True, nullable=False)
     bbox_json = Column(Text, nullable=False)  # JSON string: [x1, y1, x2, y2]
 
     @property
@@ -86,7 +122,7 @@ class VehicleObservation(Base):
     plate_number = Column(String(30), index=True, nullable=True)
     plate_confidence = Column(Float, nullable=True)
     vehicle_type = Column(String(50), nullable=False, default="car")
-    timestamp = Column(DateTime(timezone=True), default=get_utc_now, index=True, nullable=False)
+    timestamp = Column(UTCDateTime(), default=get_utc_now, index=True, nullable=False)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
 
@@ -105,7 +141,7 @@ class Watchlist(Base):
     category = Column(String(50), nullable=False)  # stolen vehicle, wanted vehicle, suspicious vehicle, other
     description = Column(String(255), nullable=True)
     active = Column(Boolean, default=True, index=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+    created_at = Column(UTCDateTime(), default=get_utc_now, nullable=False)
 
     __table_args__ = (
         Index("idx_watchlist_plate_active", "plate_number", "active"),
@@ -123,7 +159,7 @@ class VehicleEvent(Base):
     plate_number = Column(String(30), index=True, nullable=True)  # Normalized plate
     plate_confidence = Column(Float, nullable=True)  # OCR confidence 0.0 – 1.0
     vehicle_class = Column(String(50), nullable=True, default="car")
-    event_time = Column(DateTime(timezone=True), default=get_utc_now, index=True, nullable=False)
+    event_time = Column(UTCDateTime(), default=get_utc_now, index=True, nullable=False)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     evidence_ref = Column(String(500), nullable=True)  # S3/URL reference to snapshot/clip
@@ -141,7 +177,7 @@ class VehicleEvent(Base):
     # HIGH | LOW_CONFIDENCE | UNKNOWN — an uncertain read is never promoted to
     # a confident plate; it is labelled instead.
     plate_status = Column(String(20), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+    created_at = Column(UTCDateTime(), default=get_utc_now, nullable=False)
 
     @property
     def bbox(self):
@@ -174,12 +210,15 @@ class Alert(Base):
     alert_type = Column(String(50), index=True, nullable=False)  # WATCHLIST_MATCH, CAMERA_OFFLINE, LOW_OCR_CONFIDENCE, SYSTEM_ERROR
     severity = Column(String(20), default="HIGH", index=True)  # CRITICAL, HIGH, MEDIUM, LOW, INFO
     message = Column(Text, nullable=False)
-    timestamp = Column(DateTime(timezone=True), default=get_utc_now, index=True, nullable=False)
+    timestamp = Column(UTCDateTime(), default=get_utc_now, index=True, nullable=False)
     status = Column(String(20), default="NEW", index=True)  # NEW, ACKNOWLEDGED, RESOLVED, DISMISSED
-    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    acknowledged_at = Column(UTCDateTime(), nullable=True)
     acknowledged_by = Column(String(100), nullable=True)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(UTCDateTime(), nullable=True)
     resolved_by = Column(String(100), nullable=True)
+    # Free-text resolution note. Kept OUT of resolved_by so the resolving
+    # officer's identity stays a clean person/badge value.
+    resolution_note = Column(Text, nullable=True)
 
     __table_args__ = (
         Index("idx_alerts_severity_time", "severity", "timestamp"),
@@ -228,11 +267,53 @@ class VideoSource(Base):
     plates_read = Column(Integer, nullable=False, default=0)
     unknown_plates = Column(Integer, nullable=False, default=0)
 
-    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UTCDateTime(), default=get_utc_now, nullable=False)
+    started_at = Column(UTCDateTime(), nullable=True)
+    completed_at = Column(UTCDateTime(), nullable=True)
 
     __table_args__ = (
         Index("idx_video_sources_status", "status"),
         Index("idx_video_sources_batch", "batch_id"),
     )
+
+
+class EvidenceRecord(Base):
+    """One sealed link in the SHA-256 evidence hash chain (BSA 2023 §63).
+
+    Sealed at capture time from the event's immutable fields. Verification
+    recomputes the hash from (a) the stored canonical payload and (b) the live
+    row, so both a doctored record and a doctored sighting are detected — the
+    old ``/reports/evidence/{id}/verify`` endpoint recomputed a hash from the
+    *current* row and unconditionally answered VALID.
+    """
+
+    __tablename__ = "evidence_records"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # One sealed record per sighting.
+    event_id = Column(
+        Integer, ForeignKey("vehicle_events.id"), unique=True, index=True, nullable=False
+    )
+    camera_id = Column(String(50), index=True, nullable=False)
+
+    # Position in the chain; `previous_hash` is the hash of chain_index - 1
+    # (or GENESIS for the first record).
+    chain_index = Column(Integer, nullable=False, default=0, index=True)
+    hash = Column(String(64), nullable=False, index=True)
+    previous_hash = Column(String(64), nullable=True)
+
+    # Canonical JSON snapshot of the immutable fields at seal time.
+    payload_json = Column(Text, nullable=False)
+
+    # CAPTURE  — sealed by the ingestion pipeline when the sighting was created
+    # BACKFILL — sealed on first certificate/verification request (pre-existing
+    #            rows from before the vault existed); reported transparently.
+    seal_source = Column(String(20), nullable=False, default="CAPTURE")
+    sealed_at = Column(UTCDateTime(), default=get_utc_now, nullable=False)
+
+    def payload(self) -> dict:
+        """The sealed snapshot as a dict ({} when unreadable)."""
+        try:
+            return json.loads(self.payload_json) if self.payload_json else {}
+        except (TypeError, ValueError):
+            return {}

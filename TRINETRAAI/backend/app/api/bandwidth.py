@@ -3,7 +3,15 @@ TRINETRA AI - Bandwidth & Scale API
 Superior Feature: 80k Camera Federation Math
 """
 from fastapi import APIRouter
-from ..services.bandwidth_engine import calculate_bandwidth_savings, get_scaling_projection
+
+# The engine functions are aliased on import: this module also defines route
+# handlers with the natural names, and a plain import would be shadowed by the
+# handler defined below (turning `get_scaling_projection()` into unbounded
+# recursion -> HTTP 500 on /stats/scaling and /stats/federation).
+from ..services.bandwidth_engine import (
+    calculate_bandwidth_savings as engine_calculate_bandwidth_savings,
+    get_scaling_projection as engine_get_scaling_projection,
+)
 
 router = APIRouter(prefix="/stats", tags=["Bandwidth & Scale"])
 
@@ -19,7 +27,7 @@ def get_bandwidth_analysis():
     - Cost savings in INR
     - Court: competitors can't scale, we can.
     """
-    data = calculate_bandwidth_savings()
+    data = engine_calculate_bandwidth_savings()
     return {
         **data,
         "judge_pitch": {
@@ -37,12 +45,12 @@ def get_bandwidth_analysis():
 
 
 @router.get("/scaling")
-def get_scaling_projection():
+def get_scaling_projection_endpoint():
     """
     Scaling projection from 30 demo cameras to 80k production.
     Shows growth path and infrastructure needed.
     """
-    data = get_scaling_projection()
+    data = engine_get_scaling_projection()
     return {
         **data,
         "judge_notes": {
@@ -57,8 +65,8 @@ def get_scaling_projection():
 @router.get("/federation")
 def get_federation_stats():
     """Federation stats for 26 departments, 80k cameras."""
-    bandwidth = calculate_bandwidth_savings()
-    scaling = get_scaling_projection()
+    bandwidth = engine_calculate_bandwidth_savings()
+    scaling = engine_get_scaling_projection()
     
     return {
         "federation": bandwidth["federation"],

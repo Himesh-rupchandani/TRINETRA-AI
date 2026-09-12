@@ -76,8 +76,18 @@ export function LiveProvider({ children }: { children: ReactNode }) {
           setLiveEvents((prev) => [msg.payload, ...prev].slice(0, MAX_LIVE_EVENTS));
         }
       } else if (msg.type === 'ALERT') {
-        setAlerts((prev) => (prev.some((a) => a.id === msg.payload.id) ? prev : [msg.payload, ...prev]));
-        setLatestAlert(msg.payload);
+        const incoming = msg.payload;
+        setAlerts((prev) => {
+          const idx = prev.findIndex((a) => a.id === incoming.id);
+          if (idx === -1) return [incoming, ...prev];
+          // Already listed: merge instead of dropping the frame, so a later
+          // broadcast (status change, resolution note, corrected severity)
+          // still updates the card the operator is looking at.
+          const next = [...prev];
+          next[idx] = { ...next[idx], ...incoming };
+          return next;
+        });
+        setLatestAlert(incoming);
       }
     };
     const channel = connectRealtime(onMessage, setConnection);
@@ -98,7 +108,9 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resolve = useCallback(async (id: string, note?: string) => {
-    const updated = await alertService.resolve(id, note);
+    // Operator identity and note are separate fields — the backend stores the
+    // note in `resolution_note`, never inside `resolved_by`.
+    const updated = await alertService.resolve(id, note, 'Operator');
     setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
     setLatestAlert((cur) => (cur?.id === id ? null : cur));
   }, []);

@@ -8,6 +8,8 @@ This is what judges want to see for Gujarat's 80k camera network.
 from typing import Dict, Any
 import math
 
+from ..utils.timestamps import iso_utc
+
 
 # Constants for Gujarat 80k camera network
 CAMERAS_TOTAL = 80000
@@ -132,7 +134,9 @@ def calculate_bandwidth_savings() -> Dict[str, Any]:
             "gpu_hours_saved_per_day": round(CAMERAS_TOTAL * 24 * 0.8, 0),  # 80% GPU time saved
             "scalability": "Linear - add edge nodes, no central bottleneck"
         },
-        "generated_at": "2026-09-10T00:00:00Z",
+        # Real generation time (UTC, Z-suffixed). This used to be a hardcoded
+        # literal, so the payload claimed a fixed date forever.
+        "generated_at": iso_utc(),
         "system": "TRINETRA AI - Bandwidth Engine"
     }
 

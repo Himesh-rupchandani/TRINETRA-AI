@@ -42,6 +42,11 @@ Write-Host "Activating venv..." -ForegroundColor Yellow
 Write-Host "Installing requirements..." -ForegroundColor Yellow
 pip install -r requirements.txt
 
+# ultralytics may pull GUI OpenCV after the headless wheel. Repair cv2 with
+# the active venv interpreter so the backend also works on headless systems.
+Write-Host "Ensuring headless OpenCV..." -ForegroundColor Yellow
+python (Join-Path $Root "scripts\ensure_headless_opencv.py")
+
 # Ensure evidence dir exists (backend+frontend only may not have cv-engine/evidence)
 $EvidenceRoot = Join-Path $Root "cv-engine\evidence"
 if (-not (Test-Path $EvidenceRoot)) {

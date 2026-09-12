@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -32,12 +32,36 @@ import { BandwidthEngine } from '@/components/dashboard/BandwidthEngine';
 import { AIInsightsDashboard } from '@/components/dashboard/AIInsightsDashboard';
 import { VoiceAlertSystem } from '@/components/common/VoiceAlertSystem';
 
+/** How often the Command Center KPI strip re-reads the backend (ms). */
+const KPI_REFRESH_MS = 15_000;
+/** How often relative "x minutes ago" labels are re-rendered (ms). */
+const CLOCK_TICK_MS = 30_000;
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { cameras, stats } = useCameras();
   const { active: activeAlerts, acknowledge, resolve } = useAlerts();
   const recent = useAsync(() => eventService.recent(120), []);
   const kpis = useAsync(() => systemService.kpis(), []);
+
+  // The Command Center is a live wall: it used to fetch events + KPIs exactly
+  // once per page load, so every counter, "last seen" and "last hour" figure
+  // froze for the whole session (only alerts moved, via the realtime channel).
+  // Poll both resources instead; `refresh` is a stable callback.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      recent.refresh();
+      kpis.refresh();
+    }, KPI_REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [recent.refresh, kpis.refresh]);
+
+  // Clock tick so relative timestamps keep ageing even when no new event lands.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => window.clearInterval(id);
+  }, []);
 
   const recentEvents = useMemo(() => recent.data ?? [], [recent.data]);
   const detectionPoints = useMemo(
@@ -64,8 +88,8 @@ export default function Dashboard() {
     return best;
   }, [recentEvents]);
   const lastHourCount = useMemo(
-    () => recentEvents.filter((e) => Date.now() - new Date(e.timestamp).getTime() <= 3_600_000).length,
-    [recentEvents],
+    () => recentEvents.filter((e) => now - new Date(e.timestamp).getTime() <= 3_600_000).length,
+    [recentEvents, now],
   );
   const lastMatch = useMemo(() => {
     let best: VehicleEvent | undefined;
@@ -168,16 +192,16 @@ export default function Dashboard() {
           icon={Cctv}
           to="/registry"
           cta="View registry"
-          loading={kpis.loading}
+          loading={kpis.loading && !kpis.data}
           extra={
             <div className="h-1.5 overflow-hidden rounded-full bg-slate-500/15" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={camerasHealthPct}>
               <div className={cn('h-full rounded-full', stats.offline > 0 ? 'bg-red-500' : stats.degraded > 0 ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${camerasHealthPct}%` }} />
             </div>
           }
         />
-        <KpiCard label="Vehicle Detections" value={formatNumber(kpis.data?.vehicleDetections24h)} sub={latestSeen ? <>Last seen {relativeTime(latestSeen)} · {lastHourCount} last hour</> : 'Last 24 hours'} tile="blue" icon={Car} to="/events" cta="View events" loading={kpis.loading} />
-        <KpiCard label="ANPR Reads" value={formatNumber(kpis.data?.anprReads24h)} sub={readRate != null ? `${formatPct(readRate)} read rate` : 'Automated recognition'} tile="sky" icon={ScanLine} to="/events" cta="View logs" loading={kpis.loading} />
-        <KpiCard label="Watchlist Matches" value={formatNumber(kpis.data?.watchlistMatches24h)} sub={lastMatch?.plate ? <>Last: <span className="font-mono\">{lastMatch.plate}</span> · {relativeTime(lastMatch.timestamp)}</> : 'No matches 24h'} tone={kpis.data?.watchlistMatches24h ? 'critical' : 'neutral'} tile="orange" icon={ShieldAlert} to="/watchlist" cta="Watchlist" loading={kpis.loading} />
+        <KpiCard label="Vehicle Detections" value={formatNumber(kpis.data?.vehicleDetections24h)} sub={latestSeen ? <>Last seen {relativeTime(latestSeen, now)} · {lastHourCount} last hour</> : 'Last 24 hours'} tile="blue" icon={Car} to="/events" cta="View events" loading={kpis.loading && !kpis.data} />
+        <KpiCard label="ANPR Reads" value={formatNumber(kpis.data?.anprReads24h)} sub={readRate != null ? `${formatPct(readRate)} read rate` : 'Automated recognition'} tile="sky" icon={ScanLine} to="/events" cta="View logs" loading={kpis.loading && !kpis.data} />
+        <KpiCard label="Watchlist Matches" value={formatNumber(kpis.data?.watchlistMatches24h)} sub={lastMatch?.plate ? <>Last: <span className="font-mono\">{lastMatch.plate}</span> · {relativeTime(lastMatch.timestamp, now)}</> : 'No matches 24h'} tone={kpis.data?.watchlistMatches24h ? 'critical' : 'neutral'} tile="orange" icon={ShieldAlert} to="/watchlist" cta="Watchlist" loading={kpis.loading && !kpis.data} />
       </section>
 
       {/* Intelligence Modules — Tour: bandwidth-engine + ai-insights */}

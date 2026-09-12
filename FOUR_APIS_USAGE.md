@@ -25,7 +25,7 @@ from app.services.sentinel_stream_service import get_rtsp_url, resolve_ingest_so
 # Authenticated URL built at connect time — never stored in DB
 # Email '@' -> %40, password URL-quoted
 rtsp_url = get_rtsp_url("cam04")
-# rtsp://himesh.rupchandani140850%40marwadiuniversity.ac.in:A7UX-7TRC-BVS6@103.250.160.189:8554/stream/cam04
+# rtsp://<your-sentinel-email>:<your-sentinel-password>@103.250.160.189:8554/stream/cam04
 
 # Camera manager uses it automatically
 source = resolve_ingest_source(camera_id, stream_url, stream_type)
@@ -35,8 +35,8 @@ source = resolve_ingest_source(camera_id, stream_url, stream_type)
 
 **CV-Engine:**
 ```bash
-export SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-export SENTINEL_PASSWORD=A7UX-7TRC-BVS6
+export SENTINEL_EMAIL=<your-sentinel-email>
+export SENTINEL_PASSWORD=<your-sentinel-password>
 python scripts/run_pipeline.py --mode live --camera cam04
 # Internally builds same RTSP URL
 ```
@@ -72,8 +72,8 @@ GET /api/ingest/streams/cam04
 **vite.config.ts:**
 ```ts
 function sentinelBasic(env) {
-  const email = env.SENTINEL_EMAIL ?? HACKATHON_DEFAULTS.email
-  const password = env.SENTINEL_PASSWORD ?? HACKATHON_DEFAULTS.password
+  const email = (env.SENTINEL_EMAIL ?? process.env.SENTINEL_EMAIL ?? '').trim()
+  const password = (env.SENTINEL_PASSWORD ?? process.env.SENTINEL_PASSWORD ?? '').trim()
   return `Basic ${Buffer.from(`${email}:${password}`).toString('base64')}`
 }
 // proxyReq.setHeader('Authorization', basic)
@@ -226,8 +226,8 @@ All 4 APIs use same credentials from `.env`:
 
 **Frontend `.env`:**
 ```
-SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-SENTINEL_PASSWORD=A7UX-7TRC-BVS6
+SENTINEL_EMAIL=<your-sentinel-email>
+SENTINEL_PASSWORD=<your-sentinel-password>
 SENTINEL_WHEP_ORIGIN=http://103.250.160.189:8889
 SENTINEL_HLS_ORIGIN=http://103.250.160.189:80
 VITE_LIVE_STREAMS=true
@@ -236,13 +236,13 @@ VITE_AUTO_LOGIN=true
 
 **Backend `.env`:**
 ```
-SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-SENTINEL_PASSWORD=A7UX-7TRC-BVS6
+SENTINEL_EMAIL=<your-sentinel-email>
+SENTINEL_PASSWORD=<your-sentinel-password>
 AUTO_START_CAMERAS=true
 ```
 
 **Fallback in code (even if .env missing):**
-- `vite.config.ts`: `HACKATHON_DEFAULTS` fallback
+- `vite.config.ts`: `environment / .env` fallback
 - `backend/app/core/config.py`: default email/password
 - `cv-engine/config/settings.py`: same
 

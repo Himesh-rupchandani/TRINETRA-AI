@@ -23,6 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local secret overrides (e.g. credentials) — never commit
+# Local env files (may hold gateway credentials) — never commit.
+# Only the placeholder example is tracked.
+.env
+.env.*
 .env.local
 .env.*.local
+!.env.example
+!**/.env.example

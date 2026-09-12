@@ -81,15 +81,39 @@ export function normalisePlate(input: string): string {
   return input.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+/**
+ * Canonical Indian registration plate — ONE definition shared by every layer:
+ *
+ *   SS  DD  L{1,3}  N{3,4}     e.g. GJ 01 AB 1234, MH 02 CD 5678
+ *
+ * two state letters, RTO digits (two today, one on legacy plates), at least one
+ * series letter and a 3-4 digit number.
+ *
+ * Must stay byte-identical to `CANONICAL_PLATE_PATTERN` in
+ * TRINETRAAI/backend/app/utils/plate_normalizer.py and to cv-engine's
+ * cv-engine/anpr/normalizer.py — the backend test
+ * tests/test_plate_format_consistency.py fails if any layer drifts.
+ *
+ * The previous UI pattern allowed ZERO series letters and only ONE number
+ * digit, so "GJ011234" and "GJ1A2" passed validation here while the backend
+ * pipeline rejected the same strings, and prettyPlate happily rendered a
+ * half-split "GJ 01 1234".
+ */
+export const INDIAN_PLATE_PATTERN = '^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}$';
+const INDIAN_PLATE_RE = new RegExp(INDIAN_PLATE_PATTERN);
+const INDIAN_PLATE_GROUPS = /^([A-Z]{2})([0-9]{1,2})([A-Z]{1,3})([0-9]{3,4})$/;
+
 /** Pretty print an Indian plate: GJ01AB1234 -> GJ 01 AB 1234 */
 export function prettyPlate(plate: string): string {
   const p = normalisePlate(plate);
-  const m = /^([A-Z]{2})(\d{1,2})([A-Z]{0,3})(\d{1,4})$/.exec(p);
-  return m ? [m[1], m[2], m[3], m[4]].filter(Boolean).join(' ') : plate;
+  const m = INDIAN_PLATE_GROUPS.exec(p);
+  // Only a fully canonical plate is split into groups; anything else is shown
+  // normalized (never half-split, never invented).
+  return m ? `${m[1]} ${m[2].padStart(2, '0')} ${m[3]} ${m[4]}` : p || plate;
 }
 
 export function isValidPlate(input: string): boolean {
-  return /^[A-Z]{2}\d{1,2}[A-Z]{0,3}\d{1,4}$/.test(normalisePlate(input));
+  return INDIAN_PLATE_RE.test(normalisePlate(input));
 }
 
 /* --------------------------- semantic colours --------------------------- */
@@ -122,18 +146,22 @@ export const cameraStatusClass: Record<CameraStatus, string> = {
   ONLINE: 'bg-online/15 text-online border-online/45',
   OFFLINE: 'bg-offline/15 text-offline border-offline/45',
   DEGRADED: 'bg-degraded/15 text-degraded border-degraded/45',
+  // Neutral, not red: nothing is broken, no source has been authorized yet.
+  NOT_CONFIGURED: 'bg-surface-3 text-ink-muted border-line',
 };
 
 export const cameraStatusDot: Record<CameraStatus, string> = {
   ONLINE: 'bg-online',
   OFFLINE: 'bg-offline',
   DEGRADED: 'bg-degraded',
+  NOT_CONFIGURED: 'bg-ink-faint',
 };
 
 export const cameraStatusHex: Record<CameraStatus, string> = {
   ONLINE: '#16a34a',
   OFFLINE: '#dc2626',
   DEGRADED: '#d97706',
+  NOT_CONFIGURED: '#64748b',
 };
 
 export const alertStatusClass: Record<AlertStatus, string> = {

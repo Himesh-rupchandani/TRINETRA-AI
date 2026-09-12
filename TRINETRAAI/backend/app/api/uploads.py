@@ -72,11 +72,16 @@ async def upload_video(
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
-    data = await file.read()
-    if not data:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Empty file uploaded.")
+    # Streamed to disk in chunks: the size limit is enforced while reading, so
+    # an oversized upload is rejected without ever being buffered whole in RAM.
     try:
-        path = uvs.save_upload(file.filename or "upload.mp4", data)
+        with uvs.open_upload_writer(file.filename or "upload.mp4") as writer:
+            while True:
+                chunk = await file.read(uvs.UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                writer.write(chunk)
+            path = writer.finish()
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 

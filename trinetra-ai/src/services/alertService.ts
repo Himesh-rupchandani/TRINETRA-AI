@@ -41,11 +41,18 @@ export const alertService = {
     );
   },
 
-  async resolve(id: string, note?: string): Promise<Alert> {
+  /**
+   * Resolve an alert. The officer identity and the free-text note travel as
+   * separate fields: the note used to be packed into `operator` as
+   * "resolve: <note>", so the backend stored the whole string as the resolving
+   * officer (`resolved_by`) and the note was unrecoverable.
+   */
+  async resolve(id: string, note?: string, by?: string): Promise<Alert> {
     if (isMockMode) return mock.resolveAlert(id, note);
     return toAlert(
       await post<AlertDto>(`/alerts/${encodeURIComponent(id)}/resolve`, {
-        operator: note ? `resolve: ${note}` : undefined,
+        operator: by,
+        note,
       }),
     );
   },

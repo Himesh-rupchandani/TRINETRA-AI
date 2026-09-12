@@ -18,6 +18,8 @@ from sqlalchemy import func
 from ..core.config import settings
 from ..database.models import Camera, VehicleEvent, Watchlist, Alert
 from ..utils.plate_normalizer import normalize_plate
+from ..utils.timestamps import iso_utc
+from .evidence_vault import evidence_vault
 from .ws_manager import ws_manager
 
 logger = logging.getLogger("trinetra")
@@ -206,6 +208,16 @@ async def ingest_event(
             # --- Step 6a: Alert deduplication + creation ---
             alert = create_watchlist_alert(db, event, watchlist_entry)
 
+    # --- Step 6b: Seal the sighting into the evidence hash chain ---
+    # Done after watchlist matching so the sealed snapshot covers the final
+    # committed row. Sealing must never break ingestion: any failure is logged
+    # and the sighting is still processed and broadcast.
+    try:
+        evidence_vault.seal(db, event, source="CAPTURE")
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"[EVIDENCE] seal failed for event #{event.id}: {exc}")
+
     # --- Step 7: Broadcast to WebSocket ---
     ws_payload = {
         "event_id": event.id,
@@ -215,7 +227,7 @@ async def ingest_event(
         "plate_raw": event.plate_raw,
         "vehicle_class": event.vehicle_class,
         "confidence": event.plate_confidence,
-        "event_time": event.event_time.isoformat() if event.event_time else None,
+        "event_time": iso_utc(event.event_time) if event.event_time else None,
         "latitude": event.latitude,
         "longitude": event.longitude,
         "watchlist_match": event.watchlist_match,
@@ -224,10 +236,18 @@ async def ingest_event(
     if watchlist_entry and alert:
         await ws_manager.broadcast("ALERT_CREATED", {
             **ws_payload,
-            "alert_id": f"AL-{alert.id}",
+            # Numeric alert id, exactly like REST (AlertResponse.id /
+            # EventCreateResponse.alert_id). This used to be the display ref
+            # "AL-7"; the frontend coerced it with Number() and got NaN, so the
+            # live alert card had id "NaN" and its ack/resolve calls 404'd.
+            "alert_id": alert.id,
+            "alert_ref": f"AL-{alert.id}",
             "id": alert.id,
+            "alert_type": alert.alert_type,
             "severity": alert.severity,
             "message": alert.message,
+            "status": alert.status,
+            "timestamp": iso_utc(alert.timestamp) if alert.timestamp else None,
         })
     elif watchlist_entry:
         await ws_manager.broadcast("WATCHLIST_MATCH", ws_payload)

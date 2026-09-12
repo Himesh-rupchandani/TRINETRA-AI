@@ -52,6 +52,8 @@ python -m venv .venv
 
 # Install dependencies
 pip install -r requirements.txt
+# ultralytics may install GUI OpenCV; repair cv2 for server/headless use
+python ..\..\scripts\ensure_headless_opencv.py
 
 # Run initial demo seed
 python -m scripts.seed_demo
@@ -176,7 +178,7 @@ All endpoints are fully mounted and accessible via both `/api/...` and `/api/v1/
 
 ## Running the Automated Test Suite
 
-The test suite contains 97 automated tests covering unit logic, hardware pacing, state machines, and end-to-end integration workflows.
+The test suite contains 197 automated tests covering unit logic, hardware pacing, state machines, end-to-end integration workflows and the bug-fix regression suites (`tests/test_bugfix_regressions.py`, `tests/test_speed_and_insights_regressions.py`, `tests/test_frontend_js_suite.py`).
 
 ```powershell
 # Run the entire test suite
@@ -190,7 +192,10 @@ pytest --cov=app --cov-report=term-missing
 ```
 
 Test Results Summary:
-- **Total Tests**: 97
-- **Passed**: 97 (100%)
+- **Total Tests**: 197
+- **Passed**: 197 (100%)
 - **Failed**: 0
+
+> The frontend contract suite (48 tests, `cd trinetra-ai && npm test`) runs from pytest as well
+> and is skipped automatically when `node` or the frontend `node_modules` are unavailable.
 - **Errors**: 0

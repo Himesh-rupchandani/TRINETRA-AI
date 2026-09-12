@@ -75,8 +75,8 @@ def test_discontinuity_resets_track_ids():
     pipeline, detector, backend = make_pipeline()
 
     detector.queue = [[_det(100)], [_det(104)], [], [], [], []]
-    p1 = pipeline.process_packet(_packet(0.0, 1))
-    p2 = pipeline.process_packet(_packet(40.0, 2))
+    pipeline.process_packet(_packet(0.0, 1))
+    pipeline.process_packet(_packet(40.0, 2))
     first_ids = {t.track_id for t in pipeline.tracker.update([], pts_ms=80.0)}
 
     # Hard scene cut: same box appears, but identity must be NEW.

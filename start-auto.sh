@@ -1,93 +1,47 @@
 #!/bin/bash
-# TRINETRA AI — AUTO-START with live camera & auto-login
-# No manual email/password needed — credentials auto-injected
+# TRINETRA AI — AUTO-START with live camera support
+#
+# Credentials policy (important):
+#   * this script contains NO credentials — nothing secret is committed here;
+#   * env files are CREATED ONLY WHEN MISSING and are NEVER overwritten, so an
+#     operator's own values (gateway login, VITE_MAPBOX_TOKEN, ports…) survive
+#     every run;
+#   * credentials are resolved from the environment or from an env file that
+#     already exists on this machine (see trinetra-ai/scripts/auto-setup-env.mjs).
 
 set -e
 
-echo "🚀 TRINETRA AI — Auto-starting with hackathon live cameras"
-echo "   Credentials auto-injected, no manual login required"
+echo "🚀 TRINETRA AI — Auto-starting"
+echo "   Env files are created only when missing; existing values are preserved"
 
 # Root dir
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 FRONTEND="$ROOT/trinetra-ai"
 BACKEND="$ROOT/TRINETRAAI/backend"
 
-# --- Ensure frontend .env has auto credentials ---
-cat > "$FRONTEND/.env" <<'ENV'
-# AUTO-CONFIGURED — no manual email/password needed
-VITE_USE_MOCKS=false
-VITE_API_BASE_URL=/api
-BACKEND_ORIGIN=http://localhost:8000
-VITE_REALTIME_TRANSPORT=sse
-VITE_MAP_CENTER_LAT=22.3000
-VITE_MAP_CENTER_LNG=71.6000
-VITE_MAP_DEFAULT_ZOOM=7
-SENTINEL_WHEP_ORIGIN=http://103.250.160.189:8889
-SENTINEL_HLS_ORIGIN=http://103.250.160.189:80
-SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-SENTINEL_PASSWORD=A7UX-7TRC-BVS6
-VITE_STREAM_BASE_PATH=/sentinel/stream
-VITE_LIVE_STREAMS=true
-VITE_AUTO_LOGIN=true
-VITE_DEFAULT_LIVE_CAMERA=cam04
-ENV
+# --- Env files: create-if-missing, never clobber -----------------------------
+# The Node setup script is the single implementation of that policy; it also
+# appends missing keys and resolves Sentinel credentials from this machine.
+if command -v node >/dev/null 2>&1; then
+  (cd "$FRONTEND" && node scripts/auto-setup-env.mjs)
+else
+  echo "⚠️  node not found — falling back to a plain .env.example copy"
+  [ -f "$FRONTEND/.env" ] || cp "$FRONTEND/.env.example" "$FRONTEND/.env"
+  if [ ! -f "$BACKEND/.env" ]; then
+    # Copy the template and blank the credential lines: they must be filled in
+    # locally (or exported), never shipped with a value from this script.
+    sed -E 's/^(SENTINEL_EMAIL|SENTINEL_PASSWORD)=.*/\1=/' \
+      "$BACKEND/.env.example" > "$BACKEND/.env"
+  fi
+fi
 
-cat > "$FRONTEND/.env.local" <<'ENV'
-VITE_USE_MOCKS=false
-VITE_API_BASE_URL=/api
-BACKEND_ORIGIN=http://localhost:8000
-VITE_REALTIME_TRANSPORT=sse
-SENTINEL_WHEP_ORIGIN=http://103.250.160.189:8889
-SENTINEL_HLS_ORIGIN=http://103.250.160.189:80
-SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-SENTINEL_PASSWORD=A7UX-7TRC-BVS6
-VITE_STREAM_BASE_PATH=/sentinel/stream
-VITE_LIVE_STREAMS=true
-VITE_AUTO_LOGIN=true
-VITE_DEFAULT_LIVE_CAMERA=cam04
-ENV
-
-echo "✅ Frontend .env auto-configured"
-
-# --- Ensure backend .env has auto credentials ---
-cat > "$BACKEND/.env" <<'ENV'
-PROJECT_NAME="TRINETRA AI - Intelligent CCTV Surveillance"
-APP_ENV=development
-DEBUG=true
-PORT=8000
-HOST=0.0.0.0
-LIVE_CAMERA_ID=CAMLIVE
-LIVE_CAMERA_NAME=SG Highway Junction, Ahmedabad - Live
-LIVE_CAMERA_LOCATION=Ahmedabad, Gujarat
-LIVE_CAMERA_STREAM_TYPE=rtsp
-LIVE_CAMERA_STREAM_URL=
-LIVE_CAMERA_STATUS=
-AUTO_START_CAMERAS=true
-EVIDENCE_ROOT=../../cv-engine/evidence
-SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-SENTINEL_PASSWORD=A7UX-7TRC-BVS6
-SENTINEL_CATALOGUE_URL=https://cctv.corp8.cloud/cameras.json
-SENTINEL_HLS_BASE_URL=https://cctv.corp8.cloud
-SENTINEL_RTSP_HOST=103.250.160.189
-SENTINEL_RTSP_PORT=8554
-DATABASE_URL=sqlite:///./trinetra.db
-REDIS_URL=redis://localhost:6379/0
-DEFAULT_CAMERA_STREAM_URL=https://cctv.corp8.cloud/cam04/index.m3u8
-DEFAULT_CAMERA_STREAM_TYPE=hls
-RTSP_TRANSPORT=tcp
-YOLO_MODEL_PATH=models/yolo11s.pt
-CONFIDENCE_THRESHOLD=0.45
-PROCESS_EVERY_N_FRAMES=3
-OCR_ENABLED=true
-OCR_MIN_CONFIDENCE=0.60
-DEMO_MODE=true
-CORS_ORIGINS=["http://localhost:3000","http://localhost:5173","http://127.0.0.1:5173","http://127.0.0.1:3000"]
-MAX_UPLOAD_SIZE_MB=250
-UPLOAD_DIR=uploads
-AUTO_LOGIN=true
-ENV
-
-echo "✅ Backend .env auto-configured"
+# --- Warn (never print) when the gateway credentials are still empty ---------
+if ! grep -Eq '^SENTINEL_EMAIL=.+' "$FRONTEND/.env" 2>/dev/null \
+   || ! grep -Eq '^SENTINEL_PASSWORD=.+' "$FRONTEND/.env" 2>/dev/null; then
+  echo "⚠️  Sentinel gateway credentials are empty in $FRONTEND/.env"
+  echo "   Live camera playback needs SENTINEL_EMAIL + SENTINEL_PASSWORD."
+  echo "   Everything else (ANPR pipeline, alerts, evidence, analytics) works without them."
+fi
 
 # --- Install deps if needed ---
 if [ ! -d "$FRONTEND/node_modules" ]; then
@@ -100,6 +54,22 @@ if [ ! -d "$BACKEND/.venv" ] && ! python3 -c "import fastapi" 2>/dev/null; then
   (cd "$BACKEND" && pip install -r requirements.txt || pip3 install -r requirements.txt)
 fi
 
+# ultralytics may pull GUI OpenCV after the headless wheel. Repair cv2 with the
+# same interpreter that will run the backend, without printing any credentials.
+if [ -x "$BACKEND/.venv/bin/python" ]; then
+  OPENCV_PYTHON="$BACKEND/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  OPENCV_PYTHON="$(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+  OPENCV_PYTHON="$(command -v python)"
+else
+  echo "⚠️  Python not found — cannot verify headless OpenCV"
+  OPENCV_PYTHON=""
+fi
+if [ -n "$OPENCV_PYTHON" ]; then
+  (cd "$ROOT" && "$OPENCV_PYTHON" scripts/ensure_headless_opencv.py)
+fi
+
 # --- Seed DB if empty ---
 if [ ! -f "$ROOT/TRINETRAAI/trinetra.db" ] && [ ! -f "$BACKEND/trinetra.db" ]; then
   echo "🌱 Seeding demo DB..."
@@ -108,7 +78,6 @@ fi
 
 echo ""
 echo "🎬 Starting backend (port 8000) and frontend (port 5173)..."
-echo "   Live camera: auto-connected via Sentinel (no manual login)"
 echo "   Open: http://localhost:5173"
 echo ""
 

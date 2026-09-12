@@ -29,7 +29,7 @@ def _make_event(plate="GJ01AB1234"):
 
 
 class _Handler(BaseHTTPRequestHandler):
-    mode = "ok"          # ok | flaky | reject | down
+    mode = "ok"          # ok | flaky | reject | error | down
     received = []
     calls = 0
 
@@ -44,6 +44,10 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if _Handler.mode == "flaky" and _Handler.calls < 3:
             self.send_response(500)
+            self.end_headers()
+            return
+        if _Handler.mode == "error":      # every attempt fails (5xx)
+            self.send_response(503)
             self.end_headers()
             return
         if _Handler.mode == "reject":
@@ -109,6 +113,26 @@ def test_no_infinite_retry_and_dead_letter(http_server, tmp_path):
     assert len(lines) == 1
     assert json.loads(lines[0])["reason"] == "retries_exhausted"
     assert json.loads(lines[0])["event"]["plate"] == "GJ01AB1234"
+
+
+def test_retry_budget_is_initial_attempt_plus_max_retries(http_server, tmp_path):
+    """`max_retries` counts retries AFTER the first attempt: 3 -> 4 requests."""
+    _Handler.mode = "error"  # every attempt fails with 5xx
+    sleeps = []
+    dl = tmp_path / "dl.jsonl"
+    client = BackendClient(
+        base_url=http_server,
+        max_retries=3,               # the default
+        backoff_base_sec=1.0,
+        backoff_cap_sec=10.0,
+        dead_letter_path=str(dl),
+        sleep_fn=sleeps.append,
+    )
+    assert client.send_now(_make_event()) is False
+    assert _Handler.calls == 4, "initial attempt + 3 retries, then it must stop"
+    assert sleeps == [1.0, 2.0, 4.0], "exponential backoff, no sleep after the last attempt"
+    assert client.stats["failed_after_retries"] == 1
+    assert json.loads(dl.read_text().strip())["reason"] == "retries_exhausted"
 
 
 def test_4xx_not_retried_dead_lettered(http_server, tmp_path):

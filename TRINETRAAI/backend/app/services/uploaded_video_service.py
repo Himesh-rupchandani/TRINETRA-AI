@@ -13,11 +13,10 @@ uploaded cameras is one vehicle with one chronological history.
 """
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -25,10 +24,11 @@ import cv2
 
 from ..core.config import settings
 from ..core.logging_config import logger
+from ..core.paths import BACKEND_ROOT, evidence_root, upload_root
 from ..database.database import SessionLocal
 from ..database.models import Camera, VehicleEvent
 from ..services.simple_tracker import SimpleTracker
-from ..utils.plate_normalizer import normalize_plate
+from ..utils.timestamps import iso_utc
 
 ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 UPLOADED_ZONE = "Uploaded"
@@ -44,24 +44,19 @@ _jobs_lock = threading.Lock()
 _jobs: Dict[str, dict] = {}
 
 
+# Path resolution is centralized in app.core.paths so the API read side and
+# this write side can never disagree (relative EVIDENCE_ROOT used to resolve
+# against the process CWD in one place and the backend root in another).
 def _backend_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return BACKEND_ROOT
 
 
 def upload_dir() -> Path:
-    d = Path(settings.UPLOAD_DIR)
-    if not d.is_absolute():
-        d = _backend_root() / d
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return upload_root()
 
 
 def _evidence_root() -> Path:
-    root = Path(settings.EVIDENCE_ROOT)
-    if not root.is_absolute():
-        root = (_backend_root() / root).resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+    return evidence_root()
 
 
 def _safe_filename(name: str) -> str:
@@ -97,8 +92,11 @@ def is_uploaded_camera(cam: Camera) -> bool:
         return False
 
 
-def save_upload(filename: str, data: bytes) -> Path:
-    """Persist an uploaded video file; returns its absolute path."""
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+def _validate_upload_suffix(filename: str) -> str:
+    """Return the sanitized filename, rejecting unsupported container types."""
     safe = _safe_filename(filename)
     suffix = Path(safe).suffix.lower()
     if suffix not in ALLOWED_VIDEO_SUFFIXES:
@@ -106,9 +104,14 @@ def save_upload(filename: str, data: bytes) -> Path:
             f"Unsupported video type '{suffix or '?'}'. "
             f"Use one of: {', '.join(sorted(ALLOWED_VIDEO_SUFFIXES))}."
         )
-    max_bytes = int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
-    if len(data) > max_bytes:
-        raise ValueError(f"Video exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB upload limit.")
+    return safe
+
+
+def _max_upload_bytes() -> int:
+    return int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
+
+
+def _unique_target(safe: str) -> Path:
     target = upload_dir() / safe
     if target.exists():
         stem, ext = target.stem, target.suffix
@@ -116,8 +119,98 @@ def save_upload(filename: str, data: bytes) -> Path:
         while (upload_dir() / f"{stem}_{i}{ext}").exists():
             i += 1
         target = upload_dir() / f"{stem}_{i}{ext}"
-    target.write_bytes(data)
     return target
+
+
+class UploadWriter:
+    """Memory-safe writer for one uploaded video.
+
+    The endpoint used to do ``await file.read()`` — the whole upload in RAM —
+    and only *then* checked ``MAX_UPLOAD_SIZE_MB``, so a multi-GB submission was
+    fully buffered before it could be rejected. Chunks are now written straight
+    to a temporary file and the limit is enforced while streaming: the request
+    is abandoned as soon as the cap is crossed, with no partial file left behind.
+    """
+
+    def __init__(self, filename: str):
+        self.safe_name = _validate_upload_suffix(filename)
+        self._max_bytes = _max_upload_bytes()
+        self._written = 0
+        self._tmp = upload_dir() / f".{self.safe_name}.part"
+        self._fh = None
+        self._closed = False
+
+    def __enter__(self) -> "UploadWriter":
+        self._fh = self._tmp.open("wb")
+        return self
+
+    def write(self, chunk: bytes) -> int:
+        if self._fh is None:
+            raise ValueError("Upload writer is not open.")
+        if not chunk:
+            return 0
+        self._written += len(chunk)
+        if self._written > self._max_bytes:
+            self._discard()
+            raise ValueError(
+                f"Video exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB upload limit."
+            )
+        self._fh.write(chunk)
+        return len(chunk)
+
+    @property
+    def bytes_written(self) -> int:
+        return self._written
+
+    def finish(self) -> Path:
+        """Close the temp file and move it to its final, de-duplicated name."""
+        if self._closed:
+            raise ValueError("Upload writer already finished.")
+        if self._fh is not None:
+            self._fh.flush()
+            os.fsync(self._fh.fileno())
+            self._fh.close()
+            self._fh = None
+        self._closed = True
+        if self._written == 0:
+            self._discard()
+            raise ValueError("Empty file uploaded.")
+        target = _unique_target(self.safe_name)
+        os.replace(self._tmp, target)
+        return target
+
+    def _discard(self) -> None:
+        if self._fh is not None:
+            try:
+                self._fh.close()
+            except OSError:
+                pass
+            self._fh = None
+        self._closed = True
+        try:
+            self._tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if exc_type is not None or not self._closed:
+            self._discard()
+
+
+def open_upload_writer(filename: str) -> UploadWriter:
+    """Context manager that streams one upload to disk (see ``UploadWriter``)."""
+    return UploadWriter(filename)
+
+
+def save_upload(filename: str, data: bytes) -> Path:
+    """Persist an in-memory upload; returns its absolute path.
+
+    Kept for callers/scripts that already hold the bytes — it goes through the
+    same streaming writer, so the size limit is enforced identically.
+    """
+    with open_upload_writer(filename) as writer:
+        writer.write(data)
+        return writer.finish()
 
 
 def get_job(camera_id: str) -> dict:
@@ -201,12 +294,19 @@ def start_processing(camera_id: str) -> dict:
 
 
 def _broadcast(payload: dict, kind: str) -> None:
+    """Best-effort realtime notification from a worker thread.
+
+    The fan-out is scheduled onto the application's running event loop (see
+    ``ws_manager.broadcast_threadsafe``) instead of ``asyncio.run()``: a worker
+    thread has no loop of its own, and a fresh loop can never reach the SSE
+    queues / WebSocket transports that live on the app loop.
+    """
     try:
         from .ws_manager import ws_manager
 
-        asyncio.run(ws_manager.broadcast(kind, payload))
-    except Exception as exc:  # realtime is best-effort from worker threads
-        logger.debug(f"[UPLOAD] realtime broadcast skipped: {exc}")
+        ws_manager.broadcast_threadsafe(kind, payload)
+    except Exception as exc:
+        logger.warning(f"[UPLOAD:{payload.get('camera_id', '?')}] realtime broadcast failed: {exc}")
 
 
 def _process_video(camera_id: str) -> None:
@@ -327,6 +427,7 @@ def _process_video(camera_id: str) -> None:
             db.add(event)
             db.commit()
             db.refresh(event)
+            alert_extra: dict = {}
             if best_norm:
                 plates_read += 1
                 entry = match_watchlist(db, best_norm)
@@ -335,6 +436,19 @@ def _process_video(camera_id: str) -> None:
                     db.commit()
                     alert = create_watchlist_alert(db, event, entry)
                     kind = "ALERT_CREATED" if alert else "WATCHLIST_MATCH"
+                    if alert:
+                        # Same alert keys the live pipeline broadcasts: without
+                        # alert_id the UI had no id to ack/resolve against.
+                        alert_extra = {
+                            "alert_id": alert.id,
+                            "alert_ref": f"AL-{alert.id}",
+                            "id": alert.id,
+                            "alert_type": alert.alert_type,
+                            "severity": alert.severity,
+                            "message": alert.message,
+                            "status": alert.status,
+                            "timestamp": iso_utc(alert.timestamp) if alert.timestamp else None,
+                        }
                 else:
                     kind = "VEHICLE_DETECTED"
             else:
@@ -347,10 +461,11 @@ def _process_video(camera_id: str) -> None:
                     "plate_number": event.plate_number,
                     "vehicle_class": event.vehicle_class,
                     "confidence": event.plate_confidence,
-                    "event_time": event.event_time.isoformat() if event.event_time else None,
+                    "event_time": iso_utc(event.event_time) if event.event_time else None,
                     "video_file": video_filename,
                     "video_offset": format_video_offset(offset),
                     "watchlist_match": event.watchlist_match,
+                    **alert_extra,
                 },
                 kind,
             )
@@ -440,7 +555,7 @@ def _process_video(camera_id: str) -> None:
             progress_pct=100.0,
             frames_processed=frame_idx,
             vehicles_seen=vehicles_seen,
-            last_processed_at=datetime.now(timezone.utc).isoformat(),
+            last_processed_at=iso_utc(),
         )
         logger.info(
             f"[UPLOAD:{camera_id}] Done: {frame_idx} frames, "

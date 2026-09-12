@@ -58,6 +58,7 @@ cd "TRINETRAAI\backend"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python ..\..\scripts\ensure_headless_opencv.py  # keep cv2 server-safe on Windows/Linux
 python -m scripts.seed_demo   # seeds 30 cameras ONLINE (auto-fixes stale 4-camera DB)
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 # Verify: http://localhost:8000/api/health -> {"status":"healthy", "total_cameras":30}
@@ -80,6 +81,7 @@ npm run dev
 
 ```bash
 cd TRINETRAAI/backend && pip install -r requirements.txt
+python ../../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python -m scripts.seed_demo
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
@@ -97,6 +99,7 @@ See `WINDOWS_SETUP.md` for detailed OFFLINE/404 troubleshooting.
 ```bash
 # Backend (port 8000)
 cd TRINETRAAI/backend && pip install -r requirements.txt
+python ../../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python -m scripts.seed_demo
 # Point every registry camera at a local traffic clip (offline demo) —
 # video is then decoded ON DEMAND when an operator opens a camera:
@@ -111,6 +114,7 @@ EVIDENCE_ROOT=../../cv-engine/evidence uvicorn app.main:app --host 0.0.0.0 --por
 
 # CV engine — real Sentinel camera (live mode)
 cd cv-engine && pip install -r requirements.txt
+python ../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python scripts/fetch_models.py          # one-time model download
 python scripts/run_pipeline.py --mode live --camera cam04
 
@@ -126,23 +130,19 @@ on local traffic videos, and stream an **annotated live view** (bounding boxes
 + track IDs) the browser plays directly:
 
 ```bash
-# 1. one-time: put traffic videos in cv-engine/feeds/ and the model in cv-engine/models/
-#    (los_angeles.mp4, cctv.avi — any traffic clip works; yolo11s.pt)
+# 1. one-time: generate the demo clips (writes cv-engine/feeds/highway2.mp4 + city_cctv.mp4)
+python scripts/make_local_feeds.py
 # 2. register the demo-feed cameras in the backend registry (stream_type='file')
-cd TRINETRAAI/backend && python - << 'PY'
-from app.database.database import SessionLocal
-from app.database.models import Camera
-db = SessionLocal()
-if not db.query(Camera).filter(Camera.camera_id == 'CAMD01').first():
-    db.add(Camera(camera_id='CAMD01', name='DEMO FEED — Highway Interchange', location='Local Demo Interchange',
-                  stream_url='<abs path>/cv-engine/feeds/los_angeles.mp4', stream_type='file',
-                  latitude=23.0322, longitude=72.5570, status='ONLINE'))
-    db.commit()
-PY
+cd TRINETRAAI/backend && python -m scripts.register_demo_cameras
 # 3. restart the backend (it opens file sources like any camera), then:
 cd cv-engine && pip install -r requirements.txt   # incl. torch CPU + ultralytics
-python scripts/run_feed_demo.py                   # detection + events + annotated MJPEG on :8555
+python ../scripts/ensure_headless_opencv.py      # keep cv2 server-safe
+python scripts/run_feed_demo.py --anpr            # detection + ANPR + events + annotated MJPEG on :8555
 ```
+
+No model downloads are required for the demo: `run_feed_demo.py` falls back to
+the repo's bundled `trinetra_detection/models/yolo11n.pt`, and the `--anpr`
+stage uses RapidOCR (models ship inside the pip wheel, fully offline).
 
 The frontend picks the annotated view automatically (`/cvfeed/<id>`, proxied),
 falling back to the backend's own MJPEG mirror when the CV engine is off.
@@ -224,7 +224,7 @@ Common errors, decoded:
 | `curl https://cctv.corp8.cloud/cameras.json` → HTTP 000 / SSL error | You are not on a network that can reach the CDN host (Cloudflare-fronted). The grid is reachable from the venue/allowed network — not from every sandbox/office network. |
 | RTSP/WHEP `401 Unauthorized` | Credentials missing or not on the approved access list. Check `SENTINEL_EMAIL`/`SENTINEL_PASSWORD` in the right place (backend `.env`, shell for cv-engine, `trinetra-ai/.env` for the browser proxy). Email `@` must belong to an approved account. |
 | WHEP player: "Camera path is not published on the gateway" | A stale ticket path. The backend ticket is `/sentinel/stream/<id>/whep` (matches gateway `/stream/<id>/whep` behind the proxy). Rebuilt frontends/tickets use this; any `/sentinel/<id>/whep`-style URL is the old bug. |
-| `ImportError: libGL.so.1: cannot open shared object file` (cv2) | GUI `opencv-python` (pulled by ultralytics/rapidocr) overwrote the headless build → `pip uninstall -y opencv-python && pip install -q opencv-python-headless`. |
+| `ImportError: libGL.so.1: cannot open shared object file` (cv2) | GUI `opencv-python` (pulled by ultralytics/rapidocr) overwrote the headless build → run `python scripts/ensure_headless_opencv.py` from the repo root (or `python ../../scripts/ensure_headless_opencv.py` from the backend). |
 | Cameras never go ONLINE in LIVE mode | `AUTO_START_CAMERAS=false` (default) means nothing connects at boot. Either call `POST /api/cameras/{id}/start` per camera you process, or set `AUTO_START_CAMERAS=true` on a machine that can actually reach the grid. |
 | YOLO/ANPR missing at runtime | `python scripts/fetch_models.py` (weights) was never run, or tesseract isn't installed — cv-engine uses `rapidocr-onnxruntime` (bundled) for OCR. |
 
@@ -258,15 +258,25 @@ real network cameras — the file-backed demo grid always plays on demand.
 | Mode | How | Data source |
 |---|---|---|
 | **DEMO** (repo default) | `VITE_USE_MOCKS=true` | In-browser synthetic dataset incl. the scripted `GJ01AB1234` journey |
-| **LIVE** | `VITE_USE_MOCKS=false VITE_BACKEND_ORIGIN=http://localhost:8000 npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
+| **LIVE** | `VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
 
 Run the backend with `DEMO_MODE=false` in LIVE mode so unreachable cameras stay
 honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
 
+> `BACKEND_ORIGIN` has **no `VITE_` prefix** on purpose: it is read by
+> `vite.config.ts` (Node side) to target the dev proxy, and must never be
+> compiled into the browser bundle. `VITE_BACKEND_ORIGIN` is not read by
+> anything — setting it silently leaves the proxy at its default target.
+
 ## Tests
 
 ```bash
-cd TRINETRAAI/backend && pytest          # 112 tests
-cd cv-engine && pytest                   # 80 offline tests (live-feed tests opt-in)
+cd TRINETRAAI/backend && pytest          # 197 tests (incl. tests/test_bugfix_regressions.py)
+cd cv-engine && pytest                   # 81 offline tests (3 live-feed tests opt-in)
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
+cd trinetra-ai && npm test               # 48 frontend contract tests (plain node, no runner)
 ```
+
+The backend suite also drives the frontend suite (`tests/test_frontend_js_suite.py`), so a
+single `pytest` run covers all three layers — it is skipped, not failed, when `node` or
+`trinetra-ai/node_modules` are unavailable.

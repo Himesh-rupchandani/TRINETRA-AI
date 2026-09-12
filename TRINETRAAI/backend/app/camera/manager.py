@@ -19,7 +19,7 @@ if __name__ == "__main__" and not __package__:
 from ..core.config import settings
 from ..core.logging_config import logger
 from .stream import CameraStream
-from .packet import FramePacket, CameraState
+from .packet import FramePacket
 
 
 class CameraManager:

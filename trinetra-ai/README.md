@@ -151,10 +151,11 @@ VITE_MAP_DEFAULT_ZOOM=13
 Going live:
 
 ```bash
-VITE_USE_MOCKS=false VITE_BACKEND_ORIGIN=http://localhost:8000 npm run dev
+VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev
 ```
 
-`VITE_BACKEND_ORIGIN` is dev-only and configures the Vite proxy for `/api`, so the browser
+`BACKEND_ORIGIN` (no `VITE_` prefix — it is read by `vite.config.ts` on the Node side,
+never compiled into the bundle) is dev-only and configures the Vite proxy for `/api`, so the browser
 always talks to the same origin (no CORS, no hard-coded hosts in client code).
 
 ---

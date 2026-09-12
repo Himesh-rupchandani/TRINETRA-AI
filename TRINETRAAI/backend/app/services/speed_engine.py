@@ -7,11 +7,14 @@ Implements:
 - Optical Velocity Estimation (single-camera): bbox centroid tracking
 - Court-admissible violation detection with BSA 2023 compliance
 """
+import hashlib
 import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from enum import Enum
+
+from ..utils.timestamps import iso_utc
 
 
 class ViolationType(Enum):
@@ -121,10 +124,12 @@ def calculate_speed_analysis(
         curr = sorted_points[i]
         nxt = sorted_points[i + 1]
         
-        # Skip if same camera or missing GPS
+        # Skip if same camera or missing GPS.
+        # Explicit None checks: 0.0 is a perfectly valid coordinate (equator /
+        # prime meridian), so truthiness would silently drop real segments.
         if curr.camera_id == nxt.camera_id:
             continue
-        if not all([curr.latitude, curr.longitude, nxt.latitude, nxt.longitude]):
+        if None in (curr.latitude, curr.longitude, nxt.latitude, nxt.longitude):
             continue
             
         distance_km = haversine_km(
@@ -169,7 +174,6 @@ def calculate_speed_analysis(
             vtype = ViolationType.NO_VIOLATION
         
         # Generate evidence hash (simulated BSA 2023 compliant)
-        import hashlib
         evidence_str = f"{curr.event_id}-{nxt.event_id}-{distance_km}-{time_delta_sec}-{avg_speed}"
         evidence_hash = hashlib.sha256(evidence_str.encode()).hexdigest()[:16]
         
@@ -218,31 +222,48 @@ def calculate_speed_analysis(
         "critical_violations": len([v for v in violations if v.severity == "CRITICAL"]),
         "bsa_compliant": True,
         "speed_limit_kmh": speed_limit_kmh,
-        "analysis_timestamp": datetime.now().isoformat(),
+        "analysis_timestamp": iso_utc(),
         "court_admissible": len(violations) > 0,
         "evidence_chain": [
             {
                 "event_id": p.event_id,
                 "camera_id": p.camera_id,
-                "timestamp": p.timestamp.isoformat(),
-                "hash": hashlib.sha256(f"{p.event_id}{p.timestamp}".encode()).hexdigest()[:16]
+                "timestamp": iso_utc(p.timestamp),
+                "hash": hashlib.sha256(f"{p.event_id}{iso_utc(p.timestamp)}".encode()).hexdigest()[:16]
             }
             for p in sorted_points
-        ] if 'hashlib' in locals() or True else []
+        ]
     }
 
 
 def estimate_optical_velocity(
     bbox_history: List[Dict[str, Any]],
     fps: float = 25.0,
-    calibration_factor: float = 0.05  # meters per pixel ratio (calibrated)
+    calibration_factor: float = 1.0  # site calibration scale (1.0 = default model)
 ) -> Dict[str, Any]:
     """
     Estimate speed from single-camera bbox centroid motion.
     Uses perspective calibration to eliminate false positives.
+
+    ``calibration_factor`` is a multiplicative site-calibration scale on the
+    estimated real-world distance: 1.0 keeps the default car-length model,
+    1.2 says "this junction's camera sits closer than the model assumes".
+    Earlier revisions accepted the argument and silently ignored it, so the
+    returned speed could never be calibrated at all.
+
+    Timing: ``n`` samples span ``n - 1`` frame intervals, so the observed
+    window is ``(n - 1) / fps`` — using ``n / fps`` understated the elapsed
+    time and inflated every speed estimate by one interval.
     """
     if len(bbox_history) < 2:
         return {"estimated_speed_kmh": 0, "is_overspeeding": False, "confidence": 0}
+    if fps <= 0:
+        return {
+            "estimated_speed_kmh": 0,
+            "is_overspeeding": False,
+            "confidence": 0,
+            "reason": "invalid_fps",
+        }
     
     # Calculate centroid movement
     centroids = []
@@ -265,8 +286,8 @@ def estimate_optical_velocity(
     
     # Perspective correction: larger bbox = closer = more pixels per meter
     # Calibrated for realistic traffic: 15-78 km/h compliant, >80 overspeeding
-    real_distance_m = (total_pixel_dist / avg_bbox_height) * 4.5  # 4.5m avg car length
-    time_sec = len(bbox_history) / fps
+    real_distance_m = (total_pixel_dist / avg_bbox_height) * 4.5 * calibration_factor
+    time_sec = (len(bbox_history) - 1) / fps
     speed_mps = real_distance_m / time_sec if time_sec > 0 else 0
     speed_kmh = speed_mps * 3.6
     

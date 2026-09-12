@@ -13,8 +13,8 @@ model; track lifetimes (age, time_since_update) are measured in PTS-ms.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import List, Optional, Sequence
 
 import numpy as np
 
@@ -250,7 +250,6 @@ class VehicleTracker:
         associate(high_idx)
         remaining_tracks = [i for i, t in enumerate(self._tracks) if t.track_id not in matched_ids]
         if low_idx and remaining_tracks:
-            sub = self._tracks
             # Associate low-conf detections with still-unmatched tracks only.
             saved = self._tracks
             self._tracks = [saved[i] for i in remaining_tracks]

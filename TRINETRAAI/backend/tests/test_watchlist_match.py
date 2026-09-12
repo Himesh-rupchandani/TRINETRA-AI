@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database.models import Base, Camera, Watchlist, VehicleEvent
+from app.database.models import Base, Camera, Watchlist
 from app.services.event_service import ingest_event, match_watchlist
 
 

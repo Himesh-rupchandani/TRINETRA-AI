@@ -39,7 +39,9 @@ def fetch_yolo(model_name: str) -> bool:
 
 def fetch_easyocr() -> bool:
     try:
-        import numpy as np
+        # Dependency probe, not a binding: EasyOCR needs numpy at import time, so
+        # failing here reports a missing install instead of a confusing traceback.
+        import numpy  # noqa: F401
 
         t0 = time.time()
         from anpr.ocr import OcrEngine

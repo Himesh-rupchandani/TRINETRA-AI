@@ -13,6 +13,8 @@ const CAMERA_LABEL: Record<CameraStatus, string> = {
   ONLINE: 'Working',
   DEGRADED: 'Poor quality',
   OFFLINE: 'Not working',
+  // Distinct from OFFLINE: the slot exists, no stream source is authorized yet.
+  NOT_CONFIGURED: 'Not set up',
 };
 
 const SERVICE_LABEL: Record<ServiceStatus, string> = {

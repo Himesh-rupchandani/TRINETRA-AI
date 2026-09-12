@@ -28,10 +28,8 @@ python -m venv .venv && source .venv/bin/activate
 # CPU-only torch first (recommended on hackathon hardware):
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
-
-# If cv2 later fails with "libGL.so.1: cannot open shared object file",
-# the GUI opencv wheel overwrote the headless build — fix with:
-#   pip uninstall -y opencv-python && pip install -q opencv-python-headless
+# ultralytics/easyocr may install GUI OpenCV; repair cv2 for headless use:
+python ../scripts/ensure_headless_opencv.py
 
 # 1. Inspect the Sentinel catalogue + suggested diverse test subset
 python scripts/check_catalogue.py
@@ -70,7 +68,7 @@ Expected failures, decoded:
 | `CATALOGUE UNREACHABLE: ...` | `cctv.corp8.cloud` not reachable from this network (it is Cloudflare-fronted and was blocked in this sandbox). Run on the venue/allowed network. |
 | RTSP logs show `401 Unauthorized` | Email/password wrong, or not on the approved access list. Check `SENTINEL_EMAIL`/`SENTINEL_PASSWORD` are exported. |
 | RTSP connect refused/timeouts on TCP | Port `8554/TCP` closed on your path → the guide says fall back to HLS (`ALLOW_HLS_FALLBACK=true` is the default). |
-| `libGL.so.1` on import cv2 | GUI `opencv-python` overwrote headless cv2 → `pip uninstall -y opencv-python && pip install -q opencv-python-headless` |
+| `libGL.so.1` on import cv2 | GUI `opencv-python` overwrote headless cv2 → run `python ../scripts/ensure_headless_opencv.py` |
 
 ### Demo mode (NOT live Sentinel)
 
