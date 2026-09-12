@@ -10,6 +10,7 @@ if __name__ == "__main__" and not __package__:
             sys.path.insert(0, str(p))
     __package__ = "backend.app"
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, APIRouter
@@ -24,6 +25,8 @@ from .database.models import Camera
 from .database.schemas import HealthResponse
 from .camera.manager import camera_manager
 from .camera.live_source import sync_live_camera
+from .core.paths import evidence_root
+from .services.ws_manager import ws_manager
 from .api.cameras import router as cameras_router
 from .api.watchlist import router as watchlist_router
 from .api.alerts import router as alerts_router
@@ -56,16 +59,15 @@ async def lifespan(app: FastAPI):
 
     # 1b. Ensure evidence root exists (backend+frontend only mode may not have cv-engine folder)
     try:
-        evidence_root = Path(settings.EVIDENCE_ROOT)
-        # If relative, resolve from backend root
-        if not evidence_root.is_absolute():
-            # backend/app/main.py -> backend root is parents[1]
-            backend_root = Path(__file__).resolve().parents[1]
-            evidence_root = (backend_root / evidence_root).resolve()
-        evidence_root.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Evidence root ensured at {evidence_root}")
+        # Same resolution authority the evidence API and the video pipelines use.
+        logger.info(f"Evidence root ensured at {evidence_root()}")
     except Exception as e:
         logger.warning(f"Could not create evidence root {settings.EVIDENCE_ROOT}: {e}")
+
+    # 1c. Bind the realtime fan-out to THIS loop so worker threads (uploaded /
+    # multi-video analysis) can broadcast without spinning up a private loop
+    # that can never reach the SSE queues or WebSocket transports.
+    ws_manager.attach_loop(asyncio.get_running_loop())
 
     # 2. Sync the env-configured REAL live camera (.env -> registry), then
     # register existing cameras into CameraManager
@@ -101,6 +103,7 @@ async def lifespan(app: FastAPI):
 
     # 3. Clean shutdown - release all camera resources
     logger.info("Shutting down TRINETRA AI Surveillance Engine...")
+    ws_manager.detach_loop()
     active_cams = camera_manager.list_cameras()
     for cam in active_cams:
         camera_manager.stop_camera(cam["camera_id"])

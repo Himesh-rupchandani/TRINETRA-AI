@@ -1,0 +1,5 @@
+# Keep interpreter scripts LF-only on every platform: a CRLF checkout of a
+# bash script fails in Git Bash with "$'\r': command not found", and the node
+# setup script is executed by npm's predev hook on all OSes.
+*.sh   text eol=lf
+*.mjs  text eol=lf

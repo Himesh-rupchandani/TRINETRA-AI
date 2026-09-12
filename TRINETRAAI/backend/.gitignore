@@ -26,9 +26,13 @@ venv/
 .venv/
 ENV/
 
-# Environment variables
+# Environment variables (may hold gateway credentials) — never commit.
+# Only the placeholder example stays tracked.
 .env
+.env.*
 .env.local
+!.env.example
+!**/.env.example
 
 # Databases & local storage
 *.db

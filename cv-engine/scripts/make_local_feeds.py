@@ -29,7 +29,29 @@ CV_ROOT = Path(__file__).resolve().parents[1]
 STILLS = CV_ROOT.parent / "trinetra-ai" / "public" / "cctv"
 FEEDS_DIR = CV_ROOT / "feeds"
 WEIGHTS = CV_ROOT.parent / "trinetra_detection" / "models" / "yolo11n.pt"
-FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+# Bold sans-serif font for the plate sprites. Hard-coding a single Linux path
+# crashed on Windows/macOS with an opaque PIL "cannot open resource" error, so
+# the first INSTALLED candidate wins (Debian/Ubuntu, Fedora, Windows, macOS).
+FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   # Debian/Ubuntu
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",            # Fedora/Arch
+    "C:/Windows/Fonts/arialbd.ttf",                           # Windows Arial Bold
+    "C:/Windows/Fonts/segoeuib.ttf",                          # Windows Segoe UI Bold
+    "C:/Windows/Fonts/consolab.ttf",                          # Windows Consolas Bold
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",      # macOS
+    "/Library/Fonts/Arial Bold.ttf",                          # macOS (older layout)
+]
+
+
+def find_font() -> str:
+    for candidate in FONT_CANDIDATES:
+        if Path(candidate).is_file():
+            return candidate
+    raise SystemExit(
+        "no usable TrueType font found (tried: %s) — install DejaVu Sans or "
+        "Arial and retry" % ", ".join(FONT_CANDIDATES)
+    )
 
 W, H, FPS = 1280, 720, 25
 SEG_SECONDS = 9
@@ -88,7 +110,7 @@ def normalize_still(img_path: Path) -> np.ndarray:
 def plate_sprite(text: str, target_w: int, target_h: int) -> np.ndarray:
     from PIL import Image, ImageDraw, ImageFont
 
-    font = ImageFont.truetype(FONT, 64)
+    font = ImageFont.truetype(find_font(), 64)
     pad = 10
     probe = Image.new("RGB", (10, 10))
     l, t, r, b = ImageDraw.Draw(probe).textbbox((0, 0), text, font=font)

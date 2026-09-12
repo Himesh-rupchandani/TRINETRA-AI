@@ -11,8 +11,8 @@ Ab credentials automatically inject ho jate hain — koi manual entry nahi:
 
 **Frontend (`trinetra-ai/.env` + `.env.local`):**
 ```env
-SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-SENTINEL_PASSWORD=A7UX-7TRC-BVS6
+SENTINEL_EMAIL=<your-sentinel-email>
+SENTINEL_PASSWORD=<your-sentinel-password>
 SENTINEL_WHEP_ORIGIN=http://103.250.160.189:8889
 VITE_LIVE_STREAMS=true
 VITE_AUTO_LOGIN=true
@@ -20,8 +20,8 @@ VITE_AUTO_LOGIN=true
 
 **Backend (`TRINETRAAI/backend/.env`):**
 ```env
-SENTINEL_EMAIL=himesh.rupchandani140850@marwadiuniversity.ac.in
-SENTINEL_PASSWORD=A7UX-7TRC-BVS6
+SENTINEL_EMAIL=<your-sentinel-email>
+SENTINEL_PASSWORD=<your-sentinel-password>
 AUTO_START_CAMERAS=true
 ```
 
@@ -36,8 +36,8 @@ AUTO_START_CAMERAS=true
 ```ts
 // vite.config.ts — sentinelBasic() injects Basic Auth header server-side
 function sentinelBasic(env) {
-  const email = env.SENTINEL_EMAIL ?? HACKATHON_DEFAULTS.email
-  const password = env.SENTINEL_PASSWORD ?? HACKATHON_DEFAULTS.password
+  const email = (env.SENTINEL_EMAIL ?? process.env.SENTINEL_EMAIL ?? '').trim()
+  const password = (env.SENTINEL_PASSWORD ?? process.env.SENTINEL_PASSWORD ?? '').trim()
   return `Basic ${Buffer.from(`${email}:${password}`).toString('base64')}`
 }
 // Browser never sees credentials — proxy adds Authorization header

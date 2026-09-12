@@ -5,7 +5,6 @@ Executes the comprehensive Phase 17 verification checklist against
 the running FastAPI backend application and database.
 """
 import sys
-import io
 from pathlib import Path
 
 # UTF-8 stdout configuration for Windows
@@ -25,8 +24,7 @@ from datetime import datetime, timezone, timedelta
 from contextlib import asynccontextmanager
 from fastapi.testclient import TestClient
 from app.main import app
-from app.database.database import SessionLocal, init_db
-from app.database.models import Camera, Watchlist, VehicleEvent, Alert
+from app.database.database import init_db
 
 
 def run_e2e_audit():
@@ -41,7 +39,8 @@ def run_e2e_audit():
     async def noop_lifespan(app):
         yield
 
-    original_lifespan = getattr(app.router, "lifespan_context", None)
+    # One-shot script: the process exits after the checks, so the real lifespan
+    # (which would start camera workers) is simply replaced for the run.
     app.router.lifespan_context = noop_lifespan
 
     with TestClient(app, raise_server_exceptions=True) as client:

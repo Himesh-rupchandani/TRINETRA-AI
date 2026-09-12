@@ -2,7 +2,7 @@
   "name": "trinetra-ai",
   "private": true,
   "version": "1.0.0",
-  "description": "TRINETRA AI — CCTV Intelligence & Investigation Control Room",
+  "description": "TRINETRA AI \u2014 CCTV Intelligence & Investigation Control Room",
   "type": "module",
   "scripts": {
     "predev": "node scripts/auto-setup-env.mjs",
@@ -12,6 +12,7 @@
     "lint": "oxlint src",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "test": "node tests/run-tests.mjs",
     "verify:live": "node scripts/run-verify.mjs",
     "setup:auto": "node scripts/auto-setup-env.mjs"
   },

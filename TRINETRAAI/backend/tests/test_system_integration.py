@@ -26,13 +26,11 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
 
 from app.database.models import Base, Camera, Watchlist, VehicleEvent, Alert
 from app.database.database import get_db
 from app.services.sentinel_catalogue_service import sync_sentinel_catalogue, normalize_sentinel_camera
-from app.services.ws_manager import ws_manager
 
 
 @pytest.fixture(scope="module")

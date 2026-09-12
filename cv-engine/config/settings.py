@@ -8,7 +8,7 @@ catalogue unless explicitly overridden on the CLI for single-camera testing.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -43,9 +43,10 @@ class Settings:
     # --- Sentinel catalogue ---------------------------------------------
     sentinel_catalogue_url: str = "https://cctv.corp8.cloud/cameras.json"
     catalogue_timeout_sec: float = 10.0
-    # AUTO-LOGIN: hackathon credentials as fallback so live camera works without manual entry
-    sentinel_email: str = "himesh.rupchandani140850@marwadiuniversity.ac.in"
-    sentinel_password: str = "A7UX-7TRC-BVS6"
+    # Credentials come from the environment (SENTINEL_EMAIL / SENTINEL_PASSWORD)
+    # or an untracked .env — never from source. Empty means "not configured".
+    sentinel_email: str = ""
+    sentinel_password: str = ""
     sentinel_hls_base_url: str = "https://cctv.corp8.cloud"
     sentinel_rtsp_host: str = "103.250.160.189"
     sentinel_rtsp_port: int = 8554

@@ -1,4 +1,13 @@
-export type CameraStatus = 'ONLINE' | 'OFFLINE' | 'DEGRADED';
+/**
+ * Camera lifecycle states as the backend reports them
+ * (`GET /api/cameras` -> `_resolve_camera_status`).
+ *
+ * `NOT_CONFIGURED` is a real, distinct backend state: the registry slot exists
+ * but no stream source has been authorized yet. It used to be collapsed into
+ * `OFFLINE` by the adapter, so an idle/unprovisioned camera was rendered as a
+ * *fault* ("Not working", red) and counted as an outage.
+ */
+export type CameraStatus = 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'NOT_CONFIGURED';
 export type StreamType = 'HLS' | 'RTSP' | 'WEBRTC' | 'MJPEG' | 'FILE';
 
 /**

@@ -13,7 +13,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 from sqlalchemy import func
 
-from app.database.database import SessionLocal, get_db, init_db
+from app.database.database import SessionLocal, init_db
 from app.database.models import Camera, VehicleEvent
 
 

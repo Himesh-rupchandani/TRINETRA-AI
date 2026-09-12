@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 # Allow running this file directly as a script
 if __name__ == "__main__" and not __package__:
@@ -17,7 +17,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
-from ..core.logging_config import logger
 from ..database.database import get_db
 from sqlalchemy import func
 from ..database.models import Camera
@@ -380,10 +379,25 @@ def restart_camera(camera_id: str):
 
 
 @router.get("/{camera_id}/live")
-def live_mjpeg_stream(camera_id: str):
+def live_mjpeg_stream(camera_id: str, db: Session = Depends(get_db)):
     """
     Live Multipart MJPEG Stream endpoint for browser and dashboard video feeds.
+
+    An unknown camera id is rejected with 404 up front. Without this check the
+    generator happily streamed an endless "signal lost" placeholder for a camera
+    that does not exist, so a typo produced a 200 that never ends instead of an
+    error the UI can act on. Registered cameras behave exactly as before.
     """
+    cam = (
+        db.query(Camera)
+        .filter(func.upper(Camera.camera_id) == camera_id.strip().upper())
+        .first()
+    )
+    if not cam:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera '{camera_id}' not found.",
+        )
     return StreamingResponse(
         camera_manager.generate_mjpeg_stream(camera_id),
         media_type="multipart/x-mixed-replace; boundary=frame",

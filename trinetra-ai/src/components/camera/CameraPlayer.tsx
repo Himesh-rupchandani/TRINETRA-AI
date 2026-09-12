@@ -130,8 +130,13 @@ export function CameraPlayer({
       setMjpegSrc(ticket.detectionUrl);
       return;
     }
-    setMjpegSrc(ticket?.streamType === 'MJPEG' ? `/cvfeed/${camera.id}` : null);
-  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id]);
+    setMjpegSrc(isMjpeg ? `/cvfeed/${camera.id}` : null);
+    // `isMjpeg` (i.e. ticket.streamType) MUST be a dependency: the body reads
+    // it, and it is also what flips the player into <img> mode. Omitting it let
+    // a ticket that changed transport (e.g. an MJPEG fallback issued for the
+    // same camera/URL) leave mjpegSrc null while useImg was already true — a
+    // permanently black player with no fallback.
+  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id, isMjpeg]);
 
   const requestStream = async () => {
     setRequesting(true);

@@ -4,13 +4,12 @@ PTS handling & capture timing (spec §10, §14).
 Uses a locally generated video file — no live Government feed needed.
 Timing MUST come from PTS, never arrival time and never CAP_PROP_FPS.
 """
-import os
 
 import numpy as np
 import pytest
 import cv2
 
-from capture.frame_packet import CaptureState, FramePacket
+from capture.frame_packet import CaptureState
 from capture.stream_capture import StreamCaptureBase, PTS_ROLLBACK_MS, PTS_GAP_MS
 from capture.rtsp_capture import RTSPCapture
 

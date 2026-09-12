@@ -15,7 +15,6 @@ for p in [str(Path(__file__).resolve().parents[1])]:
 
 import pytest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 

@@ -5,18 +5,20 @@ GET /api/stats/kpis  — dashboard counters computed from the real database.
 No fabricated values: every number is derived from cameras/alerts/events rows.
 """
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 
 from ..database.database import get_db
 from ..database.models import Camera, Alert, VehicleEvent
+# TRINETRASchema (not a bare BaseModel) so `generated_at` is serialized as a
+# UTC instant with a `Z` suffix, matching every other timestamp on the wire.
+from ..database.schemas import TRINETRASchema
 from .cameras import _resolve_camera_status
 
 router = APIRouter(prefix="/stats", tags=["Stats"])
 
 
-class DashboardKpis(BaseModel):
+class DashboardKpis(TRINETRASchema):
     total_cameras: int
     cameras_online: int
     cameras_degraded: int

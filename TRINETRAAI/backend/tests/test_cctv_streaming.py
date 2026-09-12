@@ -1,9 +1,7 @@
 import os
 import time
-import threading
 from unittest.mock import MagicMock, patch
 import numpy as np
-import pytest
 
 from backend.app.camera.packet import FramePacket, CameraState
 from backend.app.camera.reconnect import StreamReconnectHandler
@@ -419,7 +417,7 @@ def test_multi_camera_isolation():
 
     with patch("cv2.VideoCapture", side_effect=mock_cap_factory):
         cam_good = manager.add_camera("CAM_GOOD", "rtsp://10.0.0.1:8554/good", auto_start=True)
-        cam_bad = manager.add_camera("CAM_BAD", "rtsp://10.0.0.1:8554/failing", auto_start=True)
+        manager.add_camera("CAM_BAD", "rtsp://10.0.0.1:8554/failing", auto_start=True)
 
         time.sleep(0.3)
 
