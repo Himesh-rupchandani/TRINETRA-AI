@@ -1,0 +1,171 @@
+diff --git a/dmr/openapi/generators/component_parsers.py b/dmr/openapi/generators/component_parsers.py
+index e737c31..f012cf7 100644
+--- a/dmr/openapi/generators/component_parsers.py
++++ b/dmr/openapi/generators/component_parsers.py
+@@ -24,6 +24,7 @@ if TYPE_CHECKING:
+ _RequestBody: TypeAlias = RequestBody | Reference | None
+ _RequestParameters: TypeAlias = list[Parameter | Reference] | None
+ _ConvertersMapping: TypeAlias = Mapping[type[Any], Any]
++_ConverterSchemas: TypeAlias = Mapping[type[Any], Schema]
+ 
+ 
+ @dataclasses.dataclass(frozen=True, slots=True)
+@@ -40,6 +41,19 @@ class ComponentParserGenerator:
+         # attribute to resolve our schema.
+     }
+ 
++    # Some converters cannot be described with a type annotation only,
++    # so we store extra schema fields for them:
++    _converter_schemas: ClassVar[_ConverterSchemas] = {
++        # `slug` uses `[-a-zA-Z0-9_]+` as its pattern:
++        converters.SlugConverter: Schema(
++            pattern=converters.SlugConverter.regex,
++        ),
++        # `path` can contain slashes, which is not expressed by `str`:
++        converters.PathConverter: Schema(
++            description='Can contain slashes',
++        ),
++    }
++
+     def __call__(
+         self,
+         operation_id: str,
+@@ -131,7 +145,10 @@ class ComponentParserGenerator:
+                     param_in='path',
+                 ),
+             )
+-            return params_list
++            return self._with_converter_schemas(
++                params_list,
++                pattern.pattern.converters,
++            )
+ 
+         # `re_path()` and `RegexPattern`:
+         regex = pattern.pattern.regex
+@@ -151,6 +168,49 @@ class ComponentParserGenerator:
+             )
+         return params_list or None
+ 
++    def _with_converter_schemas(
++        self,
++        params_list: list[Parameter | Reference],
++        converters: Mapping[str, Any],
++    ) -> list[Parameter | Reference]:
++        """Add extra schema fields for the known Django converters."""
++        return [
++            self._with_converter_schema(
++                path_param,
++                converters.get(path_param.name)
++                if isinstance(path_param, Parameter)
++                else None,
++            )
++            for path_param in params_list
++        ]
++
++    def _with_converter_schema(
++        self,
++        path_param: Parameter | Reference,
++        converter: Any,
++    ) -> Parameter | Reference:
++        """Merge the converter schema fields with the generated ones."""
++        converter_schema = self._converter_schemas.get(
++            type(converter),  # pyright: ignore[reportUnknownArgumentType]
++        )
++        if (
++            converter_schema is None
++            or not isinstance(path_param, Parameter)
++            or not isinstance(path_param.schema, Schema)
++        ):
++            return path_param
++        return dataclasses.replace(
++            path_param,
++            schema=dataclasses.replace(
++                path_param.schema,
++                **{
++                    field.name: getattr(converter_schema, field.name)
++                    for field in dataclasses.fields(converter_schema)
++                    if getattr(converter_schema, field.name) is not None
++                },
++            ),
++        )
++
+     def _merge_bodies(
+         self,
+         new_schema: RequestBody,
+diff --git a/docs/pages/components/path.rst b/docs/pages/components/path.rst
+index 4685901..c79ed00 100644
+--- a/docs/pages/components/path.rst
++++ b/docs/pages/components/path.rst
+@@ -34,6 +34,11 @@ What happens here?
+ Django supports multiple pre-defined path converter types:
+ ``int``, ``uuid``, ``str``, ``slug``, ``path``.
+ 
++We document all of them in the OpenAPI schema:
++``int`` and ``uuid`` are mapped to the matching schema types,
++``slug`` also gets its ``[-a-zA-Z0-9_]+`` pattern,
++and ``path`` is documented as a ``str`` that can contain slashes.
++
+ .. seealso::
+ 
+   - https://docs.djangoproject.com/en/stable/topics/http/urls/
+diff --git a/tests/test_unit/test_openapi/test_path_converters.py b/tests/test_unit/test_openapi/test_path_converters.py
+new file mode 100644
+index 0000000..4b5ee1a
+--- /dev/null
++++ b/tests/test_unit/test_openapi/test_path_converters.py
+@@ -0,0 +1,55 @@
++from typing import Any
++
++from django.urls import converters, path
++
++from dmr import Controller
++from dmr.openapi import build_schema
++from dmr.plugins.pydantic import PydanticSerializer
++from dmr.routing import Router
++
++
++class _ArticleController(Controller[PydanticSerializer]):
++    def get(self) -> str:
++        raise NotImplementedError
++
++
++def _get_path_parameters(schema: Any, url_path: str) -> dict[str, Any]:
++    operation_parameters = schema['paths'][url_path]['get']['parameters']
++    return {parameter['name']: parameter for parameter in operation_parameters}
++
++
++def _assert_path_parameters(path_parameters: dict[str, Any]) -> None:
++    for parameter in path_parameters.values():
++        assert parameter['in'] == 'path'
++        assert parameter['required'] is True
++
++
++def test_builtin_path_converters() -> None:
++    """Ensure that built-in Django converters are reflected in the schema."""
++    schema = build_schema(
++        Router(
++            'api/',
++            [
++                path(
++                    'articles/<int:article_id>/<slug:slug>/<path:tail>/',
++                    _ArticleController.as_view(),
++                ),
++            ],
++        ),
++    ).convert()
++
++    path_parameters = _get_path_parameters(
++        schema,
++        '/api/articles/{article_id}/{slug}/{tail}/',
++    )
++    assert path_parameters['article_id']['schema']['type'] == 'integer'
++
++    slug_schema = path_parameters['slug']['schema']
++    assert slug_schema['pattern'] == converters.SlugConverter.regex
++    assert slug_schema['type'] == 'string'
++
++    tail_schema = path_parameters['tail']['schema']
++    assert tail_schema['description'] == 'Can contain slashes'
++    assert tail_schema['type'] == 'string'
++
++    _assert_path_parameters(path_parameters)
