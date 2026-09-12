@@ -126,23 +126,18 @@ on local traffic videos, and stream an **annotated live view** (bounding boxes
 + track IDs) the browser plays directly:
 
 ```bash
-# 1. one-time: put traffic videos in cv-engine/feeds/ and the model in cv-engine/models/
-#    (los_angeles.mp4, cctv.avi — any traffic clip works; yolo11s.pt)
+# 1. one-time: generate the demo clips (writes cv-engine/feeds/highway2.mp4 + city_cctv.mp4)
+python scripts/make_local_feeds.py
 # 2. register the demo-feed cameras in the backend registry (stream_type='file')
-cd TRINETRAAI/backend && python - << 'PY'
-from app.database.database import SessionLocal
-from app.database.models import Camera
-db = SessionLocal()
-if not db.query(Camera).filter(Camera.camera_id == 'CAMD01').first():
-    db.add(Camera(camera_id='CAMD01', name='DEMO FEED — Highway Interchange', location='Local Demo Interchange',
-                  stream_url='<abs path>/cv-engine/feeds/los_angeles.mp4', stream_type='file',
-                  latitude=23.0322, longitude=72.5570, status='ONLINE'))
-    db.commit()
-PY
+cd TRINETRAAI/backend && python -m scripts.register_demo_cameras
 # 3. restart the backend (it opens file sources like any camera), then:
 cd cv-engine && pip install -r requirements.txt   # incl. torch CPU + ultralytics
-python scripts/run_feed_demo.py                   # detection + events + annotated MJPEG on :8555
+python scripts/run_feed_demo.py --anpr            # detection + ANPR + events + annotated MJPEG on :8555
 ```
+
+No model downloads are required for the demo: `run_feed_demo.py` falls back to
+the repo's bundled `trinetra_detection/models/yolo11n.pt`, and the `--anpr`
+stage uses RapidOCR (models ship inside the pip wheel, fully offline).
 
 The frontend picks the annotated view automatically (`/cvfeed/<id>`, proxied),
 falling back to the backend's own MJPEG mirror when the CV engine is off.

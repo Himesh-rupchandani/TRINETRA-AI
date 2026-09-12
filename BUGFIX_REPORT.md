@@ -364,3 +364,23 @@ node scripts/verify/verify_camera_access.mjs
 **Local credentials:** put `SENTINEL_EMAIL` / `SENTINEL_PASSWORD` in `TRINETRAAI/backend/.env` and
 `trinetra-ai/.env` (both gitignored; see the `.env.example` placeholders). `npm run dev` creates those
 files only if they are missing and only appends keys you have not set — it never rewrites your values.
+
+---
+
+## Addendum — post-review hardening (local Windows runs)
+
+Two portability gaps surfaced while an operator ran the local demo chain on
+Windows PowerShell; both fixed and verified on 2026-09-12:
+
+| # | Issue | Fix | Tests |
+|---|-------|-----|-------|
+| A1 | `cv-engine/scripts/make_local_feeds.py` hard-coded the Linux font path `/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf`, so plate sprites crashed on Windows/macOS with an opaque `OSError: cannot open resource` before any feed was written. | `find_font()` picks the first **installed** candidate across Debian/Ubuntu, Fedora, Windows (`arialbd.ttf`, `segoeuib.ttf`, `consolab.ttf`) and macOS; actionable `SystemExit` if none exist. | `cv-engine/tests/test_make_local_feeds_font.py` (3) |
+| A2 | The README registered the CAMD01/CAMD02 demo cameras with a **bash heredoc** — impossible to run on PowerShell, so Windows operators had no supported way to get the DEMO FEED cameras into the registry. | New `TRINETRAAI/backend/scripts/register_demo_cameras.py` (idempotent ORM upsert mirroring `run_feed_demo.py::FEEDS`); README now uses it. | `TRINETRAAI/backend/tests/test_register_demo_cameras.py` (3) |
+
+Verified end-to-end after the fixes: `make_local_feeds.py` wrote both feeds
+(675 frames each, watchlist plates `GJ 01 AB 1234` / `MH 02 CD 5678` pasted),
+`register_demo_cameras` + `point_cameras_at_local_feeds` updated the registry,
+and the demo runs with zero model downloads (`run_feed_demo.py` falls back to
+the bundled `yolo11n.pt`; `--anpr` uses the offline RapidOCR wheel).
+
+**Updated tallies:** backend **200 passed** (+3), cv-engine **84 passed, 3 deselected** (+3).
