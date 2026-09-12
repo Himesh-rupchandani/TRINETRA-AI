@@ -54,6 +54,11 @@ if (-not (Test-Path (Join-Path $Frontend "node_modules"))) {
     Pop-Location
 }
 
+# Keep the server-side cv2 import on the headless build when ultralytics has
+# also installed its GUI opencv dependency.
+Write-Host "Ensuring headless OpenCV..." -ForegroundColor Yellow
+python (Join-Path $Root "scripts\ensure_headless_opencv.py")
+
 # --- Seed DB ---
 $trinetraDb1 = Join-Path $Root "TRINETRAAI\trinetra.db"
 $trinetraDb2 = Join-Path $Backend "trinetra.db"

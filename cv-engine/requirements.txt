@@ -1,13 +1,12 @@
 # TRINETRA cv-engine — AI/CV pipeline for Sentinel CCTV feeds
 # Python 3.11+
 #
-# ⚠ INSTALL-ORDER MATTERS: ultralytics and rapidocr-onnxruntime depend on the
-# GUI `opencv-python` wheel, which overwrites cv2 with a build that requires
-# libGL.so.1 and crashes headless servers with "ImportError: libGL.so.1:
-# cannot open shared object file". The headless build below is therefore
-# listed LAST on purpose — pip installs it after those dependencies, so cv2
-# stays the headless (server-safe) build. If you still hit the libGL error:
-#     pip uninstall -y opencv-python && pip install opencv-python-headless
+# ⚠ ultralytics and easyocr declare the GUI `opencv-python` wheel, which can
+# overwrite cv2 with a build that requires libGL.so.1 on headless servers.
+# After installing this file, run:
+#     python ../scripts/ensure_headless_opencv.py
+# The helper removes GUI OpenCV and repairs the cv2 installation without
+# redownloading the headless wheel on every run.
 
 # Core
 numpy>=1.26.0
@@ -29,5 +28,6 @@ psutil>=5.9.0
 # Tests
 pytest>=8.1.0
 
-# --- must stay AFTER ultralytics / rapidocr-onnxruntime (see note above) ----
+# Declared explicitly; run scripts/ensure_headless_opencv.py after pip resolves
+# transitive dependencies so this provider wins the cv2 import.
 opencv-python-headless>=4.9.0   # headless build for servers; no libGL required

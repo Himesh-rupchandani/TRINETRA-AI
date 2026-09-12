@@ -17,6 +17,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
+python ..\..\scripts\ensure_headless_opencv.py
 python -m scripts.seed_demo
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
@@ -26,6 +27,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 cd backend
 pytest -v
 ```
-All 197 automated backend tests pass (`pytest` in `backend/`); the offline cv-engine suite
-adds 81 more and the frontend contract suite 48 — see the root [README](../README.md#tests).
+All 200 automated backend tests pass (`pytest` in `backend/`); the offline cv-engine suite
+adds 84 more and the frontend contract suite 48 — see the root [README](../README.md#tests).
 For full API contracts and architectural specifications, see [backend/README.md](backend/README.md).

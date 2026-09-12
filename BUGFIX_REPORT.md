@@ -13,8 +13,8 @@ Everything below was executed in this workspace, not inferred.
 
 | Gate | Command | Result |
 |---|---|---|
-| Backend suite | `cd TRINETRAAI/backend && pytest` | **197 passed** |
-| CV engine suite | `cd cv-engine && pytest` | **81 passed, 3 deselected** (live-feed tests opt-in) |
+| Backend suite | `cd TRINETRAAI/backend && pytest` | **200 passed** |
+| CV engine suite | `cd cv-engine && pytest` | **84 passed, 3 deselected** (live-feed tests opt-in) |
 | Frontend suite | `cd trinetra-ai && npm test` | **48/48 passed** (plain node, no runner installed) |
 | Frontend typecheck | `npx tsc -b` | **clean** |
 | Production build | `npx vite build` | **green** (6.6 s) |
@@ -339,10 +339,10 @@ here, so registry cameras report honest `OFFLINE` statuses and no live frames ar
 ## 6. How to reproduce
 
 ```bash
-# Backend (197 tests) — also runs the frontend suite when node is available
+# Backend (200 tests) — also runs the frontend suite when node is available
 cd TRINETRAAI/backend && pytest
 
-# CV engine (81 offline tests; 3 live-feed tests opt-in)
+# CV engine (84 offline tests; 3 live-feed tests opt-in)
 cd cv-engine && pytest
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
 

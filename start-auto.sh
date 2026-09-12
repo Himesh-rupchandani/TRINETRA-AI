@@ -54,6 +54,22 @@ if [ ! -d "$BACKEND/.venv" ] && ! python3 -c "import fastapi" 2>/dev/null; then
   (cd "$BACKEND" && pip install -r requirements.txt || pip3 install -r requirements.txt)
 fi
 
+# ultralytics may pull GUI OpenCV after the headless wheel. Repair cv2 with the
+# same interpreter that will run the backend, without printing any credentials.
+if [ -x "$BACKEND/.venv/bin/python" ]; then
+  OPENCV_PYTHON="$BACKEND/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  OPENCV_PYTHON="$(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+  OPENCV_PYTHON="$(command -v python)"
+else
+  echo "⚠️  Python not found — cannot verify headless OpenCV"
+  OPENCV_PYTHON=""
+fi
+if [ -n "$OPENCV_PYTHON" ]; then
+  (cd "$ROOT" && "$OPENCV_PYTHON" scripts/ensure_headless_opencv.py)
+fi
+
 # --- Seed DB if empty ---
 if [ ! -f "$ROOT/TRINETRAAI/trinetra.db" ] && [ ! -f "$BACKEND/trinetra.db" ]; then
   echo "🌱 Seeding demo DB..."

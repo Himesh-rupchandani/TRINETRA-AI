@@ -58,6 +58,7 @@ cd "TRINETRAAI\backend"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+python ..\..\scripts\ensure_headless_opencv.py  # keep cv2 server-safe on Windows/Linux
 python -m scripts.seed_demo   # seeds 30 cameras ONLINE (auto-fixes stale 4-camera DB)
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 # Verify: http://localhost:8000/api/health -> {"status":"healthy", "total_cameras":30}
@@ -80,6 +81,7 @@ npm run dev
 
 ```bash
 cd TRINETRAAI/backend && pip install -r requirements.txt
+python ../../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python -m scripts.seed_demo
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
@@ -97,6 +99,7 @@ See `WINDOWS_SETUP.md` for detailed OFFLINE/404 troubleshooting.
 ```bash
 # Backend (port 8000)
 cd TRINETRAAI/backend && pip install -r requirements.txt
+python ../../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python -m scripts.seed_demo
 # Point every registry camera at a local traffic clip (offline demo) —
 # video is then decoded ON DEMAND when an operator opens a camera:
@@ -111,6 +114,7 @@ EVIDENCE_ROOT=../../cv-engine/evidence uvicorn app.main:app --host 0.0.0.0 --por
 
 # CV engine — real Sentinel camera (live mode)
 cd cv-engine && pip install -r requirements.txt
+python ../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python scripts/fetch_models.py          # one-time model download
 python scripts/run_pipeline.py --mode live --camera cam04
 
@@ -132,6 +136,7 @@ python scripts/make_local_feeds.py
 cd TRINETRAAI/backend && python -m scripts.register_demo_cameras
 # 3. restart the backend (it opens file sources like any camera), then:
 cd cv-engine && pip install -r requirements.txt   # incl. torch CPU + ultralytics
+python ../scripts/ensure_headless_opencv.py      # keep cv2 server-safe
 python scripts/run_feed_demo.py --anpr            # detection + ANPR + events + annotated MJPEG on :8555
 ```
 
@@ -219,7 +224,7 @@ Common errors, decoded:
 | `curl https://cctv.corp8.cloud/cameras.json` → HTTP 000 / SSL error | You are not on a network that can reach the CDN host (Cloudflare-fronted). The grid is reachable from the venue/allowed network — not from every sandbox/office network. |
 | RTSP/WHEP `401 Unauthorized` | Credentials missing or not on the approved access list. Check `SENTINEL_EMAIL`/`SENTINEL_PASSWORD` in the right place (backend `.env`, shell for cv-engine, `trinetra-ai/.env` for the browser proxy). Email `@` must belong to an approved account. |
 | WHEP player: "Camera path is not published on the gateway" | A stale ticket path. The backend ticket is `/sentinel/stream/<id>/whep` (matches gateway `/stream/<id>/whep` behind the proxy). Rebuilt frontends/tickets use this; any `/sentinel/<id>/whep`-style URL is the old bug. |
-| `ImportError: libGL.so.1: cannot open shared object file` (cv2) | GUI `opencv-python` (pulled by ultralytics/rapidocr) overwrote the headless build → `pip uninstall -y opencv-python && pip install -q opencv-python-headless`. |
+| `ImportError: libGL.so.1: cannot open shared object file` (cv2) | GUI `opencv-python` (pulled by ultralytics/rapidocr) overwrote the headless build → run `python scripts/ensure_headless_opencv.py` from the repo root (or `python ../../scripts/ensure_headless_opencv.py` from the backend). |
 | Cameras never go ONLINE in LIVE mode | `AUTO_START_CAMERAS=false` (default) means nothing connects at boot. Either call `POST /api/cameras/{id}/start` per camera you process, or set `AUTO_START_CAMERAS=true` on a machine that can actually reach the grid. |
 | YOLO/ANPR missing at runtime | `python scripts/fetch_models.py` (weights) was never run, or tesseract isn't installed — cv-engine uses `rapidocr-onnxruntime` (bundled) for OCR. |
 

@@ -52,6 +52,8 @@ python -m venv .venv
 
 # Install dependencies
 pip install -r requirements.txt
+# ultralytics may install GUI OpenCV; repair cv2 for server/headless use
+python ..\..\scripts\ensure_headless_opencv.py
 
 # Run initial demo seed
 python -m scripts.seed_demo
