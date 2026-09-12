@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 # Allow running this file directly as a script
 if __name__ == "__main__" and not __package__:

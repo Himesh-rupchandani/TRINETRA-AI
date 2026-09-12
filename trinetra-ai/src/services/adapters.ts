@@ -51,7 +51,8 @@ export interface CameraItemDto {
 }
 
 export interface VehicleEventDto {
-  id: number;
+  /** Numeric on REST; realtime frames are normalized through `toId`. */
+  id: number | string;
   camera_id: string;
   vehicle_track_id?: number | null;
   plate_raw?: string | null;
@@ -69,8 +70,12 @@ export interface VehicleEventDto {
 }
 
 export interface AlertDto {
-  id: number;
-  event_id?: number | null;
+  /**
+   * Numeric alert id on REST responses. Realtime frames have historically also
+   * carried display refs ("AL-7"), so the mapper normalizes both — see `toId`.
+   */
+  id: number | string;
+  event_id?: number | string | null;
   camera_id: string;
   plate_number?: string | null;
   alert_type: string;
@@ -82,6 +87,9 @@ export interface AlertDto {
   acknowledged_at?: string | null;
   acknowledged_by?: string | null;
   resolved_at?: string | null;
+  resolved_by?: string | null;
+  /** Officer's free-text resolution note (kept out of `resolved_by`). */
+  resolution_note?: string | null;
 }
 
 export interface WatchlistDto {
@@ -209,10 +217,21 @@ function metaFor(dir: Map<string, CameraMeta> | null | undefined, cameraId: stri
 
 /* -------------------------------- converters ------------------------------- */
 
-function asCameraStatus(raw?: string): Camera['status'] {
-  const s = (raw ?? 'OFFLINE').toUpperCase();
+/**
+ * Map the backend camera vocabulary onto the UI's.
+ *
+ * `NOT_CONFIGURED` is preserved as its own state — collapsing it into OFFLINE
+ * (as this used to) turned every unprovisioned registry slot into a red
+ * "Not working" fault and inflated the outage counters. Live-engine states the
+ * API already folds down (CONNECTING/RECONNECTING/STOPPED) never reach here;
+ * anything unrecognized still falls back to OFFLINE rather than inventing a
+ * state.
+ */
+export function asCameraStatus(raw?: string): Camera['status'] {
+  const s = (raw ?? 'OFFLINE').trim().toUpperCase();
   if (s === 'ONLINE') return 'ONLINE';
   if (s === 'DEGRADED') return 'DEGRADED';
+  if (s === 'NOT_CONFIGURED' || s === 'NOT CONFIGURED' || s === 'UNCONFIGURED') return 'NOT_CONFIGURED';
   return 'OFFLINE';
 }
 
@@ -243,6 +262,25 @@ const CLASS_MAP: Record<string, VehicleClass> = {
 
 function asVehicleClass(raw?: string | null): VehicleClass {
   return CLASS_MAP[(raw ?? '').toUpperCase()] ?? 'UNKNOWN';
+}
+
+/**
+ * Normalize a backend id into the string the UI keys on.
+ *
+ * Never returns "NaN": a numeric id round-trips as-is, a prefixed display ref
+ * ("AL-7") contributes its numeric part, and anything else is passed through
+ * verbatim so it still works as a React key and as a path segment. Coercing
+ * with `Number()` (the old behaviour) produced `NaN` for those refs, which the
+ * UI then sent back as `POST /api/alerts/NaN/resolve` -> 422/404.
+ */
+export function toId(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+  const s = String(value).trim();
+  if (!s) return '';
+  if (/^-?\d+$/.test(s)) return s;
+  const trailing = /(\d+)\s*$/.exec(s);
+  return trailing ? trailing[1] : s;
 }
 
 /** Backend confidences are 0.0–1.0; the UI renders percentages. */
@@ -281,7 +319,7 @@ export function toVehicleEvent(
   const evidenceRef = dto.evidence_ref ?? undefined;
   const plate = dto.plate_number ?? dto.plate_raw ?? undefined;
   return {
-    id: String(dto.id),
+    id: toId(dto.id),
     cameraId,
     cameraName: meta?.name ?? dto.camera_id.toUpperCase(),
     vehicleId: dto.vehicle_track_id ?? undefined,
@@ -320,8 +358,8 @@ export function toAlert(
   const cameraId = dto.camera_id.toLowerCase();
   const meta = metaFor(dir, cameraId);
   return {
-    id: String(dto.id),
-    eventId: dto.event_id != null ? String(dto.event_id) : '',
+    id: toId(dto.id),
+    eventId: dto.event_id != null ? toId(dto.event_id) : '',
     plate: dto.plate_number ?? '',
     cameraId,
     cameraName: meta?.name ?? dto.camera_id.toUpperCase(),
@@ -333,10 +371,12 @@ export function toAlert(
     category: dto.alert_type,
     createdAt: dto.timestamp,
     confidence: dto.confidence != null ? pct(dto.confidence) : undefined,
-    acknowledgedBy: dto.acknowledged_by ?? undefined,
+    acknowledgedBy: dto.acknowledged_by ?? dto.resolved_by ?? undefined,
     acknowledgedAt: dto.acknowledged_at ?? undefined,
     resolvedAt: dto.resolved_at ?? undefined,
-    note: dto.message,
+    // Once resolved, the officer's note is what matters; until then the alert
+    // message is shown (unchanged behaviour).
+    note: dto.resolution_note ?? dto.message,
   };
 }
 

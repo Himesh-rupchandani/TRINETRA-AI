@@ -4,12 +4,10 @@ Superior Feature: Section Speed Control + Optical Velocity
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
-from datetime import datetime
 
 from ..database.database import get_db
 from ..database.models import VehicleEvent, Camera
-from ..services.speed_engine import calculate_speed_analysis, SpeedPoint, haversine_km
+from ..services.speed_engine import calculate_speed_analysis, SpeedPoint
 
 router = APIRouter(prefix="/vehicles", tags=["Speed Analysis"])
 
@@ -53,7 +51,10 @@ def get_speed_analysis(
         cam = db.query(Camera).filter(Camera.camera_id == ev.camera_id).first()
         cam_name = cam.name if cam else ev.camera_id
         
-        if ev.latitude and ev.longitude:
+        # Explicit None checks: 0.0 is a valid coordinate (equator / prime
+        # meridian). Truthiness silently dropped GPS-tagged sightings there, so
+        # a real section-speed segment never reached the engine.
+        if ev.latitude is not None and ev.longitude is not None:
             points.append(SpeedPoint(
                 camera_id=ev.camera_id,
                 camera_name=cam_name,

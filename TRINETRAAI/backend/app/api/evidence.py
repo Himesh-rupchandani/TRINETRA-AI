@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
-from ..core.config import settings
+from ..core.paths import evidence_root
 
 logger = logging.getLogger("trinetra")
 
@@ -47,7 +47,9 @@ def get_evidence(ref: str):
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Unsupported evidence type."
         )
 
-    root = Path(settings.EVIDENCE_ROOT).resolve()
+    # ONE resolution authority (app.core.paths): identical to the root the
+    # pipelines write crops into, independent of the server's working directory.
+    root = evidence_root(create=False)
     target = (root / ref).resolve()
     try:
         target.relative_to(root)

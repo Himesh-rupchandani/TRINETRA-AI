@@ -14,7 +14,6 @@ Thread-safe singleton; the OCR model is loaded lazily, once per process.
 """
 from __future__ import annotations
 
-import re
 import threading
 from dataclasses import dataclass
 from typing import List, Optional
@@ -24,10 +23,14 @@ import numpy as np
 
 from ..core.config import settings
 from ..core.logging_config import logger
-from ..utils.plate_normalizer import normalize_plate
+from ..utils.plate_normalizer import INDIAN_PLATE_RE, normalize_plate
 
-# Indian plate: 2 letters (state) + 1-2 digits + 0-3 letters + 3-4 digits
-_INDIAN_PLATE = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{3,4}$")
+# Canonical Indian plate (single definition, shared with the pipeline, cv-engine
+# and the frontend): 2 state letters + 1-2 RTO digits + 1-3 series letters +
+# 3-4 number digits. This stage used to allow ZERO series letters, so a
+# letterless string like "GJ011234" counted as a proper plate here while the
+# pipeline rejected it — the two layers disagreed on the same OCR read.
+_INDIAN_PLATE = INDIAN_PLATE_RE
 
 
 @dataclass

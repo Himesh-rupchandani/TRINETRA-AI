@@ -8,7 +8,12 @@ from typing import Optional
 
 from ..database.database import get_db
 from ..database.models import VehicleEvent, Alert, Camera, Watchlist
-from ..services.evidence_vault import generate_bsa_certificate, generate_printable_report_data
+from ..services.evidence_vault import (
+    evidence_vault,
+    generate_bsa_certificate,
+    generate_printable_report_data,
+)
+from ..utils.timestamps import iso_utc
 from ..services.bandwidth_engine import calculate_bandwidth_savings
 
 router = APIRouter(prefix="/reports", tags=["Reports & Evidence"])
@@ -56,47 +61,44 @@ def get_evidence_certificate(
         "location": cam.location if cam else None
     }
     
+    # Seal the sighting into the hash chain (idempotent) and verify it, so the
+    # certificate carries the sealed hash and the *real* integrity verdict
+    # instead of asserting tamper-proof/court-admissible for unchecked evidence.
+    evidence_vault.record_for(db, event_id)
+    verification = evidence_vault.verify(db, event_id)
+
     certificate = generate_bsa_certificate(
         event_data=event_data,
         officer_name=officer_name,
         officer_id=officer_id,
-        case_number=case_number
+        case_number=case_number,
+        chain=verification,
     )
-    
+
     return certificate
+
+
+@router.get("/evidence/chain/verify")
+def verify_evidence_chain(limit: Optional[int] = None, db: Session = Depends(get_db)):
+    """Re-verify the whole stored hash chain (optionally the first ``limit`` links)."""
+    return evidence_vault.verify_chain(db, limit=limit)
 
 
 @router.get("/evidence/{event_id}/verify")
 def verify_evidence(event_id: int, db: Session = Depends(get_db)):
-    """Verify evidence integrity via hash chain."""
+    """Verify evidence integrity via the stored SHA-256 hash chain.
+
+    The hash is recomputed from the sealed snapshot *and* from the live row, and
+    the predecessor link is re-checked, so a modified sighting, a modified record
+    and a broken chain are each reported. It used to hash the current row and
+    answer ``VALID``/``tampered: False`` unconditionally — a verdict that could
+    never be wrong, and therefore proved nothing.
+    """
     event = db.query(VehicleEvent).filter(VehicleEvent.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
-    
-    import hashlib
-    import json
-    
-    payload = {
-        "event_id": event.id,
-        "camera_id": event.camera_id,
-        "plate": event.plate_number,
-        "timestamp": str(event.event_time),
-        "evidence_ref": event.evidence_ref
-    }
-    computed_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
-    
-    return {
-        "event_id": event_id,
-        "evidence_hash": computed_hash,
-        "hash_algorithm": "SHA-256",
-        "status": "VALID",
-        "tampered": False,
-        "verified_at": event.event_time.isoformat() if event.event_time else None,
-        "chain_integrity": "INTACT",
-        "court_admissible": True,
-        "bsa_2023_compliant": True,
-        "verification_method": "SHA256 hash chain - any alteration changes hash"
-    }
+
+    return evidence_vault.verify(db, event_id)
 
 
 @router.get("/alert/{alert_id}/print")
@@ -122,7 +124,7 @@ def get_alert_printable_report(alert_id: int, db: Session = Depends(get_db)):
             "severity": alert.severity,
             "status": alert.status,
             "message": alert.message,
-            "timestamp": alert.timestamp.isoformat() if alert.timestamp else None,
+            "timestamp": iso_utc(alert.timestamp) if alert.timestamp else None,
             "camera_id": alert.camera_id,
             "camera_name": cam.name if cam else alert.camera_id,
             "plate_number": alert.plate_number,
@@ -187,8 +189,8 @@ def get_vehicle_report(plate_number: str, db: Session = Depends(get_db)):
     report_data = {
         "plate_number": normalized,
         "total_sightings": len(events),
-        "first_seen": events[-1].event_time.isoformat() if events else None,
-        "last_seen": events[0].event_time.isoformat() if events else None,
+        "first_seen": iso_utc(events[-1].event_time) if events else None,
+        "last_seen": iso_utc(events[0].event_time) if events else None,
         "cameras_touched": len(set(e.camera_id for e in events)),
         "watchlist": {
             "is_watchlisted": watchlist is not None,
@@ -199,7 +201,7 @@ def get_vehicle_report(plate_number: str, db: Session = Depends(get_db)):
             {
                 "id": e.id,
                 "camera_id": e.camera_id,
-                "timestamp": e.event_time.isoformat() if e.event_time else None,
+                "timestamp": iso_utc(e.event_time) if e.event_time else None,
                 "confidence": e.plate_confidence,
                 "latitude": e.latitude,
                 "longitude": e.longitude
@@ -211,7 +213,7 @@ def get_vehicle_report(plate_number: str, db: Session = Depends(get_db)):
                 "id": a.id,
                 "severity": a.severity,
                 "status": a.status,
-                "timestamp": a.timestamp.isoformat() if a.timestamp else None,
+                "timestamp": iso_utc(a.timestamp) if a.timestamp else None,
                 "message": a.message
             }
             for a in alerts

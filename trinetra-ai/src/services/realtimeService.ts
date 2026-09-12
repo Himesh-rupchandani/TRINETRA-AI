@@ -5,7 +5,16 @@ import { mockCameras } from '@/mocks/cameras';
 import { watchlistByPlate } from '@/mocks/watchlist';
 import { pushMockEvent, setMockCameraStatus } from '@/mocks/mockBackend';
 import { syntheticFrame, syntheticPlateCrop } from '@/utils/syntheticEvidence';
-import { cameraDirectory, toAlert, toVehicleEvent, type AlertDto, type CameraMeta, type VehicleEventDto } from './adapters';
+import {
+  asCameraStatus,
+  cameraDirectory,
+  toAlert,
+  toId,
+  toVehicleEvent,
+  type AlertDto,
+  type CameraMeta,
+  type VehicleEventDto,
+} from './adapters';
 
 /* ------------------------------ message model ------------------------------ */
 
@@ -190,7 +199,9 @@ function primeCameraDir(): void {
 
 function mapBackendEventPayload(raw: Record<string, unknown>): VehicleEvent {
   const dto = {
-    id: Number(raw.event_id ?? raw.id ?? 0),
+    // toId, not Number(): a non-numeric id used to become NaN and then "NaN"
+    // in the UI (and in the URLs built from it).
+    id: toId(raw.event_id ?? raw.id ?? 0),
     camera_id: String(raw.camera_id ?? ''),
     vehicle_track_id: raw.vehicle_track_id != null ? Number(raw.vehicle_track_id) : undefined,
     plate_raw: raw.plate_raw as string | undefined,
@@ -229,21 +240,27 @@ export function mapBackendMessages(raw: unknown): RealtimeMessage[] {
     case 'ALERT_CREATED': {
       const event = mapBackendEventPayload(body);
       const dto = {
-        id: Number(body.alert_id ?? body.id ?? body.event_id ?? 0),
-        event_id: Number(body.event_id ?? 0) || null,
+        // Backend sends the numeric alert id (alert_id); "AL-7"-style display
+        // refs from older builds are normalized too, so this is never NaN.
+        id: toId(body.alert_id ?? body.id ?? body.event_id ?? 0),
+        event_id: toId(body.event_id) || null,
         camera_id: String(body.camera_id ?? ''),
         plate_number: (body.plate_number ?? body.plate) as string | null,
-        alert_type: 'WATCHLIST_MATCH',
+        alert_type: String(body.alert_type ?? 'WATCHLIST_MATCH'),
         severity: String(body.severity ?? 'CRITICAL'),
         message: String(body.message ?? `Watchlist match on ${body.camera_id ?? 'camera'}`),
-        status: 'NEW',
+        status: String(body.status ?? 'NEW'),
         confidence:
           body.plate_confidence != null
             ? Number(body.plate_confidence)
             : body.confidence != null
               ? Number(body.confidence)
               : null,
-        timestamp: new Date().toISOString(),
+        timestamp:
+          (body.timestamp as string | undefined) ??
+          (body.event_time as string | undefined) ??
+          new Date().toISOString(),
+        resolution_note: (body.resolution_note as string | null | undefined) ?? null,
       } satisfies AlertDto;
       const alert = toAlert(dto, liveCameraDir);
       return [
@@ -257,7 +274,9 @@ export function mapBackendMessages(raw: unknown): RealtimeMessage[] {
           type: 'CAMERA_STATUS',
           payload: {
             cameraId: String(body.camera_id ?? body.cameraId ?? '').toLowerCase(),
-            status: String(body.status ?? 'OFFLINE').toUpperCase() as Camera['status'],
+            // Same mapper the REST adapters use, so a live frame can never push
+            // a state the UI does not know (NOT_CONFIGURED stays distinct).
+            status: asCameraStatus(body.status as string | undefined),
           },
         },
       ];

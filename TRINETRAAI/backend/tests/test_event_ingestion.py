@@ -13,12 +13,11 @@ for p in [str(Path(__file__).resolve().parents[1])]:
         sys.path.insert(0, p)
 
 import pytest
-import pytest_asyncio
 from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database.models import Base, Camera, VehicleEvent, Watchlist, Alert
+from app.database.models import Base, Camera
 from app.services.event_service import ingest_event
 
 

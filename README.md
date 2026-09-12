@@ -258,15 +258,25 @@ real network cameras — the file-backed demo grid always plays on demand.
 | Mode | How | Data source |
 |---|---|---|
 | **DEMO** (repo default) | `VITE_USE_MOCKS=true` | In-browser synthetic dataset incl. the scripted `GJ01AB1234` journey |
-| **LIVE** | `VITE_USE_MOCKS=false VITE_BACKEND_ORIGIN=http://localhost:8000 npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
+| **LIVE** | `VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
 
 Run the backend with `DEMO_MODE=false` in LIVE mode so unreachable cameras stay
 honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
 
+> `BACKEND_ORIGIN` has **no `VITE_` prefix** on purpose: it is read by
+> `vite.config.ts` (Node side) to target the dev proxy, and must never be
+> compiled into the browser bundle. `VITE_BACKEND_ORIGIN` is not read by
+> anything — setting it silently leaves the proxy at its default target.
+
 ## Tests
 
 ```bash
-cd TRINETRAAI/backend && pytest          # 112 tests
-cd cv-engine && pytest                   # 80 offline tests (live-feed tests opt-in)
+cd TRINETRAAI/backend && pytest          # 197 tests (incl. tests/test_bugfix_regressions.py)
+cd cv-engine && pytest                   # 81 offline tests (3 live-feed tests opt-in)
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
+cd trinetra-ai && npm test               # 48 frontend contract tests (plain node, no runner)
 ```
+
+The backend suite also drives the frontend suite (`tests/test_frontend_js_suite.py`), so a
+single `pytest` run covers all three layers — it is skipped, not failed, when `node` or
+`trinetra-ai/node_modules` are unavailable.

@@ -5,7 +5,7 @@ GET /api/v1/vehicles/{plate}         — investigation profile (stats + watchlis
 GET /api/v1/vehicles/{plate}/events  — full event history across all cameras
 GET /api/v1/vehicles/{plate}/route   — ordered GIS coordinate route
 """
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session

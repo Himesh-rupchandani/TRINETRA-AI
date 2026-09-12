@@ -17,7 +17,7 @@ import os
 import queue
 import threading
 import time
-from typing import Dict, Optional
+from typing import Optional
 
 logger = logging.getLogger("cv_engine.backend")
 
@@ -86,6 +86,19 @@ class BackendClient:
 
     # ------------------------------------------------------------------
     def _send_with_retries(self, event: dict) -> bool:
+        """POST one event, retrying transient failures with exponential backoff.
+
+        Retry contract (pinned by tests/test_backend_client.py):
+
+        * ``max_retries`` counts retries **after** the first attempt, so a send
+          performs at most ``max_retries + 1`` HTTP requests (default 3 -> 4);
+        * 2xx -> accepted, returns True;
+        * 4xx -> rejected permanently (a contract error cannot be retried away),
+          dead-lettered with reason ``http_<status>``;
+        * 5xx / timeout / connection error -> retried with delay
+          ``min(backoff_base_sec * 2**(attempt-1), backoff_cap_sec)``, then
+          dead-lettered with reason ``retries_exhausted``.
+        """
         import httpx
 
         attempt = 0

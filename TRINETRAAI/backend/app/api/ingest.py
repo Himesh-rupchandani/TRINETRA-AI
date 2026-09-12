@@ -15,8 +15,6 @@ clients always receive same-origin proxied paths.
 This router is mounted at /api/ingest and /api/v1/ingest.
 """
 
-import logging
-from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -189,18 +187,15 @@ def get_all_streams(camera_id: str, db: Session = Depends(get_db)):
     # Sentinel host info
     rtsp_host = settings.SENTINEL_RTSP_HOST.strip()
     rtsp_port = int(settings.SENTINEL_RTSP_PORT)
-    hls_base = settings.SENTINEL_HLS_BASE_URL.rstrip("/")
-    whep_origin = f"http://{rtsp_host}:8889"
 
     # --- 🤖 AI processing: RTSP ---
     # User requested: rtsp://<host>:8554/stream/<id>
-    rtsp_authenticated = None
     rtsp_redacted = None
     rtsp_public = f"rtsp://{rtsp_host}:{rtsp_port}/stream/{cid}"
     if credentials_configured() and is_sentinel_camera(cam.stream_url):
         try:
             full = get_rtsp_url(cid)
-            rtsp_authenticated = "***REDACTED***"  # never expose real creds
+            # Only the redacted form is ever returned — never expose real creds.
             rtsp_redacted = redact(full)
             logger.info(f"[{cid_upper}] RTSP ingest resolved {rtsp_redacted}")
         except Exception as e:

@@ -1,12 +1,53 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Generic, TypeVar, Any, Dict
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_serializer, model_validator
 
 T = TypeVar("T")
 
 
+def to_utc(dt: datetime) -> datetime:
+    """Return ``dt`` as timezone-aware UTC (naive values are assumed to be UTC)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def iso_utc(dt: datetime) -> str:
+    """Browser-safe ISO-8601 UTC: ``2026-09-12T08:17:28.236849Z``."""
+    return to_utc(dt).isoformat().replace("+00:00", "Z")
+
+
+class TRINETRASchema(BaseModel):
+    """Base model for every API schema.
+
+    Timestamp contract (pairs with ``app.database.models.UTCDateTime``):
+
+    * **out** — every ``datetime`` is serialized as ISO-8601 UTC with an
+      explicit ``Z`` suffix, so ``new Date(value)`` in the browser is the same
+      instant the backend stored. A naive value is read as *local* time and
+      shifts every clock in the UI by the viewer's UTC offset.
+    * **in** — a naive ``datetime`` supplied by a client is interpreted as UTC
+      instead of being silently re-labelled later; a value carrying an offset
+      (``...Z``, ``+05:30``) is preserved and normalized to UTC.
+    """
+
+    @model_validator(mode="after")
+    def _normalize_datetimes_to_utc(self):
+        for name in type(self).model_fields:
+            value = getattr(self, name, None)
+            if isinstance(value, datetime) and value.tzinfo is None:
+                setattr(self, name, value.replace(tzinfo=timezone.utc))
+        return self
+
+    @field_serializer("*", when_used="json")
+    def _serialize_datetimes_as_utc(self, value, _info):
+        if isinstance(value, datetime):
+            return iso_utc(value)
+        return value
+
+
 # --- Base Paginated Response ---
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse(TRINETRASchema, Generic[T]):
     items: List[T]
     total: int
     page: int
@@ -15,7 +56,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 
 # --- Camera Schemas ---
-class CameraBase(BaseModel):
+class CameraBase(TRINETRASchema):
     camera_id: str = Field(..., example="CAM04", min_length=2, max_length=50)
     name: str = Field(..., example="North Gate Junction", min_length=2, max_length=100)
     stream_url: str = Field(..., example="rtsp://103.250.160.189:8554/stream/cam04")
@@ -32,7 +73,7 @@ class CameraCreate(CameraBase):
     pass
 
 
-class CameraUpdate(BaseModel):
+class CameraUpdate(TRINETRASchema):
     name: Optional[str] = None
     stream_url: Optional[str] = None
     stream_type: Optional[str] = None
@@ -54,7 +95,7 @@ class CameraResponse(CameraBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CameraItem(BaseModel):
+class CameraItem(TRINETRASchema):
     id: str
     camera_id: Optional[str] = None
     name: str
@@ -75,11 +116,11 @@ class CameraItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CameraListResponse(BaseModel):
+class CameraListResponse(TRINETRASchema):
     data: List[CameraItem]
 
 
-class CameraStreamTicket(BaseModel):
+class CameraStreamTicket(TRINETRASchema):
     """Browser-safe playback ticket. Contains no credentials and no RTSP URLs."""
     camera_id: str
     stream_type: str = "WEBRTC"
@@ -92,7 +133,7 @@ class CameraStreamTicket(BaseModel):
     detection_url: Optional[str] = None
 
 
-class CameraStreamInfo(BaseModel):
+class CameraStreamInfo(TRINETRASchema):
     camera_id: str
     status: str
     fps: float
@@ -102,7 +143,7 @@ class CameraStreamInfo(BaseModel):
 
 
 # --- Detection Schemas ---
-class DetectionBase(BaseModel):
+class DetectionBase(TRINETRASchema):
     camera_id: str
     track_id: Optional[int] = None
     object_type: str  # car, motorcycle, bus, truck, bicycle, person
@@ -123,7 +164,7 @@ class DetectionResponse(DetectionBase):
 
 
 # --- Vehicle Observation Schemas ---
-class VehicleObservationBase(BaseModel):
+class VehicleObservationBase(TRINETRASchema):
     camera_id: str
     track_id: Optional[int] = None
     plate_number: Optional[str] = None
@@ -146,7 +187,7 @@ class VehicleObservationResponse(VehicleObservationBase):
 
 
 # --- Watchlist Schemas ---
-class WatchlistBase(BaseModel):
+class WatchlistBase(TRINETRASchema):
     plate_number: str = Field(..., example="GJ01AB1234")
     category: str = Field(..., example="stolen vehicle")  # stolen vehicle, wanted vehicle, suspicious vehicle, other
     description: Optional[str] = Field(None, example="Reported stolen near SG Highway")
@@ -157,7 +198,7 @@ class WatchlistCreate(WatchlistBase):
     pass
 
 
-class WatchlistUpdate(BaseModel):
+class WatchlistUpdate(TRINETRASchema):
     category: Optional[str] = None
     description: Optional[str] = None
     active: Optional[bool] = None
@@ -171,7 +212,7 @@ class WatchlistResponse(WatchlistBase):
 
 
 # --- Alert Schemas ---
-class AlertBase(BaseModel):
+class AlertBase(TRINETRASchema):
     camera_id: str
     track_id: Optional[int] = None
     plate_number: Optional[str] = None
@@ -185,7 +226,7 @@ class AlertCreate(AlertBase):
     pass
 
 
-class AlertUpdate(BaseModel):
+class AlertUpdate(TRINETRASchema):
     status: Optional[str] = None
     severity: Optional[str] = None
 
@@ -200,16 +241,20 @@ class AlertResponse(AlertBase):
     acknowledged_by: Optional[str] = None
     resolved_at: Optional[datetime] = None
     resolved_by: Optional[str] = None
+    resolution_note: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class AlertAckRequest(BaseModel):
+class AlertAckRequest(TRINETRASchema):
     operator: Optional[str] = Field(None, description="Operator username or badge ID")
+    # Resolve only: free-text note. Stored in Alert.resolution_note, never
+    # concatenated into `operator`.
+    note: Optional[str] = Field(None, description="Optional resolution note")
 
 
 # --- Vehicle Event Schemas ---
-class VehicleEventCreate(BaseModel):
+class VehicleEventCreate(TRINETRASchema):
     camera_id: str = Field(..., example="CAM04")
     vehicle_id: Optional[int] = Field(None, example=101, description="AI track ID")
     plate_raw: Optional[str] = Field(None, example="GJ 01 AB-1234")
@@ -225,7 +270,7 @@ class VehicleEventCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-class VehicleEventResponse(BaseModel):
+class VehicleEventResponse(TRINETRASchema):
     id: int
     camera_id: str
     vehicle_track_id: Optional[int] = None
@@ -246,7 +291,7 @@ class VehicleEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class VehicleEventIngestResponse(BaseModel):
+class VehicleEventIngestResponse(TRINETRASchema):
     event: VehicleEventResponse
     plate_normalized: str
     watchlist_match: bool
@@ -256,7 +301,7 @@ class VehicleEventIngestResponse(BaseModel):
 
 
 # --- Route / GIS Schemas ---
-class RoutePoint(BaseModel):
+class RoutePoint(TRINETRASchema):
     sequence: int
     camera_id: str
     # The sighting behind this hop, so a GIS route point can deep-link to its
@@ -275,13 +320,13 @@ class RoutePoint(BaseModel):
     video_offset_sec: Optional[float] = None
 
 
-class VehicleRouteResponse(BaseModel):
+class VehicleRouteResponse(TRINETRASchema):
     plate_number: str
     total_sightings: int
     route: List[RoutePoint]
 
 
-class VehicleProfileResponse(BaseModel):
+class VehicleProfileResponse(TRINETRASchema):
     """Investigation profile for one plate: sighting stats + watchlist state."""
     plate_number: str
     vehicle_class: Optional[str] = None
@@ -294,7 +339,7 @@ class VehicleProfileResponse(BaseModel):
 
 
 # --- Officer Schemas ---
-class OfficerResponse(BaseModel):
+class OfficerResponse(TRINETRASchema):
     """One officer's own profile. Figures are scoped to that officer only."""
 
     officer_id: str
@@ -312,7 +357,7 @@ class OfficerResponse(BaseModel):
 
 
 # --- Uploaded CCTV Video Schemas ---
-class UploadedVideoResponse(BaseModel):
+class UploadedVideoResponse(TRINETRASchema):
     camera_id: str
     name: str
     location: Optional[str] = None
@@ -335,7 +380,7 @@ class UploadedVideoDetailResponse(UploadedVideoResponse):
 
 
 # --- System Health Schema ---
-class HealthResponse(BaseModel):
+class HealthResponse(TRINETRASchema):
     status: str
     app_name: str
     version: str
@@ -351,7 +396,7 @@ class HealthResponse(BaseModel):
 # --- Camera stream ticket ----------------------------------------------------
 # --- Vehicle profile (investigation header) ----------------------------------
 # --- Dashboard KPIs ----------------------------------------------------------
-class KpisResponse(BaseModel):
+class KpisResponse(TRINETRASchema):
     total_cameras: int
     cameras_online: int
     cameras_degraded: int

@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import time
 import threading
-from typing import Tuple, Optional
+from typing import Optional
 from datetime import datetime, timezone
 import numpy as np
 import cv2

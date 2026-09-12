@@ -2,20 +2,38 @@
 TRINETRA AI - AI Insights API
 Superior Feature: Anomaly Detection, Predictive Analytics, Threat Level
 """
-from fastapi import APIRouter, Depends
+from typing import Optional
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
 from ..database.database import get_db
 from ..database.models import VehicleEvent, Camera, Alert
+from ..utils.timestamps import iso_utc, utc_now
 from ..services.ai_insights import generate_ai_insights_dashboard, analyze_traffic_patterns, predict_next_location
 
 router = APIRouter(prefix="/stats", tags=["AI Insights"])
 
+# Supported analysis windows: rolling periods measured back from "now" (UTC).
+INSIGHT_PERIODS = {"1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30}
+DEFAULT_INSIGHT_PERIOD = "24h"
+# Hard cap so a 30d window on a busy deployment cannot blow up memory.
+INSIGHT_MAX_EVENTS = 5000
+INSIGHT_MAX_ALERTS = 1000
+
+
+def period_hours(period: Optional[str]) -> int:
+    """Map a ``?period=`` value to its rolling window in hours (default 24h)."""
+    key = (period or DEFAULT_INSIGHT_PERIOD).strip().lower()
+    return INSIGHT_PERIODS.get(key, INSIGHT_PERIODS[DEFAULT_INSIGHT_PERIOD])
+
 
 @router.get("/insights")
-def get_ai_insights(db: Session = Depends(get_db)):
+def get_ai_insights(
+    period: str = Query(DEFAULT_INSIGHT_PERIOD, description="Rolling window: 1h, 6h, 24h, 7d, 30d"),
+    db: Session = Depends(get_db),
+):
     """
     🚀 SUPERIOR FEATURE: AI Insights Dashboard
     
@@ -27,11 +45,32 @@ def get_ai_insights(db: Session = Depends(get_db)):
     - System health with AI model accuracy
     
     Competitors have static dashboards. We have intelligence.
+
+    Every number returned here is derived from rows inside the requested rolling
+    window (``period``, default the last 24h). It used to take the newest 500
+    events regardless of age and then advertise ``time_range_hours: 24`` — so the
+    "24h analytics" could actually describe a week, or five minutes. With an
+    empty window the counts are zero, never invented.
     """
-    # Get recent data
-    events = db.query(VehicleEvent).order_by(desc(VehicleEvent.event_time)).limit(500).all()
+    window_hours = period_hours(period)
+    since = utc_now() - timedelta(hours=window_hours)
+
+    events = (
+        db.query(VehicleEvent)
+        .filter(VehicleEvent.created_at >= since)
+        .order_by(desc(VehicleEvent.event_time))
+        .limit(INSIGHT_MAX_EVENTS)
+        .all()
+    )
     cameras = db.query(Camera).all()
-    alerts = db.query(Alert).order_by(desc(Alert.timestamp)).limit(100).all()
+    alerts = (
+        db.query(Alert)
+        .filter(Alert.timestamp >= since)
+        .order_by(desc(Alert.timestamp))
+        .limit(INSIGHT_MAX_ALERTS)
+        .all()
+    )
+    event_total = db.query(VehicleEvent).filter(VehicleEvent.created_at >= since).count()
     
     # Convert to dicts
     event_dicts = [
@@ -40,7 +79,7 @@ def get_ai_insights(db: Session = Depends(get_db)):
             "camera_id": e.camera_id,
             "plate_number": e.plate_number,
             "vehicle_class": e.vehicle_class,
-            "event_time": e.event_time.isoformat() if e.event_time else None,
+            "event_time": iso_utc(e.event_time) if e.event_time else None,
             "watchlist_match": e.watchlist_match,
             "latitude": e.latitude,
             "longitude": e.longitude
@@ -66,32 +105,55 @@ def get_ai_insights(db: Session = Depends(get_db)):
             "status": a.status,
             "camera_id": a.camera_id,
             "plate_number": a.plate_number,
-            "timestamp": a.timestamp.isoformat() if a.timestamp else None
+            "timestamp": iso_utc(a.timestamp) if a.timestamp else None
         }
         for a in alerts
     ]
     
-    insights = generate_ai_insights_dashboard(event_dicts, camera_dicts, alert_dicts)
-    
+    insights = generate_ai_insights_dashboard(
+        event_dicts, camera_dicts, alert_dicts, window_hours=window_hours
+    )
+    # Tell the client exactly which window was measured and whether the
+    # per-camera breakdown was capped.
+    insights["window"] = {
+        "period": (period or DEFAULT_INSIGHT_PERIOD).strip().lower(),
+        "hours": window_hours,
+        "since": iso_utc(since),
+        "events_total": event_total,
+        "events_analyzed": len(event_dicts),
+        "truncated": event_total > len(event_dicts),
+    }
+
     return insights
 
 
 @router.get("/traffic-patterns")
-def get_traffic_patterns(db: Session = Depends(get_db)):
-    """Traffic pattern analysis."""
-    events = db.query(VehicleEvent).order_by(desc(VehicleEvent.event_time)).limit(1000).all()
+def get_traffic_patterns(
+    period: str = Query(DEFAULT_INSIGHT_PERIOD, description="Rolling window: 1h, 6h, 24h, 7d, 30d"),
+    db: Session = Depends(get_db),
+):
+    """Traffic pattern analysis over a real rolling window (default last 24h)."""
+    window_hours = period_hours(period)
+    since = utc_now() - timedelta(hours=window_hours)
+    events = (
+        db.query(VehicleEvent)
+        .filter(VehicleEvent.created_at >= since)
+        .order_by(desc(VehicleEvent.event_time))
+        .limit(INSIGHT_MAX_EVENTS)
+        .all()
+    )
     event_dicts = [
         {
             "camera_id": e.camera_id,
             "plate_number": e.plate_number,
             "vehicle_class": e.vehicle_class,
-            "event_time": e.event_time.isoformat() if e.event_time else None,
+            "event_time": iso_utc(e.event_time) if e.event_time else None,
             "watchlist_match": e.watchlist_match
         }
         for e in events
     ]
     
-    return analyze_traffic_patterns(event_dicts)
+    return analyze_traffic_patterns(event_dicts, window_hours=window_hours)
 
 
 @router.get("/predict/{plate_number}")
@@ -124,7 +186,7 @@ def predict_vehicle_location(plate_number: str, db: Session = Depends(get_db)):
             "camera_id": e.camera_id,
             "latitude": e.latitude,
             "longitude": e.longitude,
-            "timestamp": e.event_time.isoformat() if e.event_time else None,
+            "timestamp": iso_utc(e.event_time) if e.event_time else None,
             "event_id": e.id
         }
         for e in events if e.latitude and e.longitude
@@ -188,7 +250,7 @@ def get_threat_level(db: Session = Depends(get_db)):
             "medium": medium,
             "total_active": len(active_alerts)
         },
-        "calculated_at": datetime.now(timezone.utc).isoformat(),
+        "calculated_at": iso_utc(),
         "auto_calculated": True,
         "judge_note": "Competitors have static threat levels. Ours auto-calculates from live alerts using real AI logic."
     }

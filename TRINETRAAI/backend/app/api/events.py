@@ -8,7 +8,6 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
-from ..core.logging_config import logger
 from ..database.database import get_db
 from ..database.models import VehicleEvent
 from ..database.schemas import (
@@ -20,23 +19,6 @@ from ..database.schemas import (
 from ..services.event_service import ingest_event
 
 router = APIRouter(prefix="/events", tags=["Events"])
-
-
-@router.get(
-    "/{event_id}",
-    response_model=VehicleEventResponse,
-    summary="Get vehicle event by ID",
-    description="Single AI event lookup — used by the frontend evidence / detection-detail panels.",
-)
-def get_event(event_id: int, db: Session = Depends(get_db)):
-    """Return one vehicle event by its integer ID."""
-    event = db.query(VehicleEvent).filter(VehicleEvent.id == event_id).first()
-    if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Event #{event_id} not found.",
-        )
-    return event
 
 
 @router.post(
@@ -129,14 +111,24 @@ def list_events(
 @router.get(
     "/{event_id}",
     response_model=VehicleEventResponse,
-    summary="Get one vehicle event",
-    description="Single sighting by primary key — used by the evidence panel and map popups.",
+    operation_id="get_event_by_id",
+    summary="Get vehicle event by ID",
+    description=(
+        "Single sighting by primary key — used by the frontend evidence panel, "
+        "detection-detail panels and GIS map popups."
+    ),
 )
-def get_event(event_id: int, db: Session = Depends(get_db)):
+def get_event_by_id(event_id: int, db: Session = Depends(get_db)):
+    """Return one vehicle event by its integer ID.
+
+    This is the ONLY handler for ``GET /events/{event_id}``. A duplicate
+    registration used to shadow the first one and produced a
+    "Duplicate Operation ID" warning plus an ambiguous OpenAPI document.
+    """
     event = db.query(VehicleEvent).filter(VehicleEvent.id == event_id).first()
     if not event:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Vehicle event '{event_id}' not found.",
+            detail=f"Event #{event_id} not found.",
         )
     return VehicleEventResponse.model_validate(event)

@@ -17,9 +17,18 @@ from typing import Optional
 
 _NON_ALNUM = re.compile(r"[^A-Z0-9]")
 
-# Indian plate pattern: 2 letters (state) + 2 digits + 1-4 letters + 3-4 digits
-# e.g. GJ01AB1234, MH02CD5678, KA05XY9999
-_INDIAN_PLATE = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z]{1,4}[0-9]{3,4}$")
+# Canonical Indian plate pattern — MUST stay byte-identical to the backend
+# definition in TRINETRAAI/backend/app/utils/plate_normalizer.py
+# (CANONICAL_PLATE_PATTERN) and the frontend one in trinetra-ai/src/lib/utils.ts
+# (INDIAN_PLATE_PATTERN). backend/tests/test_plate_format_consistency.py fails
+# the build if any of the three layers drifts.
+#
+#   SS  DD  L{1,3}  N{3,4}      e.g. GJ01AB1234, MH02CD5678, KA05XY9999
+#
+# Two state letters, RTO digits (two today, one on legacy plates), at least one
+# series letter (a letterless "GJ011234" is not a plate) and a 3-4 digit number.
+CANONICAL_PLATE_PATTERN = r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}$"
+_INDIAN_PLATE = re.compile(CANONICAL_PLATE_PATTERN)
 # Generic fallback: mostly alnum, 6..12 chars
 _GENERIC_PLATE = re.compile(r"^[A-Z0-9]{6,12}$")
 

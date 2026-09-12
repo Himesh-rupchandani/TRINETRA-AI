@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from ..core.config import settings
 from ..core.logging_config import logger
-from .models import Base, Camera, Watchlist, VehicleEvent
+from .models import Base, Camera, Watchlist
 
 # Build engine depending on SQLite vs PostgreSQL
 db_url = settings.DATABASE_URL
@@ -70,6 +69,8 @@ def _auto_migrate(target_engine=None):
             ("event_id", "INTEGER REFERENCES vehicle_events(id)"),
             ("watchlist_id", "INTEGER REFERENCES watchlist(id)"),
             ("confidence", "FLOAT"),
+            # Resolution note, stored separately from resolved_by.
+            ("resolution_note", "TEXT"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE alerts ADD COLUMN {col} {col_def}"))

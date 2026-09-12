@@ -30,12 +30,31 @@ from ..database.schemas import (
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
+# Older bundles posted the resolution note inside `operator` ("resolve: <note>").
+_LEGACY_NOTE_PREFIX = "resolve:"
+
+
+def _split_legacy_operator(operator: Optional[str]) -> tuple:
+    """Return ``(resolved_by, note_or_None)`` for an operator string.
+
+    A plain operator is passed through; the legacy ``"resolve: <note>"`` form is
+    split so the note never ends up stored as the resolving officer's identity.
+    """
+    raw = (operator or "").strip()
+    if raw.lower().startswith(_LEGACY_NOTE_PREFIX):
+        note = raw[len(_LEGACY_NOTE_PREFIX):].strip()
+        return "system", (note or None)
+    return (raw or "system"), None
+
 
 @router.get("", response_model=PaginatedResponse[AlertResponse])
 def list_alerts(
     camera_id: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    # The query parameter stays `?status=` on the wire (alias); the Python name
+    # is `status_filter` so it no longer shadows the imported `fastapi.status`
+    # module inside this function.
+    status_filter: Optional[str] = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -46,8 +65,8 @@ def list_alerts(
         query = query.filter(Alert.camera_id == camera_id)
     if severity:
         query = query.filter(Alert.severity == severity.upper())
-    if status:
-        query = query.filter(Alert.status == status.upper())
+    if status_filter:
+        query = query.filter(Alert.status == status_filter.upper())
 
     total = query.count()
     items = query.order_by(Alert.timestamp.desc()).offset((page - 1) * size).limit(size).all()
@@ -124,7 +143,7 @@ def acknowledge_alert(
 
     alert.status = "ACKNOWLEDGED"
     alert.acknowledged_at = datetime.now(timezone.utc)
-    alert.acknowledged_by = payload.operator or "system"
+    alert.acknowledged_by, _ = _split_legacy_operator(payload.operator)
 
     db.commit()
     db.refresh(alert)
@@ -138,7 +157,13 @@ def resolve_alert(
     payload: AlertAckRequest = AlertAckRequest(),
     db: Session = Depends(get_db),
 ):
-    """Transition an alert to RESOLVED, recording operator and timestamp."""
+    """Transition an alert to RESOLVED, recording operator, note and timestamp.
+
+    The operator identity and the free-text resolution note are stored
+    separately: ``resolved_by`` must stay a person/badge, never a composite
+    ``"resolve: <note>"`` string. Older clients that packed the note into
+    ``operator`` are still understood (the prefix is split off).
+    """
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         raise HTTPException(
@@ -151,9 +176,14 @@ def resolve_alert(
             detail=f"Alert #{alert_id} is already RESOLVED.",
         )
 
+    operator, legacy_note = _split_legacy_operator(payload.operator)
+    note = payload.note if payload.note is not None else legacy_note
+
     alert.status = "RESOLVED"
     alert.resolved_at = datetime.now(timezone.utc)
-    alert.resolved_by = payload.operator or "system"
+    alert.resolved_by = operator
+    if note:
+        alert.resolution_note = note
 
     db.commit()
     db.refresh(alert)

@@ -16,27 +16,18 @@ interface BandwidthData {
 
 export function CommandCenterHero() {
   const [time, setTime] = useState(new Date());
+  // No fabricated fallbacks: when either endpoint fails the tile shows "—"
+  // instead of an invented LOW threat level or a made-up 99.98% saving.
   const threat = useAsync(async () => {
-    try {
-      const res = await fetch('/api/stats/threat-level');
-      if (!res.ok) throw new Error('Failed');
-      return (await res.json()) as ThreatLevel;
-    } catch {
-      return { threat_level: 'LOW', color: 'green', message: 'Low', counts: { critical: 0, high: 0, total_active: 0 } } as ThreatLevel;
-    }
+    const res = await fetch('/api/stats/threat-level');
+    if (!res.ok) throw new Error(`threat-level responded ${res.status}`);
+    return (await res.json()) as ThreatLevel;
   }, []);
-  
+
   const bandwidth = useAsync(async () => {
-    try {
-      const res = await fetch('/api/stats/bandwidth');
-      if (!res.ok) throw new Error('Failed');
-      return (await res.json()) as BandwidthData;
-    } catch {
-      return {
-        savings: { bandwidth_savings_percent: 99.98, tb_saved_per_day: 3142 },
-        gujarat_network: { total_cameras: 80000, total_bandwidth_required: { centralized_gbps: 320, edge_ai_mbps: 65 } }
-      } as BandwidthData;
-    }
+    const res = await fetch('/api/stats/bandwidth');
+    if (!res.ok) throw new Error(`bandwidth responded ${res.status}`);
+    return (await res.json()) as BandwidthData;
   }, []);
 
   useEffect(() => {
@@ -44,13 +35,14 @@ export function CommandCenterHero() {
     return () => clearInterval(id);
   }, []);
 
-  const threatLevel = threat.data?.threat_level ?? 'LOW';
-  
+  const threatLevel = threat.data?.threat_level ?? 'UNKNOWN';
+
   const threatStyles: Record<string, string> = {
     CRITICAL: 'bg-red-500 text-white border-red-600 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.5)]',
     HIGH: 'bg-orange-500 text-white border-orange-600 shadow-[0_0_15px_rgba(249,115,22,0.4)]',
     ELEVATED: 'bg-amber-500 text-white border-amber-600',
     LOW: 'bg-emerald-500 text-white border-emerald-600',
+    UNKNOWN: 'bg-slate-600 text-white border-slate-500',
   };
 
   return (
@@ -86,7 +78,7 @@ export function CommandCenterHero() {
             <div className={`rounded-xl border px-4 py-2 text-center font-bold shadow-md ${threatStyles[threatLevel] || threatStyles.LOW}`}>
               <p className="text-[10px] uppercase tracking-widest opacity-90">Threat Level</p>
               <p className="text-sm tracking-wide">{threatLevel}</p>
-              <p className="text-[10px] font-mono opacity-80">{threat.data?.counts?.total_active ?? 0} active</p>
+              <p className="text-[10px] font-mono opacity-80">{threat.data ? `${threat.data.counts?.total_active ?? 0} active` : '— active'}</p>
             </div>
           </div>
         </div>
@@ -107,7 +99,11 @@ export function CommandCenterHero() {
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/20"><Zap size={16} className="text-emerald-300" /></div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-200">Optimization</p>
-                <p className="font-mono text-[12px] font-semibold">{bandwidth.data?.savings?.bandwidth_savings_percent ?? 99.98}% Saved</p>
+                <p className="font-mono text-[12px] font-semibold">
+                  {bandwidth.data?.savings?.bandwidth_savings_percent != null
+                    ? `${bandwidth.data.savings.bandwidth_savings_percent}% Saved`
+                    : '— Saved'}
+                </p>
                 <p className="text-[10px] text-emerald-300">Edge AI • 65 Mbps total</p>
               </div>
             </div>

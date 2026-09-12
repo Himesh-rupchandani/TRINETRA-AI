@@ -16,23 +16,19 @@ import path from 'node:path';
 // the proxy adds the Authorization header server-side.
 
 /**
- * AUTO-LOGIN: Hackathon credentials are auto-injected so website runs
- * without manual email/password entry. Env vars win if set, otherwise
- * fallback to hackathon-provided credentials.
+ * Sentinel gateway credentials are read from the environment / untracked
+ * `trinetra-ai/.env` only. They were previously hardcoded in this file as an
+ * "auto-login" fallback, which committed a live username and password to the
+ * repository. When they are missing the proxy logs a warning (see below) and
+ * forwards unauthenticated — the browser bundle never carries a secret.
  */
-const HACKATHON_DEFAULTS = {
-  email: 'himesh.rupchandani140850@marwadiuniversity.ac.in',
-  password: 'A7UX-7TRC-BVS6',
-};
-
 function sentinelBasic(env: Record<string, string | undefined>): string | null {
-  const email = (env.SENTINEL_EMAIL ?? HACKATHON_DEFAULTS.email).trim();
-  const password = (env.SENTINEL_PASSWORD ?? HACKATHON_DEFAULTS.password).trim();
+  const email = (env.SENTINEL_EMAIL ?? process.env.SENTINEL_EMAIL ?? '').trim();
+  const password = (env.SENTINEL_PASSWORD ?? process.env.SENTINEL_PASSWORD ?? '').trim();
   // Sentinel authenticates with your registered email + access password —
   // equivalent to HTTP Basic auth. The browser only ever talks to the
   // same-origin /sentinel path, so the proxy injects the Authorization
   // header. No credential is compiled into the app bundle (VITE_ prefix absent).
-  // AUTO-LOGIN: credentials are pre-filled so no manual login needed.
   return email && password
     ? `Basic ${Buffer.from(`${email}:${password}`).toString('base64')}`
     : null;

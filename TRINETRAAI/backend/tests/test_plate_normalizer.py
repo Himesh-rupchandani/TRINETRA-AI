@@ -11,7 +11,6 @@ for p in [str(Path(__file__).resolve().parents[1])]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
-import pytest
 from app.utils.plate_normalizer import normalize_plate
 
 

@@ -17,21 +17,22 @@ Hard rules enforced here:
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 import numpy as np
 
 from ..core.config import settings
-from ..utils.plate_normalizer import normalize_plate
+from ..utils.plate_normalizer import INDIAN_PLATE_RE, LOOSE_PLATE_RE
 from .ocr_service import candidate_from_text, ocr_service, preprocess_variants
 from .plate_detector_service import PlateBox, plate_detector_service
 
-# Full Indian civilian layout: SS DD LL(L) NNNN  (e.g. GJ01AB1234, GJ1AB1234)
-INDIAN_PLATE_RE = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}$")
-# Bharat-series / older layouts still worth accepting as plausible.
-LOOSE_PLATE_RE = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,8}$")
+# Plate patterns are defined once, in app/utils/plate_normalizer.py, and shared
+# by the OCR stage, cv-engine and the frontend:
+#   INDIAN_PLATE_RE — full Indian civilian layout SS DD L{1,3} N{3,4}
+#                     (e.g. GJ01AB1234, GJ1AB1234)
+#   LOOSE_PLATE_RE  — Bharat-series / older layouts still worth accepting as
+#                     plausible (confidence discount tier only)
 
 PLATE_STATUS_HIGH = "HIGH"
 PLATE_STATUS_LOW = "LOW_CONFIDENCE"

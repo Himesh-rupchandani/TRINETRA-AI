@@ -5,7 +5,6 @@ from capture.sentinel_catalogue import (
     Camera,
     CatalogueError,
     SentinelCatalogue,
-    parse_camera,
     parse_cameras,
     select_test_subset,
 )

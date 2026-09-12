@@ -21,25 +21,24 @@ and a NULL plate, and it simply never participates in cross-video matching.
 """
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import cv2
 
 from ..core.config import settings
 from ..core.logging_config import logger
+from ..core.paths import BACKEND_ROOT, analysis_root, evidence_root
 from ..database.database import SessionLocal
 from ..database.models import Camera, VehicleEvent, VideoSource
-from ..utils.plate_normalizer import normalize_plate
+from ..utils.timestamps import iso_utc
 from .anpr_pipeline import (
     PLATE_STATUS_HIGH,
-    PLATE_STATUS_LOW,
     PLATE_STATUS_UNKNOWN,
     TrackPlateAccumulator,
     read_plate_for_vehicle,
@@ -89,24 +88,18 @@ class AnalysisError(Exception):
 # Paths & identifiers
 # ---------------------------------------------------------------------------
 
+# Path resolution is centralized in app.core.paths so the API read side and
+# this write side can never disagree (see the note in uploaded_video_service).
 def _backend_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return BACKEND_ROOT
 
 
 def analysis_dir() -> Path:
-    d = Path(getattr(settings, "ANALYSIS_DIR", "uploads/analysis"))
-    if not d.is_absolute():
-        d = _backend_root() / d
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return analysis_root()
 
 
 def _evidence_root() -> Path:
-    root = Path(settings.EVIDENCE_ROOT)
-    if not root.is_absolute():
-        root = (_backend_root() / root).resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+    return evidence_root()
 
 
 def safe_filename(name: str) -> str:
@@ -390,13 +383,17 @@ def _spawn(video_id: str) -> None:
 
 
 def _broadcast(kind: str, payload: dict) -> None:
-    """Best-effort realtime notification from a worker thread."""
+    """Best-effort realtime notification from a worker thread.
+
+    Scheduled onto the application's running event loop rather than a throwaway
+    ``asyncio.run()`` loop, which could never reach the SSE/WebSocket clients.
+    """
     try:
         from .ws_manager import ws_manager
 
-        asyncio.run(ws_manager.broadcast(kind, payload))
+        ws_manager.broadcast_threadsafe(kind, payload)
     except Exception as exc:
-        logger.debug(f"[ANALYSIS] realtime broadcast skipped: {exc}")
+        logger.warning(f"[ANALYSIS] realtime broadcast failed: {exc}")
 
 
 def _run_video(video_id: str) -> None:
@@ -525,6 +522,7 @@ def _run_video(video_id: str) -> None:
             db.commit()
             db.refresh(event)
 
+            alert_extra: dict = {}
             if plate_norm:
                 counters["plates"] += 1
                 entry = match_watchlist(db, plate_norm)
@@ -533,6 +531,19 @@ def _run_video(video_id: str) -> None:
                     db.commit()
                     alert = create_watchlist_alert(db, event, entry)
                     kind = "ALERT_CREATED" if alert else "WATCHLIST_MATCH"
+                    if alert:
+                        # Mirror the live pipeline's alert keys so the UI gets a
+                        # real alert id (and severity/message) to act on.
+                        alert_extra = {
+                            "alert_id": alert.id,
+                            "alert_ref": f"AL-{alert.id}",
+                            "id": alert.id,
+                            "alert_type": alert.alert_type,
+                            "severity": alert.severity,
+                            "message": alert.message,
+                            "status": alert.status,
+                            "timestamp": iso_utc(alert.timestamp) if alert.timestamp else None,
+                        }
                 else:
                     kind = "VEHICLE_DETECTED"
             else:
@@ -548,10 +559,11 @@ def _run_video(video_id: str) -> None:
                 "plate_status": plate_status,
                 "vehicle_class": event.vehicle_class,
                 "confidence": event.plate_confidence,
-                "event_time": event.event_time.isoformat() if event.event_time else None,
+                "event_time": iso_utc(event.event_time) if event.event_time else None,
                 "video_file": video_filename,
                 "video_offset": format_offset(offset),
                 "watchlist_match": event.watchlist_match,
+                **alert_extra,
             })
 
         while True:
