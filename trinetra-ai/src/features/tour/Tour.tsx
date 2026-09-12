@@ -1,18 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, GraduationCap, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Shield, X } from 'lucide-react';
 import { TOUR_STEPS } from './tourSteps';
 import { tourStore, useTour } from './tourStore';
 import { cn } from '@/lib/utils';
-
-/**
- * Minimal spotlight walkthrough for first-time viewers (judges!).
- * Each step navigates to its route, waits for the target element
- * (pages lazy-mount, the map hydrates async), then draws a glowing cutout
- * over it with a compact card. No target ⇒ centred card (intro/outro).
- *
- * Keys: Enter/→ next · ← back · Esc exit · click anywhere advances.
- */
 
 interface Rect {
   x: number;
@@ -21,10 +12,10 @@ interface Rect {
   h: number;
 }
 
-const CARD_W = 360;
-const CARD_H_EST = 224;
-const GAP = 14;
-const PAD = 10;
+const CARD_W = 380;
+const CARD_H_EST = 240;
+const GAP = 16;
+const PAD = 8;
 
 export function Tour() {
   const { open, i } = useTour();
@@ -37,7 +28,6 @@ export function Tour() {
   const firedActions = useRef<Set<string>>(new Set());
   const nextBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Fresh run ⇒ clear one-shot actions and start hidden until measured.
   useEffect(() => {
     if (open && i === 0) {
       firedActions.current.clear();
@@ -46,13 +36,11 @@ export function Tour() {
     }
   }, [open, i]);
 
-  // Navigate to the step's route before measuring.
   useEffect(() => {
     if (!open || !step?.route) return;
     if (location.pathname !== step.route) navigate(step.route);
   }, [open, step, location.pathname, navigate]);
 
-  // Poll for the target element; keep the cutout glued on scroll/resize.
   useEffect(() => {
     if (!open || !step) return;
     const fire = () => {
@@ -67,7 +55,7 @@ export function Tour() {
       fire();
       return;
     }
-    const target = step.target; // narrowed for use inside listeners/polls
+    const target = step.target;
     let stopped = false;
     let tries = 0;
     let timer = 0;
@@ -87,7 +75,6 @@ export function Tour() {
         return;
       }
       if (++tries > 160) {
-        // ~5 s and still nothing: degrade to a centred card, don't block the tour
         setRect(null);
         setReady(true);
         fire();
@@ -110,7 +97,6 @@ export function Tour() {
     };
   }, [open, step, location.pathname]);
 
-  // Keyboard control.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -144,89 +130,112 @@ export function Tour() {
     cardStyle = { left, top };
   }
 
+  const progress = Math.round(((i + 1) / total) * 100);
+
   return (
     <>
-      {/* Scrim: click anywhere to advance. */}
       <div
-        className="fixed inset-0 z-[10040] cursor-pointer"
+        className="fixed inset-0 z-[10040] cursor-pointer bg-slate-950/60 backdrop-blur-[1px]"
         onClick={() => tourStore.next(total)}
         aria-hidden
       />
       {rect ? (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-[10041] rounded-2xl transition-all duration-300 ease-out"
+          className="pointer-events-none fixed z-[10041] rounded-xl transition-all duration-300 ease-out"
           style={{
             left: rect.x - PAD,
             top: rect.y - PAD,
             width: rect.w + PAD * 2,
             height: rect.h + PAD * 2,
             boxShadow:
-              '0 0 0 9999px rgba(2,6,23,.68), 0 0 0 2px rgba(249,115,22,.9), 0 0 34px 6px rgba(249,115,22,.28)',
+              '0 0 0 9999px rgba(2,6,23,.68), 0 0 0 2px rgba(37,99,235,.9), 0 0 0 6px rgba(37,99,235,.18), 0 8px 32px rgba(0,0,0,.35)',
           }}
         />
       ) : null}
 
       <div
         role="dialog"
-        aria-label={`Guided tour, step ${i + 1} of ${total}`}
+        aria-label={`Guided walkthrough step ${i + 1} of ${total}: ${step.title}`}
         className={cn(
-          'fixed z-[10042] w-[360px] max-w-[calc(100vw-24px)] rounded-2xl border border-line bg-surface-1 p-4 shadow-2xl transition-all duration-300 ease-out',
-          !ready && 'pointer-events-none opacity-0',
+          'fixed z-[10042] w-[380px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(2,6,23,.25),0_0_0_1px_rgba(2,6,23,.06)] transition-all duration-300 ease-out',
+          !ready && 'pointer-events-none opacity-0 translate-y-2',
         )}
         style={cardStyle}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-2 flex items-center gap-2">
-          <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand/10 text-brand" aria-hidden>
-            <GraduationCap size={14} />
-          </span>
-          <span className="font-mono text-[10px] font-semibold text-ink-faint">
-            {i + 1} / {total}
-          </span>
-          <span className="ml-auto flex items-center gap-1" aria-hidden>
-            {TOUR_STEPS.map((s, si) => (
-              <span
-                key={s.id}
-                className={cn(
-                  'h-1 rounded-full transition-all duration-300',
-                  si === i ? 'w-4 bg-brand' : si < i ? 'w-1.5 bg-brand/45' : 'w-1.5 bg-line',
-                )}
-              />
-            ))}
-          </span>
-          <button
-            type="button"
-            onClick={() => tourStore.stop()}
-            aria-label="Exit walkthrough"
-            title="Exit (Esc)"
-            className="grid h-6 w-6 place-items-center rounded-md text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
-          >
-            <X size={13} aria-hidden />
-          </button>
+        {/* Progress bar */}
+        <div className="h-1 w-full bg-slate-100">
+          <div className="h-full bg-blue-600 transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
         </div>
 
-        <h3 className="text-sm font-bold text-ink">{step.title}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-ink-muted">{step.body}</p>
+        <div className="p-4">
+          <div className="mb-3 flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-600 text-white shadow-sm" aria-hidden>
+              <Shield size={14} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-blue-700">
+                  Step {i + 1} / {total}
+                </span>
+                <span className="h-1 w-1 rounded-full bg-slate-300" />
+                <span className="text-[11px] text-slate-500">{progress}%</span>
+              </div>
+            </div>
+            <div className="ml-auto flex items-center gap-1.5">
+              {TOUR_STEPS.map((s, si) => (
+                <span
+                  key={s.id}
+                  className={cn(
+                    'h-1.5 rounded-full transition-all duration-300',
+                    si === i ? 'w-5 bg-blue-600' : si < i ? 'w-1.5 bg-blue-300' : 'w-1.5 bg-slate-200',
+                  )}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => tourStore.stop()}
+              aria-label="Exit walkthrough"
+              title="Exit (Esc)"
+              className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X size={14} aria-hidden />
+            </button>
+          </div>
 
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => tourStore.prev()}
-            className={cn('btn-ghost btn-xs', i === 0 && 'invisible')}
-          >
-            <ChevronLeft size={12} aria-hidden /> Back
-          </button>
-          <span className="ml-auto text-[10px] text-ink-faint">click backdrop to advance</span>
-          <button
-            ref={nextBtnRef}
-            type="button"
-            onClick={() => tourStore.next(total)}
-            className="btn-primary btn-xs"
-          >
-            {i === total - 1 ? 'Finish' : (step.cta ?? 'Next')}
-            {i < total - 1 && <ChevronRight size={12} aria-hidden />}
-          </button>
+          <h3 className="text-[15px] font-bold leading-tight tracking-tight text-slate-900">{step.title}</h3>
+          <p className="mt-2 text-[13px] leading-[1.55] text-slate-600">{step.body}</p>
+
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => tourStore.prev()}
+              className={cn(
+                'inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50',
+                i === 0 && 'invisible',
+              )}
+            >
+              <ChevronLeft size={13} aria-hidden /> Back
+            </button>
+            <span className="ml-auto text-[10px] text-slate-400">Esc to exit • ← → to navigate</span>
+            <button
+              ref={nextBtnRef}
+              type="button"
+              onClick={() => tourStore.next(total)}
+              className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-600 px-3.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+            >
+              {i === total - 1 ? 'Finish Tour' : step.cta ?? 'Next'}
+              {i < total - 1 && <ChevronRight size={13} aria-hidden />}
+            </button>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 bg-slate-50 px-4 py-2">
+          <p className="text-[10px] font-medium text-slate-500">
+            TRINETRA AI — Gujarat Police • Professional Walkthrough • Click backdrop or press Enter to continue
+          </p>
         </div>
       </div>
     </>
