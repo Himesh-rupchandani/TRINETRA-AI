@@ -101,6 +101,8 @@ def main():
         default="outputs/detected_plates",
         help="Directory to save cropped license plates",
     )
+    parser.add_argument("--no-multiscale", action="store_true",
+                        help="Skip the native-resolution second pass (faster, looser boxes)")
     args = parser.parse_args()
 
     base_dir = Path(__file__).resolve().parent
@@ -124,6 +126,7 @@ def main():
     print(f"  Confidence  : {args.conf}")
     print(f"  NMS IoU     : {args.iou}")
     print(f"  Img size    : {args.imgsz}")
+    print(f"  Multi-scale : {'off' if args.no_multiscale else 'on'}")
     print("=" * 65)
 
     detector = VehiclePlateDetector(
@@ -132,6 +135,7 @@ def main():
         iou_threshold=args.iou,
         imgsz=args.imgsz,
         vehicle_model_path=args.vehicle_model,
+        multiscale=not args.no_multiscale,
     )
     print(f"  Vehicle wt  : {detector.vehicle_model_path or model_path}")
 

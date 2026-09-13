@@ -51,6 +51,11 @@ DEFAULT_IMGSZ = 960
 
 # Plate stage keeps its historical settings (see __init__): conf 0.25 @ imgsz 640.
 PLATE_IMGSZ = 640
+# Duplicate reduction thresholds, identical to the backend's DETECTION_CONTAINMENT_*
+# settings: a box that is almost wholly inside a much larger one describes the same
+# vehicle seen twice, and keeping both is what looks like "one box per two bikes".
+CONTAINMENT_THR = 0.60
+CONTAINMENT_AREA_GUARD = 3.0
 PLATE_CONF_CEILING = 0.25  # plates never need a *stricter* cut than this
 
 
@@ -150,7 +155,21 @@ class VehiclePlateDetector:
         use_coco_vehicles: bool = True,
         plate_conf_threshold: float = PLATE_CONF_CEILING,
         plate_imgsz: int = PLATE_IMGSZ,
+        multiscale: Optional[bool] = None,
+        multiscale_strips: int = 2,
     ):
+        # Multi-scale = a second look at native resolution (see core/multiscale.py).
+        # On by default for these offline scripts, where CPU is better spent finding
+        # the distant vehicles than saving a few hundred ms; `detect_webcam.py`
+        # switches it off because a live view cannot wait for it. Env override so a
+        # caller can flip it without touching code: TRINETRA_MULTISCALE=0.
+        if multiscale is None:
+            multiscale = os.environ.get("TRINETRA_MULTISCALE", "1").strip().lower() not in {
+                "0", "false", "no", "off"}
+        self.multiscale = bool(multiscale)
+        self.multiscale_strips = max(1, int(multiscale_strips))
+        self.multiscale_mode = "auto"        # "single" to disable extra passes explicitly
+        self.last_multiscale_passes = 1      # audit: passes the last frame cost
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.imgsz = imgsz
@@ -323,7 +342,7 @@ class VehiclePlateDetector:
 
         vehicle_classes = classes if classes is not None else self.vehicle_class_ids
         one_weight = self.plate_model is self.vehicle_model
-        if one_weight and size == self.plate_imgsz:
+        if one_weight and size == self.plate_imgsz and not self.multiscale:
             # Single weight, same working resolution: one pass for both roles.
             ids = sorted(set(vehicle_classes or []) | set(self.plate_class_ids or [])) or None
             dets = self._run(self.vehicle_model, image, min(threshold, plate_conf),
@@ -331,12 +350,58 @@ class VehiclePlateDetector:
             return [d for d in dets if d.is_plate or d.confidence >= threshold]
 
         detections: List[DetectionResult] = []
-        detections += self._run(self.vehicle_model, image, threshold, size,
-                                vehicle_classes, force_kind=None)
+        if self.multiscale:
+            detections += self._detect_vehicles_multiscale(image, threshold, size,
+                                                            vehicle_classes)
+        else:
+            detections += self._run(self.vehicle_model, image, threshold, size,
+                                    vehicle_classes, force_kind=None)
         if self.plate_class_ids:
             detections += self._run(self.plate_model, image, plate_conf, self.plate_imgsz,
                                     self.plate_class_ids, force_kind="plate")
         return detections
+
+    def _detect_vehicles_multiscale(
+        self,
+        image: np.ndarray,
+        threshold: float,
+        size: int,
+        vehicle_classes: Optional[List[int]],
+    ) -> List[DetectionResult]:
+        """Vehicle boxes from several passes, merged into one tight set.
+
+        Only the vehicle role is multi-scaled. The plate stage keeps its own
+        conf/imgsz, because its recall is tuned separately and must not move
+        when vehicle quality is raised.
+        """
+        from .multiscale import collect_multiscale, suppress_duplicates
+
+        def predict(crop, imgsz, conf):
+            return [(d.bbox[0], d.bbox[1], d.bbox[2], d.bbox[3], d.class_id, d.confidence)
+                    for d in self._run(self.vehicle_model, crop, conf, imgsz,
+                                       vehicle_classes, force_kind=None)]
+
+        names = getattr(self.vehicle_model, "names", None) or {}
+        raw, passes = collect_multiscale(predict, image, threshold, size,
+                                        mode=self.multiscale_mode,
+                                        strips=self.multiscale_strips)
+        # Same reduction the backend applies: choose between boxes describing one
+        # vehicle, never edit a rectangle to make it look tighter.
+        boxes = suppress_duplicates(raw, iou_thr=self.iou_threshold,
+                                    containment_thr=CONTAINMENT_THR,
+                                    containment_area_guard=CONTAINMENT_AREA_GUARD)
+        self.last_multiscale_passes = max(1, len(passes))
+        out: List[DetectionResult] = []
+        for x1, y1, x2, y2, cls_id, score in boxes:
+            if int(round(x2)) - int(round(x1)) < 2 or int(round(y2)) - int(round(y1)) < 2:
+                continue                      # nothing to draw, nothing to crop
+            cls_name = _class_name_of(names, int(cls_id))
+            out.append(DetectionResult(
+                bbox=[int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2))],
+                class_id=int(cls_id), class_name=cls_name, confidence=float(score),
+                kind="vehicle",
+            ))
+        return out
 
     def _run(
         self,

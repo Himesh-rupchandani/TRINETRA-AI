@@ -32,6 +32,7 @@ def run_video_detection(
     iou: float = 0.45,
     imgsz: int = 960,
     vehicle_model: Optional[str] = None,
+    multiscale: bool = True,
 ):
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
@@ -49,6 +50,7 @@ def run_video_detection(
     print(f"  NMS IoU      : {iou}")
     print(f"  Inference size: {imgsz}")
     print(f"  Frame Stride : {stride}")
+    print(f"  Multi-scale  : {'on (native-res second look at vehicles)' if multiscale else 'off'}")
     print("=" * 70)
 
     detector = VehiclePlateDetector(
@@ -57,6 +59,7 @@ def run_video_detection(
         iou_threshold=iou,
         imgsz=imgsz,
         vehicle_model_path=vehicle_model,
+        multiscale=multiscale,
     )
     print(f"  Vehicle Weights: {detector.vehicle_model_path or model_path} "
           f"(classes: {list(detector.vehicle_model.names.values()) if detector.vehicle_class_ids is None else ['car', 'motorcycle', 'bus', 'truck']})")
@@ -182,6 +185,10 @@ def main():
                         help="Per-class weight used for VEHICLE boxes (default: auto — "
                              "the repo's yolo11s/yolo11n COCO weight). Pass 'none' to "
                              "keep vehicle boxes from --model.")
+    parser.add_argument("--no-multiscale", dest="multiscale", action="store_false",
+                        help="Skip the native-resolution second pass over vertical "
+                             "strips. Faster, but distant/parked vehicles merge into "
+                             "fewer, looser boxes (default: multiscale on).")
     parser.add_argument("--stride", type=int, default=2, help="Frame stride (default 2)")
     parser.add_argument("--max-frames", type=int, default=None, help="Max frames to process (optional)")
     args = parser.parse_args()
@@ -205,6 +212,7 @@ def main():
         iou=args.iou,
         imgsz=args.imgsz,
         vehicle_model=args.vehicle_model,
+        multiscale=args.multiscale,
     )
 
 

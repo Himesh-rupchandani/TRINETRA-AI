@@ -65,6 +65,9 @@ def main():
         iou_threshold=args.iou,
         imgsz=args.imgsz,
         vehicle_model_path=args.vehicle_model,
+        # Live view: the multi-scale second look costs ~2x inference time, which a
+        # webcam loop cannot pay frame-for-frame. Offline scripts keep it on.
+        multiscale=False,
     )
 
     # Reported after construction: which weight the vehicle boxes actually come

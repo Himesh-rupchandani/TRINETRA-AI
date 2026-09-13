@@ -181,6 +181,9 @@ def _ondemand_detector(settings):
                 imgsz=int(getattr(settings, "live_imgsz", 960)),
                 device="cpu",
                 nms_iou=getattr(settings, "nms_iou", 0.45),
+                # This is the box a viewer sees, so it gets the deeper look.
+                multiscale=bool(getattr(settings, "live_multiscale", False)),
+                strips=int(getattr(settings, "live_strips", 2)),
             )
         return _ONDEMAND_DETECTOR
 
@@ -458,6 +461,10 @@ def run_feed(camera_id: str, cfg: dict, settings: Settings, annotate_feed: bool)
         else settings.inference_imgsz,
         device=settings.device,
         nms_iou=settings.nms_iou,
+        # Only the feed somebody is watching gets the extra pass; a pure ingest
+        # run keeps its historical single pass at inference_imgsz.
+        multiscale=bool(annotate_feed and getattr(settings, "live_multiscale", False)),
+        strips=int(getattr(settings, "live_strips", 2)),
     )
     backend = BackendClient(
         base_url=settings.backend_base_url,

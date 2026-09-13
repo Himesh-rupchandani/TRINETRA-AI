@@ -60,8 +60,40 @@ class Settings(BaseSettings):
     # back up when it is comfortably under it. Only boxes get coarser, never
     # more boxes or bigger ones - geometry always stays the model's own.
     LIVE_ADAPTIVE_IMGSZ: bool = True
-    LIVE_INFER_BUDGET_MS: float = 260.0   # per-inference time the stream may pay
+    LIVE_INFER_BUDGET_MS: float = 450.0   # per-inference time the stream may pay
     LIVE_IMGSZ_FLOOR: int = 640           # never go below this on the live view
+    # Quality policy for the live view. "auto" lets the governor choose from the
+    # ladder (single passes up to DETECTION_IMGSZ, then the same plus native
+    # strips); "eco" never spends a second pass; "max" always looks twice.
+    LIVE_QUALITY: str = "auto"
+    # How a frame is looked at a second time. Vertical strips at native
+    # resolution: on 1280x720 footage this took live recall from 48% to 88% of
+    # what the best multi-scale pass finds, at 3.2x the CPU of one 768 pass.
+    DETECTION_STRIPS: int = 2             # 2 = left/right halves, overlapping
+    DETECTION_TILE: int = 640             # square-grid tiles for very tall frames
+    DETECTION_MAX_TILES: int = 6          # ceiling, so 4K cannot mean 40 passes
+    # Duplicate suppression beyond IoU: a box almost INSIDE another one is the
+    # same vehicle seen through a crop edge. The area guard is what stops that
+    # rule from deleting a motorcycle legitimately hidden inside a bus's box.
+    DETECTION_CONTAINMENT_THR: float = 0.60
+    DETECTION_CONTAINMENT_AREA_GUARD: float = 3.0
+    # Offline video analysis: quality is not traded for latency there, so it
+    # always gets the second look. Set false to halve analysis CPU at ~25-40%
+    # fewer vehicles.
+    ANALYSIS_MULTISCALE: bool = True
+    # ---- live overlay delivery -------------------------------------------------
+    # Detect on a background worker per camera instead of inline in the MJPEG
+    # loop. The stream then always renders at its own rate with the freshest real
+    # boxes, and the detector is free to look as deep as the CPU allows: extra
+    # work buys detection latency, never dropped frames. Measured on this box:
+    # inline at 768 gave 4.7 fps / 11.8 vehicles; async multi-scale keeps the
+    # stream smooth and roughly doubles the vehicles it can afford to find.
+    LIVE_ASYNC_DETECT: bool = True
+    # Boxes older than this are dropped instead of drawn. Without it a camera
+    # whose detector stalled would keep a vehicle boxed in front of an empty
+    # road; with it the worst case is a brief gap, never a wrong box.
+    LIVE_BOX_MAX_AGE_MS: float = 900.0
+
     # NMS IoU used by the detector. Ultralytics' default is 0.7, which let one
     # motorcycle be boxed two or three times over; 0.45 keeps the best box per
     # vehicle while still separating genuinely adjacent vehicles (their mutual
@@ -75,7 +107,7 @@ class Settings(BaseSettings):
     # painted every vehicle solid green, which made even honest padding read as
     # "a huge green area over the road" — the exact complaint the tightening
     # below is meant to remove.
-    DETECTION_BOX_FILL_ALPHA: float = 0.18
+    DETECTION_BOX_FILL_ALPHA: float = 0.0
     # ---- Offline video analysis (uploads / Drive): quality over latency -----
     # A larger inference size is what separates parked vehicles that overlap in
     # the frame and finds the small distant ones. Measured on this repo's own

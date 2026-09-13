@@ -77,7 +77,7 @@ class TestDraw:
         itself) carries a semi-transparent green layer: the green channel
         dominates clearly over red/blue and differs from the original grey
         frame. The alpha is pinned here because the shipped default is a light
-        tint on purpose (see test_default_fill_is_a_light_tint)."""
+        tint only when DETECTION_BOX_FILL_ALPHA asks for it."""
         monkeypatch.setattr(settings, "DETECTION_BOX_FILL_ALPHA", 0.55)
         frame = np.full((360, 640, 3), 128, dtype=np.uint8)
         VehicleDetectionService.draw(frame, [_dets()[0]])  # box (50,50)-(200,150)
@@ -103,16 +103,20 @@ class TestDraw:
         # a pixel covered by both boxes must look exactly like a singly covered one
         assert tuple(int(v) for v in both[120, 250]) == tuple(int(v) for v in single[120, 250])
 
-    def test_default_fill_is_a_light_tint(self):
-        """The shipped overlay must not paint the vehicle (let alone the road)
-        solid green: the default is a light tint, and the box border — which is
-        what has to sit on the vehicle boundary — stays fully green."""
-        assert 0.0 <= float(settings.DETECTION_BOX_FILL_ALPHA) <= 0.25
+    def test_default_overlay_is_outline_only(self):
+        """The shipped overlay must match the reference images: a green border on
+        the vehicle boundary, nothing painted over the vehicle or the road. A tint
+        is available (DETECTION_BOX_FILL_ALPHA) but it stays off by default, so a
+        slightly generous box can never read as a green slab."""
+        assert float(settings.DETECTION_BOX_FILL_ALPHA) == 0.0
         frame = np.full((360, 640, 3), 128, dtype=np.uint8)
         VehicleDetectionService.draw(frame, [_dets()[0]])
-        b, g, r = (int(v) for v in frame[100, 120])
-        assert (g - r) < 90, f"interior too heavily covered: BGR=({b},{g},{r})"
-        assert tuple(frame[50, 100]) == (0, 255, 0)
+        assert tuple(frame[100, 120]) == (128, 128, 128), "interior must be untouched"
+        assert tuple(frame[50, 100]) == (0, 255, 0), "border must be pure green"
+        # ...and the knob still works when somebody wants it
+        frame2 = np.full((360, 640, 3), 128, dtype=np.uint8)
+        VehicleDetectionService.draw(frame2, [_dets()[0]], fill_alpha=0.4)
+        assert int(frame2[100, 120][1]) > 160, "tint not applied when asked for"
 
     def test_label_never_escapes_the_frame(self):
         """A box at the right/top edge must not draw its tag outside the frame."""
@@ -133,7 +137,38 @@ class TestDraw:
 # Annotate pipeline (throttling, caching, safety)
 # ============================================================================
 class TestAnnotate:
-    def test_throttles_inference_and_reuses_last_boxes(self, monkeypatch):
+    def test_live_view_boxes_every_frame_without_queueing_frames(self, monkeypatch):
+        """Async contract: the stream never waits for the model, and the model
+        never queues more than one look. Boxes stay on screen while a pass runs."""
+        import threading
+        import time as _t
+
+        svc = VehicleDetectionService()
+        calls = []
+        gate = threading.Event()
+
+        def fake_detect(frame):
+            calls.append(1)
+            if len(calls) > 1:
+                gate.wait(3.0)          # the second pass is slow, on purpose
+            return _dets()
+
+        monkeypatch.setattr(svc, "detect", fake_detect)
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+
+        # 1st frame: measured synchronously, so nobody watches an empty overlay
+        assert _green_pixels(svc.annotate("cam-a", frame)) > 100
+        assert len(calls) == 1
+        # 2nd frame goes to the worker and blocks there
+        assert _green_pixels(svc.annotate("cam-a", frame)) > 100
+        for _ in range(5):
+            assert _green_pixels(svc.annotate("cam-a", frame)) > 100
+            _t.sleep(0.01)
+        assert len(calls) == 2, "frames must not pile up behind an in-flight pass"
+        gate.set()
+        svc.forget("cam-a")
+
+    def test_sync_fallback_honours_detection_every_n_frames(self, monkeypatch):
         svc = VehicleDetectionService()
         calls = []
 
@@ -142,12 +177,49 @@ class TestAnnotate:
             return _dets()
 
         monkeypatch.setattr(svc, "detect", fake_detect)
+        monkeypatch.setattr(settings, "LIVE_ASYNC_DETECT", False)
         monkeypatch.setattr(settings, "DETECTION_EVERY_N_FRAMES", 2)
-
         for _ in range(4):
             out = svc.annotate("cam-test", np.zeros((360, 640, 3), dtype=np.uint8))
-            assert _green_pixels(out) > 100  # boxes visible on every frame
-        assert len(calls) == 2  # model ran only every 2nd frame
+            assert _green_pixels(out) > 100        # replayed on the odd frames
+        assert len(calls) == 2                     # model ran only every 2nd frame
+
+    def test_stale_boxes_are_dropped_rather_than_shown_in_the_wrong_place(self, monkeypatch):
+        """A result older than LIVE_BOX_MAX_AGE_MS is not drawn at all."""
+        import threading
+        import app.services.vehicle_detection_service as mod
+
+        svc = VehicleDetectionService()
+        calls, gate = [], threading.Event()
+
+        def detect(frame):
+            calls.append(1)
+            if len(calls) > 1:
+                gate.wait(3.0)          # keep the worker busy so it cannot refresh
+            return _dets()
+
+        clock = [1000.0]
+        monkeypatch.setattr(svc, "detect", detect)
+        monkeypatch.setattr(mod.time, "monotonic", lambda: clock[0] / 1000.0)
+        monkeypatch.setattr(settings, "LIVE_BOX_MAX_AGE_MS", 500.0)
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+
+        # draw() paints in place, so every call gets its own fresh frame
+        assert _green_pixels(svc.annotate("cam-b", frame.copy())) > 100   # fresh result
+        clock[0] += 600.0                                                # now stale
+        assert _green_pixels(svc.annotate("cam-b", frame.copy())) == 0    # dropped
+        gate.set()
+        svc.forget("cam-b")
+
+    def test_forget_stops_the_camera_worker(self, monkeypatch):
+        svc = VehicleDetectionService()
+        monkeypatch.setattr(svc, "detect", lambda frame: _dets())
+        svc.annotate("cam-c", np.zeros((360, 640, 3), dtype=np.uint8))
+        view = svc._live_view("cam-c")
+        assert view._thread.is_alive()
+        svc.forget("cam-c")
+        assert view._stop.is_set()
+        assert "cam-c" not in svc._live_views
 
     def test_disabled_returns_frame_unchanged(self, monkeypatch):
         svc = VehicleDetectionService()

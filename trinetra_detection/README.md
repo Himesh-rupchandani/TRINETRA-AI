@@ -84,6 +84,28 @@ Yeh automatically sample images par detection run karega aur results `outputs/` 
 
 ---
 
+### 🔬 Multi-scale: doosra pass, native resolution pe (default ON)
+
+`detect_image.py` aur `detect_video.py` ab har frame ko **do baar** dekhte hain:
+ek baar poora frame (imgsz 960), aur ek baar frame ko **vertical strips** me kaat
+kar har strip ko uski **apni native resolution** par. Kyun? 1280-wide frame ko
+960 me squeeze karne par har vehicle 75% ho jaata hai — do parked vehicles ka box
+merge ho kar ek bada rectangle ban jaata hai, aur 20 px ki door wali car model ki
+pahunch se bahar ho jaati hai. Strip native resolution par hai to dono theek.
+
+- Boxes me **koi padding/jaadu nahi**: crop ka offset wapas jodna aur frame ke
+  bahar ka hissa kaatna — bas. Jo box crop ki *kaati* edge se chipakta hai (frame
+  ki edge se nahi) use drop kar diya jaata hai, kyun ki wahi vehicle padosi strip
+  pura dekhta hai.
+- Do passes se aaya hua duplicate "ek hi vehicle, do box" nahi banta: IoU +
+  containment (size guard ke saath) se one vehicle → one box.
+- Isse boxes **tighter** bhi hote hain, bade nahi. Is repo ke 33 hand-checked
+  frames par (CPU): **7.1 → 9.1 vehicle/frame, aur mean box area 2.87% → 2.24%**.
+- Cost: ~3x inference (yeh offline tools hain, isliye value quality par lagta hai).
+  Tez banana ho: `--no-multiscale`, ya poore process ke liye `TRINETRA_MULTISCALE=0`.
+- `detect_webcam.py` me ise **off** rakha gaya hai — live view 2x inference ka
+  intezaar nahi kar sakta; wahan frame-rate hi quality hai.
+
 ### Option C: Video Detection (`detect_video.py`)
 Kisi bhi video file par vehicle aur number plate detect karne ke liye:
 ```bash

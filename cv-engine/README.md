@@ -162,6 +162,22 @@ weak CPU), `CV_DEVICE`, `PROCESS_INTERVAL_MS`,
 `ANPR_INTERVAL_MS`, `EVENT_SUPPRESSION_SEC`, `TRACK_MAX_AGE_SEC`, `LOG_LEVEL`…
 (full list in `config/settings.py`). No secrets are ever hard-coded.
 
+Two more, for box quality in the view a person reads:
+
+- `LIVE_MULTISCALE` (default `true`) - the annotated live feed and the on-demand
+  viewer look at each frame twice: whole, then as native-resolution vertical
+  strips, merged into one box per vehicle. That is where distant vehicles stop
+  vanishing and two parked ones stop sharing one oversized rectangle, because a
+  strip is fed at 1:1 scale instead of squeezed. It reuses
+  `../trinetra_detection/core/multiscale.py` by path and degrades to the plain
+  single pass if that file is not present, so the engine still runs standalone.
+- `LIVE_STRIPS` (default `2`) - how many strips, i.e. ~2x inference per frame.
+
+Neither touches the 24/7 ingest detector, which keeps its single pass at
+`INFERENCE_IMGSZ`: this costs CPU, and ingest is CPU-bound. `NMS_IOU_THRESHOLD`
+(0.45) is what stops one vehicle being boxed twice; raising it does not help -
+measured, 0.70 was the original bug.
+
 ## Tests
 
 ```bash

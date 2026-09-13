@@ -29,6 +29,10 @@ import numpy as np
 
 from ..core.config import settings
 from ..core.logging_config import logger
+from .detection_core import (
+    collect_multiscale,
+    suppress_duplicates,
+)
 
 # COCO class id -> label, restricted to road vehicles.
 VEHICLE_CLASS_IDS: Dict[int, str] = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
@@ -53,6 +57,91 @@ class VehicleDetection:
     confidence: float
 
 
+class _LiveView:
+    """One camera's background detection worker.
+
+    Exactly one frame may be in flight: the stream hands over a copy when the
+    worker is idle and otherwise keeps showing the last real result, so the
+    model is never queued up behind itself and a stalled detector cannot eat
+    memory. Results are discarded once older than ``LIVE_BOX_MAX_AGE_MS`` so a
+    camera that stops producing frames does not keep a vehicle boxed forever.
+    """
+
+    def __init__(self, service: "VehicleDetectionService", camera_id: str) -> None:
+        self._svc = service
+        self._camera_id = camera_id
+        self._lock = threading.Lock()
+        self._wake = threading.Event()
+        self._stop = threading.Event()
+        self._pending = None                # (frame,) waiting to be looked at
+        self._busy = False
+        self._result: List[VehicleDetection] = []
+        self._result_at = 0.0
+        self._thread = threading.Thread(target=self._run, name=f"live-detect-{camera_id}", daemon=True)
+        self._thread.start()
+
+    # ---------------------------------------------------------------- worker
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            # Long timeout: the Event wakes us the moment a frame is queued, so
+            # an idle worker must cost nothing. clear() is what makes the wait
+            # mean something - Event.wait() does not consume the flag, and
+            # without it this loop would spin at full speed forever.
+            self._wake.wait(0.5)
+            self._wake.clear()
+            if self._stop.is_set():
+                break
+            with self._lock:
+                frame, self._pending = self._pending, None
+                if frame is None:
+                    continue
+            try:
+                dets = self._svc.detect(frame)
+            except Exception as exc:          # a bad frame must not kill the worker
+                logger.warning(f"[DETECTION] live pass failed for {self._camera_id}: {exc}")
+                dets = None
+            if dets is not None:
+                with self._lock:
+                    self._result = dets
+                    self._result_at = time.monotonic() * 1000.0
+                    self._busy = False
+                    more = self._pending is not None
+            if more:
+                self._wake.set()
+
+    # ------------------------------------------------------------------- api
+    def frames(self, frame: np.ndarray) -> List[VehicleDetection]:
+        """Boxes to draw on this frame, and queue the frame for the next pass.
+
+        The first frame of a view is measured synchronously - otherwise a viewer
+        stares at an unboxed feed for a whole inference before anything appears -
+        and once one look is in flight later frames never pile up behind it.
+        """
+        max_age = float(getattr(settings, "LIVE_BOX_MAX_AGE_MS", 900.0))
+        with self._lock:
+            have = bool(self._result)
+            age = time.monotonic() * 1000.0 - self._result_at
+            fresh = list(self._result) if (have and (age <= max_age or max_age <= 0)) else []
+            if have and not self._busy and not self._stop.is_set():
+                self._pending = frame.copy()
+                self._busy = True
+                self._wake.set()
+        if fresh or have:
+            return fresh
+        try:
+            dets = self._svc.detect(frame)
+        except Exception:
+            return []
+        with self._lock:
+            self._result = dets
+            self._result_at = time.monotonic() * 1000.0
+        return list(dets)
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._wake.set()
+
+
 class VehicleDetectionService:
     """Singleton wrapper around a YOLO11 vehicle detector with per-camera throttling."""
 
@@ -65,11 +154,16 @@ class VehicleDetectionService:
         # camera_id -> (frame counter, last detections, last inference ms)
         self._frame_counter: Dict[str, int] = {}
         self._last_detections: Dict[str, List[VehicleDetection]] = {}
+        self._last_frame_ms: Dict[str, float] = {}
         self.last_inference_ms: Optional[float] = None
-        # Live auto-pacing state: the imgsz currently in force and the most
+        # what produced the last result: [{"region": ..., "imgsz": ..., "count": n}]
+        self.last_passes: List[dict] = []
+        # Live auto-pacing state: the quality level currently in force and the
         # recent inference times it is judged on.
-        self._live_imgsz: Optional[int] = None
+        self._live_level: Optional[tuple] = None
         self._infer_ms_samples: List[float] = []
+        # camera_id -> _LiveView (background inference worker for that stream)
+        self._live_views: Dict[str, "_LiveView"] = {}
 
     # ------------------------------------------------------------------ model
     @property
@@ -139,45 +233,88 @@ class VehicleDetectionService:
                 )
         return self._model
 
-    # ------------------------------------------------------- live auto-pacing
-    def _ladder(self) -> List[int]:
-        """Allowed live imgsz rungs, from the configured target down to the floor."""
+    # ------------------------------------------- live quality ladder + pacing
+    # Quality levels ordered from cheapest to best, each with the cost of that
+    # level relative to a single 768 pass (measured on 1280x720 CPU frames with
+    # the shipped weight: 512=103ms, 640=149, 768=207, 960=322, 1280=540,
+    # 768+2 native strips=665). The governor measures one level and uses it to
+    # place the whole ladder, so a strong machine gets multi-scale live detection
+    # and a weak one gets a single pass - automatically, same box geometry.
+    QUALITY_LADDER = (
+        (512, "single", 0.50),
+        (640, "single", 0.72),
+        (768, "single", 1.00),
+        (960, "single", 1.55),
+        (1280, "single", 2.60),
+        (768, "strips", 3.20),
+        (960, "strips", 3.90),
+    )
+
+    def _levels(self) -> List[tuple]:
+        """Ladder rungs allowed by the configuration, cheapest first."""
         target = int(getattr(settings, "DETECTION_IMGSZ", 960))
         floor = int(getattr(settings, "LIVE_IMGSZ_FLOOR", 640))
-        rungs = [r for r in IMGSZ_LADDER if floor <= r <= target]
-        # Always honour the configured target itself even if it is off-ladder,
-        # and never let a tiny floor leave the list empty.
-        return sorted(set(rungs) | {target}, reverse=True) or [target]
+        quality = str(getattr(settings, "LIVE_QUALITY", "auto") or "auto").lower()
+        allow_multiscale = quality in ("auto", "max") and bool(
+            getattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)
+        )
+        out = [
+            (size, mode, cost)
+            for (size, mode, cost) in self.QUALITY_LADDER
+            if floor <= size <= max(target, floor) and (allow_multiscale or mode == "single")
+        ]
+        if not out:
+            out = [(target, "single", 1.0)]
+        if quality == "eco":
+            out = [lv for lv in out if lv[1] == "single"] or out
+        return out
+
+    def _active_locked(self) -> tuple:
+        """The level currently in force (imgsz, mode, relative cost)."""
+        if self._live_level is not None:
+            return self._live_level
+        levels = self._levels()
+        quality = str(getattr(settings, "LIVE_QUALITY", "auto") or "auto").lower()
+        target = int(getattr(settings, "DETECTION_IMGSZ", 960))
+        if quality == "max":
+            return levels[-1]
+        # otherwise start at the configured imgsz's single pass, if present
+        for lv in levels:
+            if lv[0] == target and lv[1] == "single":
+                return lv
+        return min(levels, key=lambda lv: abs(lv[0] - target))
 
     def live_imgsz(self) -> int:
         """The inference resolution the live view is currently using."""
         with self._state_lock:
-            return self._live_imgsz_locked()
+            return self._active_locked()[0]
 
-    def _live_imgsz_locked(self) -> int:
-        """Same, for callers already holding ``_state_lock`` (it is not reentrant)."""
-        if self._live_imgsz is not None:
-            return self._live_imgsz
-        rungs = self._ladder()
-        return rungs[0] if rungs else int(getattr(settings, "DETECTION_IMGSZ", 960))
+    def live_mode(self) -> str:
+        """``single`` or ``strips``: is the live view looking twice or once?"""
+        with self._state_lock:
+            return self._active_locked()[1]
 
     def _pace(self, elapsed_ms: float) -> None:
-        """Feed one live inference time into the governor and re-pick imgsz.
+        """Feed one live measurement into the governor and re-pick the level.
 
-        The stream is paced by *resolution*, not by dropping frames: on a weak
-        CPU the boxes get a little coarser and the distant vehicles thinner,
-        while the view itself stays smooth. Median-of-recent runs is what moves
-        it, and it only steps one rung per inference in either direction, so a
-        single slow frame (another process grabbing the CPU) cannot make the
-        overlay flicker between sizes.
+        Two rules make this safe to leave switched on:
+
+        * the estimate comes from the *median* of the last few inferences, so one
+          slow frame (another process grabbing the CPU) cannot make the overlay
+          flicker between sizes;
+        * an upgrade needs headroom (60% of the budget), a downgrade only needs
+          the budget to be broken - so the loop settles instead of oscillating.
+
+        Pacing changes how *much* of the frame the model is shown, never what it
+        said: no box is resized, moved or invented here.
         """
-        if not bool(getattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)):
-            with self._state_lock:
-                self._live_imgsz = None
-                self._infer_ms_samples = []
-            return
+        quality = str(getattr(settings, "LIVE_QUALITY", "auto") or "auto").lower()
+        adaptive = bool(getattr(settings, "LIVE_ADAPTIVE_IMGSZ", True))
         budget = float(getattr(settings, "LIVE_INFER_BUDGET_MS", 260.0) or 0.0)
-        if budget <= 0:
+        if not adaptive or quality == "max" or budget <= 0:
+            with self._state_lock:
+                self._live_level = None
+                self._infer_ms_samples = []
             return
         with self._state_lock:
             self._infer_ms_samples = (self._infer_ms_samples + [float(elapsed_ms)])[-5:]
@@ -185,34 +322,67 @@ class VehicleDetectionService:
                 return
             ordered = sorted(self._infer_ms_samples)
             median = ordered[len(ordered) // 2]
-            rungs = self._ladder()
-            current = self._live_imgsz_locked()
-            try:
-                idx = min(range(len(rungs)), key=lambda i: abs(rungs[i] - current))
-            except ValueError:
+            levels = self._levels()
+            cur = self._active_locked()
+            idx = next((i for i, lv in enumerate(levels) if lv == cur),
+                       min(range(len(levels)), key=lambda i: abs(levels[i][0] - cur[0])))
+            unit = max(1.0, median) / max(0.05, levels[idx][2])
+            target_idx = idx
+            if unit * levels[idx][2] > budget:
+                affordable = [i for i, lv in enumerate(levels) if unit * lv[2] <= budget]
+                target_idx = max(affordable) if affordable else 0
+            elif idx + 1 < len(levels) and unit * levels[idx + 1][2] <= 0.6 * budget:
+                target_idx = idx + 1
+            if target_idx == idx:
                 return
-            if median > budget and idx < len(rungs) - 1:
-                idx += 1
-            elif median < 0.6 * budget and idx > 0:
-                idx -= 1
-            else:
-                return
-            if rungs[idx] == self._live_imgsz:
-                return
-            self._live_imgsz = rungs[idx]
+            self._live_level = levels[target_idx]
             self._infer_ms_samples = []
+            new = levels[target_idx]
         logger.info(
-            f"[DETECTION] Live auto-pacing: imgsz {current} -> {rungs[idx]} "
-            f"(median inference {median:.0f} ms, budget {budget:.0f} ms)"
+            f"[DETECTION] Live auto-pacing: {cur[1]}@{cur[0]} -> {new[1]}@{new[0]} "
+            f"(median {median:.0f} ms, budget {budget:.0f} ms)"
         )
 
     def reset_pacing(self) -> None:
         """Forget the learned pace (used when settings change or on restart)."""
         with self._state_lock:
-            self._live_imgsz = None
+            self._live_level = None
             self._infer_ms_samples = []
 
     # -------------------------------------------------------------- inference
+    def _predict_raw(self, model, image, conf: float, size: int, iou: float,
+                     agnostic: bool) -> List[tuple]:
+        """One model call, returned as ``(x1, y1, x2, y2, class_id, score)``.
+
+        Caller must hold ``_infer_lock``: a multi-scale look at one frame should
+        not interleave with another camera's.
+        """
+        results = model.predict(
+            image,
+            verbose=False,
+            conf=conf,
+            iou=iou,
+            imgsz=size,
+            device="cpu",
+            # Only road vehicles are requested, so a person, a bench or a
+            # shadow cannot come back as a "vehicle" in the first place.
+            classes=list(VEHICLE_CLASS_IDS.keys()),
+            # One box per vehicle even when the model hedges between car/bus/
+            # truck for the same one. Suppression is IoU based, so two separate
+            # vehicles stay two separate detections.
+            agnostic_nms=agnostic,
+        )
+        if not results or results[0].boxes is None:
+            return []
+        boxes = results[0].boxes
+        xyxy = boxes.xyxy.cpu().numpy()
+        confs = boxes.conf.cpu().numpy()
+        clss = boxes.cls.cpu().numpy()
+        return [
+            (float(b[0]), float(b[1]), float(b[2]), float(b[3]), int(k), float(c))
+            for b, c, k in zip(xyxy, confs, clss)
+        ]
+
     def detect(
         self,
         frame: np.ndarray,
@@ -228,11 +398,18 @@ class VehicleDetectionService:
         applying any extra scale factor here is exactly what would create
         mis-positioned or oversized boxes.
 
+        What this method adds is a *pixel budget*, not a geometry opinion: the
+        frame is looked at once whole and (when enabled) again as overlapping
+        native-resolution strips, and the resulting boxes are reduced to one per
+        vehicle. A car that is 14 px tall at imgsz 640 cannot be boxed tightly
+        by any amount of post-processing; seen at native resolution it can,
+        which is why multi-scale raises both recall AND tightness.
+
         ``conf`` / ``imgsz`` let the offline video pass ask for different
-        settings than the live view (see the ANALYSIS_* settings) without making
-        the live loop pay for them. Left as ``None`` — i.e. called from the live
-        stream — the settings defaults apply and the inference time is fed to
-        the auto-pacing governor.
+        settings than the live view (see the ANALYSIS_* settings). Left ``None``
+        - i.e. called from the live stream - the settings defaults apply, the
+        quality level comes from the pacing governor, and the measured cost is
+        fed back to it.
         """
         model = self._ensure_model()
         if model is None:
@@ -241,62 +418,69 @@ class VehicleDetectionService:
         threshold = float(
             conf if conf is not None else getattr(settings, "CONFIDENCE_THRESHOLD", 0.35)
         )
-        size = int(imgsz if imgsz is not None else (self.live_imgsz() if live
-                     else getattr(settings, "DETECTION_IMGSZ", 960)))
+        if live:
+            with self._state_lock:
+                size, mode = self._active_locked()[:2]
+        else:
+            size = int(imgsz if imgsz is not None else getattr(settings, "DETECTION_IMGSZ", 960))
+            mode = ("auto" if bool(getattr(settings, "ANALYSIS_MULTISCALE", True)) else "single")
         iou = float(getattr(settings, "DETECTION_IOU", 0.45))
         agnostic = bool(getattr(settings, "DETECTION_AGNOSTIC_NMS", True))
         t0 = time.perf_counter()
         try:
+            def _run(image, imgsz_, conf_):
+                return self._predict_raw(model, image, conf_, imgsz_, iou, agnostic)
+
             # One inference at a time keeps CPU usage bounded across cameras.
             with self._infer_lock:
-                results = model.predict(
+                raw, passes = collect_multiscale(
+                    _run,
                     frame,
-                    verbose=False,
                     conf=threshold,
-                    iou=iou,
                     imgsz=size,
-                    device="cpu",
-                    # Only road vehicles are requested, so a person, a bench or
-                    # a shadow can never come back as a "vehicle".
-                    classes=list(VEHICLE_CLASS_IDS.keys()),
-                    # One box per vehicle even when the model hedges between
-                    # car/bus/truck for the same one. Suppression is IoU based,
-                    # so two separate vehicles stay two separate detections.
-                    agnostic_nms=agnostic,
+                    mode=mode,
+                    strips=int(getattr(settings, "DETECTION_STRIPS", 2)),
+                    tile=int(getattr(settings, "DETECTION_TILE", 640)),
+                    max_tiles=int(getattr(settings, "DETECTION_MAX_TILES", 6)),
                 )
         except Exception as exc:
             logger.error(f"[DETECTION] Inference failed: {exc}")
             return []
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         self.last_inference_ms = elapsed_ms
+        self.last_passes = passes
         if live:
             # Only the live loop re-paces itself; a batch analysis job must not
-            # drag the live view's resolution around with its own timings.
+            # drag the live view's quality level around with its own timings.
             self._pace(elapsed_ms)
 
+        # One box per vehicle: model NMS is per class and IoU based, so a
+        # crop-clipped repeat of the same car (IoU ~0.35) survives it. Choosing
+        # between duplicates is all this does - it never edits a rectangle.
+        kept = suppress_duplicates(
+            raw,
+            iou_thr=iou,
+            containment_thr=float(getattr(settings, "DETECTION_CONTAINMENT_THR", 0.60)),
+            containment_area_guard=float(getattr(settings, "DETECTION_CONTAINMENT_AREA_GUARD", 3.0)),
+        )
+
         detections: List[VehicleDetection] = []
-        if not results or results[0].boxes is None:
-            return detections
-        boxes = results[0].boxes
-        xyxy = boxes.xyxy.cpu().numpy()
-        confs = boxes.conf.cpu().numpy()
-        clss = boxes.cls.cpu().numpy()
         h, w = frame.shape[:2]
-        for box, c, k in zip(xyxy, confs, clss):
+        for x1, y1, x2, y2, k, c in kept:
             name = VEHICLE_CLASS_IDS.get(int(k))
             if name is None or float(c) < threshold:
                 continue
             # Clip to the real frame bounds (this only ever *bounds* a box, it
             # never enlarges one) and drop degenerate rectangles.
-            x1 = max(0, min(w - 1, int(box[0])))
-            y1 = max(0, min(h - 1, int(box[1])))
-            x2 = max(x1 + 1, min(w, int(box[2])))
-            y2 = max(y1 + 1, min(h, int(box[3])))
-            if x2 - x1 < 2 or y2 - y1 < 2:
+            ix1 = max(0, min(w - 1, int(x1)))
+            iy1 = max(0, min(h - 1, int(y1)))
+            ix2 = max(ix1 + 1, min(w, int(x2)))
+            iy2 = max(iy1 + 1, min(h, int(y2)))
+            if ix2 - ix1 < 2 or iy2 - iy1 < 2:
                 continue
             detections.append(
                 VehicleDetection(
-                    x1=x1, y1=y1, x2=x2, y2=y2,
+                    x1=ix1, y1=iy1, x2=ix2, y2=iy2,
                     class_name=name, confidence=float(c),
                 )
             )
@@ -304,7 +488,11 @@ class VehicleDetectionService:
 
     # ---------------------------------------------------------------- drawing
     @staticmethod
-    def draw(frame: np.ndarray, detections: List[VehicleDetection]) -> np.ndarray:
+    def draw(
+        frame: np.ndarray,
+        detections: List[VehicleDetection],
+        fill_alpha: Optional[float] = None,
+    ) -> np.ndarray:
         """Draw the model's boxes in green, in place, with OpenCV.
 
         The box drawn here is exactly ``d.x1..d.y2`` clipped to the frame — the
@@ -312,13 +500,15 @@ class VehicleDetectionService:
         and label size follow the frame/box so a distant car does not arrive
         wearing a label bigger than itself.
 
-        ``DETECTION_BOX_FILL_ALPHA > 0`` adds a light tint inside the box only
-        (0.0 = outline only). It used to be 0.55, which painted whole road
-        sections green whenever a box was even slightly generous.
+        The default is outline only - the border marks the vehicle boundary, which
+        is what the reference imagery asks for. ``DETECTION_BOX_FILL_ALPHA`` (or the
+        ``fill_alpha`` argument) adds a tint inside the box; it used to be 0.55,
+        which painted whole road sections green whenever a box was even slightly
+        generous, and a tint is a bad way to make a loose box look intentional.
         """
-        fill_alpha = min(
-            max(float(getattr(settings, "DETECTION_BOX_FILL_ALPHA", 0.18) or 0.0), 0.0), 1.0
-        )
+        if fill_alpha is None:
+            fill_alpha = float(getattr(settings, "DETECTION_BOX_FILL_ALPHA", 0.0) or 0.0)
+        fill_alpha = min(max(float(fill_alpha), 0.0), 1.0)
         h, w = frame.shape[:2]
         # 1-3 px: thin on a phone-sized stream, medium on a 1080p wall.
         thickness = max(1, min(3, int(round(min(h, w) / 360.0))))
@@ -370,15 +560,48 @@ class VehicleDetectionService:
         return frame
 
     # --------------------------------------------------------------- pipeline
-    def annotate(self, camera_id: str, frame: np.ndarray) -> np.ndarray:
-        """Detect (throttled per camera) and draw green boxes on a live frame.
+    def _live_view(self, camera_id: str) -> "_LiveView":
+        key = (camera_id or "").lower()
+        with self._state_lock:
+            view = self._live_views.get(key)
+            if view is None:
+                view = _LiveView(self, key)
+                self._live_views[key] = view
+            return view
 
-        Frames between inference runs re-use the latest real detections so the
-        overlay stays stable at full stream rate. Never raises: any failure
-        returns the frame unchanged so the live view is never interrupted.
+    def annotate(self, camera_id: str, frame: np.ndarray) -> np.ndarray:
+        """Draw the current vehicle boxes on a live frame, without ever slowing
+        the stream down to the speed of the model.
+
+        Inference runs on a background worker per camera (``LIVE_ASYNC_DETECT``):
+        the stream renders the freshest real detections at its own frame rate,
+        and a frame is only handed to the worker when the previous look has
+        finished, so CPU - not the MJPEG loop - sets how deep the detector looks.
+        That is what makes the multi-scale pass affordable on a live view: it
+        buys boxes, and spends detection latency, which is bounded by
+        ``LIVE_BOX_MAX_AGE_MS``. Boxes older than that are dropped rather than
+        shown at the wrong place, and nothing is ever extrapolated: a box you see
+        is a box the model measured on some real frame of this stream.
+
+        With ``LIVE_ASYNC_DETECT=false`` the previous synchronous behaviour is
+        used: detect every Nth frame and replay those boxes in between.
+
+        Never raises - a failure returns the frame unchanged, because an
+        overlay must never be able to kill somebody's camera view.
         """
         if not self.enabled or frame is None or frame.size == 0:
             return frame
+        if not bool(getattr(settings, "LIVE_ASYNC_DETECT", True)):
+            return self._annotate_sync(camera_id, frame)
+        try:
+            view = self._live_view(camera_id)
+            return self.draw(frame, view.frames(frame))
+        except Exception as exc:
+            logger.warning(f"[DETECTION] Live overlay skipped: {exc}")
+            return frame
+
+    def _annotate_sync(self, camera_id: str, frame: np.ndarray) -> np.ndarray:
+        """Synchronous fallback: model every Nth frame, replay in between."""
         every_n = max(1, int(getattr(settings, "DETECTION_EVERY_N_FRAMES", 2)))
         with self._state_lock:
             n = self._frame_counter.get(camera_id, 0)
@@ -388,15 +611,21 @@ class VehicleDetectionService:
             detections = self.detect(frame)
             with self._state_lock:
                 self._last_detections[camera_id] = detections
-        else:
-            detections = cached
-        return self.draw(frame, detections)
+            cached = detections
+        return self.draw(frame, cached)
 
     def forget(self, camera_id: str) -> None:
         """Drop cached state for a camera whose live view has ended."""
+        key = (camera_id or "").lower()
         with self._state_lock:
             self._frame_counter.pop(camera_id, None)
             self._last_detections.pop(camera_id, None)
+            self._last_frame_ms.pop(camera_id, None)
+            view = self._live_views.pop(key, None)
+            view2 = self._live_views.get(camera_id)
+        for v in (view, view2):
+            if v is not None:
+                v.stop()
 
 
 # Global singleton — the model is loaded once per backend process.
