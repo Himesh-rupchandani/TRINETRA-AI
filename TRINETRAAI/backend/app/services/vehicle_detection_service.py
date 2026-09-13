@@ -684,6 +684,20 @@ class VehicleDetectionService:
         for v in views:
             v.stop()
 
+    def stop_all(self) -> None:
+        """Stop every live detection worker (application shutdown).
+
+        Without this a worker thread outlives the app and can be mid-inference
+        during interpreter teardown, which shows up as the classic
+        "terminate called without an active exception" on exit.
+        """
+        for camera_id in list(self._live_views):
+            self.forget(camera_id)
+        with self._state_lock:
+            self._frame_counter.clear()
+            self._last_detections.clear()
+            self._last_detections_at.clear()
+
 
 # Global singleton — the model is loaded once per backend process.
 vehicle_detection_service = VehicleDetectionService()

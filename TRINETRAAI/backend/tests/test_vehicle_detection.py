@@ -234,6 +234,33 @@ class TestAnnotate:
         monkeypatch.setattr(settings, "LIVE_QUALITY", "max")
         assert svc.live_mode() == "strips"
 
+    def test_shutdown_stops_every_camera_worker(self, monkeypatch):
+        """``stop_all`` is what main.py's lifespan calls; it must really be there.
+
+        A rewrite of ``forget`` once swallowed this method and the app still
+        started fine - only the shutdown log showed the workers never stopped,
+        which is the kind of bug that costs someone their afternoon.
+        """
+        import threading
+
+        svc = VehicleDetectionService()
+        monkeypatch.setattr(svc, "detect", lambda frame: _dets())
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+        for cam in ("cam-a", "cam-b", "cam-c"):
+            svc.annotate(cam, frame.copy())
+        assert len(svc._live_views) == 3
+        before = {id(v._thread) for v in svc._live_views.values()}
+        assert threading.active_count() >= len(before)
+
+        svc.stop_all()
+
+        assert svc._live_views == {}, "views must be released"
+        for tid in before:
+            alive = [t for t in threading.enumerate() if t.ident == tid and t.is_alive()]
+            assert not alive, "a live detection worker outlived stop_all()"
+        # and it is safe to call again with nothing running
+        svc.stop_all()
+
     def test_the_staleness_window_follows_the_detectors_cadence(self, monkeypatch):
         """A deep pass must not make the overlay flicker; a stalled one must go.
 
