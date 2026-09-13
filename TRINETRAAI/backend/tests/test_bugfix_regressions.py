@@ -112,7 +112,7 @@ def upload_env(tmp_path_factory):
     )
     saved_ocr = (ocr_service.read_plate, ocr_service._engine, ocr_service._attempted)
 
-    def fake_detect(frame):
+    def fake_detect(frame, conf=None, imgsz=None):
         h, w = frame.shape[:2]
         return [
             VehicleDetection(

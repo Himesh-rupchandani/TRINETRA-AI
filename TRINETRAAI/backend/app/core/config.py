@@ -38,14 +38,28 @@ class Settings(BaseSettings):
     VEHICLE_DETECTION_ENABLED: bool = True
     DETECTION_IMGSZ: int = 640            # inference resolution (speed vs accuracy)
     DETECTION_EVERY_N_FRAMES: int = 2     # run the model every Nth live frame
-    # NMS IoU used by the detector. Ultralytics' default is 0.7; 0.55 separates
-    # overlapping vehicles in dense traffic without dropping real boxes.
-    DETECTION_IOU: float = 0.55
-    # When AI detection is ON, each detected vehicle is COVERED with a
-    # semi-transparent green box fill (OpenCV), not just a thin outline —
-    # matching the reference look where the whole vehicle reads as green.
-    # 0.0 = outline only (old look); 1.0 = solid green.
-    DETECTION_BOX_FILL_ALPHA: float = 0.55
+    # NMS IoU used by the detector. Ultralytics' default is 0.7, which let one
+    # motorcycle be boxed two or three times over; 0.45 keeps the best box per
+    # vehicle while still separating genuinely adjacent vehicles (their mutual
+    # IoU is far below 0.45, so two neighbouring cars never merge into one box).
+    DETECTION_IOU: float = 0.45
+    # Class-agnostic NMS: one vehicle gets ONE box even when the model hedges
+    # between labels (car vs bus vs truck for the same vehicle). Suppression is
+    # still IoU-based, so separate vehicles are never merged by this.
+    DETECTION_AGNOSTIC_NMS: bool = True
+    # A very light tint inside the box (0.0 = pure outline). The previous 0.55
+    # painted every vehicle solid green, which made even honest padding read as
+    # "a huge green area over the road" — the exact complaint the tightening
+    # below is meant to remove.
+    DETECTION_BOX_FILL_ALPHA: float = 0.18
+    # ---- Offline video analysis (uploads / Drive): quality over latency -----
+    # A larger inference size is what separates parked vehicles that overlap in
+    # the frame and finds the small distant ones. Measured on this repo's own
+    # traffic stills with the same weight: a night traffic scene went from 0
+    # vehicles at imgsz 640 to 27 at 960, mean box area 3.8% -> 2.2% of the
+    # frame, duplicate boxes on one vehicle ~0. Live view keeps 640 for latency.
+    ANALYSIS_CONFIDENCE_THRESHOLD: float = 0.35
+    ANALYSIS_DETECTION_IMGSZ: int = 960
 
     # ---- Number-plate detection (new pipeline stage) ----
     # A fine-tuned plate detector produced by training/train_plate_detector.py.

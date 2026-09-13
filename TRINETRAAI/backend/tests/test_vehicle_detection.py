@@ -72,11 +72,13 @@ class TestDraw:
         VehicleDetectionService.draw(frame, [])
         assert _green_pixels(frame) == 0
 
-    def test_vehicle_is_covered_by_green_fill(self):
+    def test_vehicle_is_covered_by_green_fill(self, monkeypatch):
         """With DETECTION_BOX_FILL_ALPHA > 0 the box interior (the vehicle
-        itself) is covered by a semi-transparent green layer: the green
-        channel dominates clearly over red/blue and differs from the
-        original grey frame."""
+        itself) carries a semi-transparent green layer: the green channel
+        dominates clearly over red/blue and differs from the original grey
+        frame. The alpha is pinned here because the shipped default is a light
+        tint on purpose (see test_default_fill_is_a_light_tint)."""
+        monkeypatch.setattr(settings, "DETECTION_BOX_FILL_ALPHA", 0.55)
         frame = np.full((360, 640, 3), 128, dtype=np.uint8)
         VehicleDetectionService.draw(frame, [_dets()[0]])  # box (50,50)-(200,150)
         b, g, r = (int(v) for v in frame[100, 120])
@@ -84,6 +86,39 @@ class TestDraw:
         assert g - r > 40 and g - b > 40, f"green not dominant: BGR=({b},{g},{r})"
         assert (b, g, r) != (128, 128, 128), "frame unchanged — no fill applied"
         assert (b, g, r) != (0, 255, 0), "fill must be semi-transparent, not solid green"
+
+    def test_overlapping_boxes_do_not_stack_the_tint(self, monkeypatch):
+        """Neighbouring vehicles whose boxes touch must not darken into a green
+        wall: the tint is applied once per pixel, not once per box."""
+        monkeypatch.setattr(settings, "DETECTION_BOX_FILL_ALPHA", 0.4)
+        frame = np.full((360, 640, 3), 128, dtype=np.uint8)
+        single = frame.copy()
+        both = frame.copy()
+        VehicleDetectionService.draw(single, [VehicleDetection(50, 50, 300, 250, "car", 0.9)])
+        VehicleDetectionService.draw(
+            both,
+            [VehicleDetection(50, 50, 300, 250, "car", 0.9),
+             VehicleDetection(200, 100, 450, 300, "car", 0.8)],   # overlaps the first
+        )
+        # a pixel covered by both boxes must look exactly like a singly covered one
+        assert tuple(int(v) for v in both[120, 250]) == tuple(int(v) for v in single[120, 250])
+
+    def test_default_fill_is_a_light_tint(self):
+        """The shipped overlay must not paint the vehicle (let alone the road)
+        solid green: the default is a light tint, and the box border — which is
+        what has to sit on the vehicle boundary — stays fully green."""
+        assert 0.0 <= float(settings.DETECTION_BOX_FILL_ALPHA) <= 0.25
+        frame = np.full((360, 640, 3), 128, dtype=np.uint8)
+        VehicleDetectionService.draw(frame, [_dets()[0]])
+        b, g, r = (int(v) for v in frame[100, 120])
+        assert (g - r) < 90, f"interior too heavily covered: BGR=({b},{g},{r})"
+        assert tuple(frame[50, 100]) == (0, 255, 0)
+
+    def test_label_never_escapes_the_frame(self):
+        """A box at the right/top edge must not draw its tag outside the frame."""
+        frame = np.full((360, 640, 3), 128, dtype=np.uint8)
+        VehicleDetectionService.draw(frame, [VehicleDetection(560, 0, 639, 60, "car", 0.91)])
+        assert frame[:, 639].max() >= 200  # green pixels clamped inside, no crash
 
     def test_fill_alpha_zero_keeps_outline_only(self, monkeypatch):
         monkeypatch.setattr(settings, "DETECTION_BOX_FILL_ALPHA", 0.0)
@@ -166,6 +201,63 @@ class TestDetectPostProcessing:
         names = sorted(d.class_name for d in dets)
         assert names == ["bus", "car"]
         assert all(d.confidence >= settings.CONFIDENCE_THRESHOLD for d in dets)
+
+    def test_boxes_are_clipped_to_the_frame_by_the_detector(self):
+        """detect() may bound a box to the frame, never grow it.
+
+        This is the whole 'tight box' contract in one test: a rectangle that
+        overflows is truncated to the frame, and a rectangle that fits is
+        returned byte-for-byte as the model produced it — no padding, no
+        shrink-by-a-factor, no re-centring.
+        """
+        svc = VehicleDetectionService()
+        svc._model = self._fake_model(
+            [[-30.0, -20.0, 900.0, 500.0], [100, 100, 180, 160]],
+            [0.9, 0.8],
+            [2, 7],
+        )
+        dets = svc.detect(np.zeros((360, 640, 3), dtype=np.uint8))
+        assert len(dets) == 2
+        for d in dets:
+            assert 0 <= d.x1 < d.x2 <= 640
+            assert 0 <= d.y1 < d.y2 <= 360
+        assert (dets[0].x1, dets[0].y1, dets[0].x2, dets[0].y2) == (0, 0, 640, 360)
+        assert (dets[1].x1, dets[1].y1, dets[1].x2, dets[1].y2) == (100, 100, 180, 160)
+
+    def test_tuning_is_passed_to_the_model_not_applied_to_the_boxes(self, monkeypatch):
+        """conf / iou / imgsz / agnostic NMS go to the model; the boxes themselves
+        are never post-processed. Inverting the box order also proves degenerate
+        rectangles cannot reach the caller."""
+        import torch
+
+        seen = {}
+
+        class FakeBoxes:
+            xyxy = torch.tensor([[10.0, 10.0, 90.0, 90.0], [5.0, 5.0, 4.0, 4.0]])
+            conf = torch.tensor([0.9, 0.9])
+            cls = torch.tensor([2.0, 2.0])
+
+        class FakeModel:
+            def predict(self, frame, **kw):
+                seen.update(kw)
+                return [SimpleNamespace(boxes=FakeBoxes())]
+
+        monkeypatch.setattr(settings, "DETECTION_IOU", 0.45)
+        monkeypatch.setattr(settings, "DETECTION_AGNOSTIC_NMS", True)
+        svc = VehicleDetectionService()
+        svc._model = FakeModel()
+        dets = svc.detect(np.zeros((360, 640, 3), dtype=np.uint8), conf=0.33, imgsz=960)
+        assert seen["conf"] == 0.33 and seen["imgsz"] == 960
+        assert seen["iou"] == 0.45 and seen["agnostic_nms"] is True
+        assert seen["classes"] == [2, 3, 5, 7]      # vehicle classes only
+        assert len(dets) == 1                        # the 4x4-px artifact dropped
+        assert [d.class_name for d in dets] == ["car"]
+
+    def test_analysis_pipeline_asks_for_the_tighter_settings(self):
+        """The offline video pass must run the detector at the ANALYSIS_*
+        settings; the live view keeps the latency-friendly ones."""
+        assert float(settings.ANALYSIS_DETECTION_IMGSZ) >= 832
+        assert float(settings.ANALYSIS_CONFIDENCE_THRESHOLD) <= 0.45
 
 
 # ============================================================================

@@ -173,6 +173,7 @@ def _ondemand_detector(settings):
                 conf_threshold=0.35,
                 imgsz=416,
                 device="cpu",
+                nms_iou=getattr(settings, "nms_iou", 0.45),
             )
         return _ONDEMAND_DETECTOR
 
@@ -446,6 +447,7 @@ def run_feed(camera_id: str, cfg: dict, settings: Settings, annotate_feed: bool)
         conf_threshold=settings.conf_threshold,
         imgsz=settings.inference_imgsz,
         device=settings.device,
+        nms_iou=settings.nms_iou,
     )
     backend = BackendClient(
         base_url=settings.backend_base_url,

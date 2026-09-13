@@ -64,8 +64,12 @@ def _camera_of(video_path: str) -> str:
     return Path(video_path).stem.upper()
 
 
-def _fake_detect(frame):
-    """One steadily moving vehicle — enough for the tracker to hold one id."""
+def _fake_detect(frame, conf=None, imgsz=None):
+    """One steadily moving vehicle — enough for the tracker to hold one id.
+
+    `conf`/`imgsz` are the offline-analysis overrides the pipeline passes to the
+    detector; the stub accepts and ignores them.
+    """
     h, w = frame.shape[:2]
     x1 = 40
     return [VehicleDetection(x1=x1, y1=60, x2=min(w - 1, x1 + 180), y2=min(h - 1, 180),

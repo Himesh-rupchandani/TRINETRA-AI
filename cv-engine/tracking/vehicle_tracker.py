@@ -130,11 +130,17 @@ class _TrackState:
     __slots__ = (
         "track_id", "kf", "cls", "conf", "hits", "frames",
         "first_pts", "last_pts", "since_update_ms", "camera_id",
+        "det_bbox",
     )
 
     def __init__(self, track_id, bbox, cls, conf, pts_ms, camera_id):
         self.track_id = track_id
         self.kf = _KalmanBox(bbox)
+        # The detector's own rectangle for this track's latest real measurement.
+        # It is what the track reports when it WAS seen this frame — see
+        # `_report()` — so a smoothed/predicted box can never grow past the
+        # vehicle the model actually boxed.
+        self.det_bbox = [float(v) for v in bbox]
         self.cls = cls
         self.conf = conf
         self.hits = 1
@@ -234,6 +240,7 @@ class VehicleTracker:
                 tr = self._tracks[ti]
                 d = dets[det_i]
                 tr.kf.update(d.bbox)
+                tr.det_bbox = [float(v) for v in d.bbox]
                 tr.cls = d.class_name
                 tr.conf = float(d.confidence)
                 tr.hits += 1
@@ -277,7 +284,7 @@ class VehicleTracker:
                 out.append(
                     Track(
                         track_id=t.track_id,
-                        bbox=t.kf.bbox(),
+                        bbox=self._report(t),
                         class_name=t.cls,
                         confidence=t.conf,
                         camera_id=t.camera_id,
@@ -290,6 +297,19 @@ class VehicleTracker:
                 )
         return out
 
+    @staticmethod
+    def _report(t: _TrackState) -> List[float]:
+        """The rectangle to show/store for one track.
+
+        A track that matched a detection *this frame* reports the detector's
+        box verbatim — that is the tight, true box around the vehicle. The
+        Kalman estimate is only used to bridge frames where the detector did
+        not see the vehicle (occlusion / flicker), which is what tracking is
+        for; it must not be allowed to inflate a box that has a real
+        measurement available.
+        """
+        return list(t.det_bbox) if t.since_update_ms <= 0.0 else t.kf.bbox()
+
     # ------------------------------------------------------------------
     def lost_tracks(self, pts_ms: Optional[float] = None) -> List[Track]:
         """Tracks currently unmatched this frame (for event-on-loss logic)."""
@@ -299,7 +319,7 @@ class VehicleTracker:
                 out.append(
                     Track(
                         track_id=t.track_id,
-                        bbox=t.kf.bbox(),
+                        bbox=self._report(t),
                         class_name=t.cls,
                         confidence=t.conf,
                         camera_id=t.camera_id,

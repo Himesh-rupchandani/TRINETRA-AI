@@ -21,13 +21,14 @@ def process_image(
     output_dir: Path,
     plates_dir: Path,
     conf: float,
+    imgsz: int = 960,
 ):
     image = cv2.imread(str(image_path))
     if image is None:
         print(f"[Warning] Could not read image: {image_path}")
         return
 
-    detections = detector.detect(image, conf=conf)
+    detections = detector.detect(image, conf=conf, imgsz=imgsz)
     vehicles = detector.filter_by_class(detections, "vehicle")
     plates = detector.filter_by_class(detections, "number_plate")
 
@@ -70,8 +71,25 @@ def main():
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.25,
-        help="Confidence threshold (default: 0.25)",
+        default=0.35,
+        help="Confidence threshold (default: 0.35)",
+    )
+    parser.add_argument(
+        "--iou",
+        type=float,
+        default=0.45,
+        help="NMS IoU threshold (default: 0.45) - removes double boxes",
+    )
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=960,
+        help="Inference resolution (default: 960; small/distant vehicles need it)",
+    )
+    parser.add_argument(
+        "--vehicle-model",
+        default=None,
+        help="Per-class weight for VEHICLE boxes ('none' = keep using --model)",
     )
     parser.add_argument(
         "--output-dir",
@@ -104,13 +122,22 @@ def main():
     print(f"  Input       : {input_path}")
     print(f"  Model       : {model_path}")
     print(f"  Confidence  : {args.conf}")
+    print(f"  NMS IoU     : {args.iou}")
+    print(f"  Img size    : {args.imgsz}")
     print("=" * 65)
 
-    detector = VehiclePlateDetector(model_path=str(model_path), conf_threshold=args.conf)
+    detector = VehiclePlateDetector(
+        model_path=str(model_path),
+        conf_threshold=args.conf,
+        iou_threshold=args.iou,
+        imgsz=args.imgsz,
+        vehicle_model_path=args.vehicle_model,
+    )
+    print(f"  Vehicle wt  : {detector.vehicle_model_path or model_path}")
 
     valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
     if input_path.is_file():
-        process_image(input_path, detector, output_dir, plates_dir, args.conf)
+        process_image(input_path, detector, output_dir, plates_dir, args.conf, args.imgsz)
     else:
         images = [p for p in input_path.iterdir() if p.suffix.lower() in valid_extensions]
         if not images:
@@ -118,7 +145,7 @@ def main():
             sys.exit(0)
         print(f"Found {len(images)} image(s) to process...")
         for img_path in images:
-            process_image(img_path, detector, output_dir, plates_dir, args.conf)
+            process_image(img_path, detector, output_dir, plates_dir, args.conf, args.imgsz)
 
     print("\n" + "=" * 65)
     print(f"  COMPLETED! Annotated outputs saved to: {output_dir}")

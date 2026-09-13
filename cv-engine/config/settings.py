@@ -61,6 +61,9 @@ class Settings:
     model_path: str = "yolo11s.pt"
     conf_threshold: float = 0.35
     inference_imgsz: int = 640
+    # NMS IoU for the detector (see detection/vehicle_detector.py). Kept well
+    # under Ultralytics' 0.7 default so one vehicle is not boxed repeatedly.
+    nms_iou: float = 0.45
     device: str = "cpu"  # "cpu" | "cuda" | "0" ...
 
     # --- Capture / pacing -------------------------------------------------
@@ -128,6 +131,7 @@ class Settings:
             model_path=_env_str("MODEL_PATH", "yolo11s.pt"),
             conf_threshold=_env_float("CONF_THRESHOLD", 0.35),
             inference_imgsz=_env_int("INFERENCE_IMGSZ", 640),
+            nms_iou=_env_float("NMS_IOU_THRESHOLD", 0.45),
             device=_env_str("CV_DEVICE", "cpu"),
             frame_skip=_env_int("FRAME_SKIP", 1),
             process_interval_ms=_env_float("PROCESS_INTERVAL_MS", 0.0),

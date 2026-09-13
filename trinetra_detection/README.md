@@ -68,10 +68,15 @@ Yeh automatically sample images par detection run karega aur results `outputs/` 
    python detect_image.py --input path/to/your/car.jpg
    ```
 
-3. **Confidence threshold change karna (default 0.25):**
+3. **Confidence / NMS / resolution tune karna:**
    ```bash
-   python detect_image.py --input sample_data --conf 0.35
+   python detect_image.py --input sample_data --conf 0.35 --iou 0.45 --imgsz 960
    ```
+   - `--conf` (default **0.35**) — neeche ka value background/pedestrian par
+     false `vehicle` boxes banata hai.
+   - `--iou` (default **0.45**) — ek hi vehicle par duplicate boxes hatata hai.
+   - `--imgsz` (default **960**) — door/parked vehicles alag-alag box paate hain.
+   - `--vehicle-model none` — vehicle boxes bhi `--model` se hi (purana behaviour).
 
 **Output:**
 - Annotated images: `outputs/annotated_images/`
@@ -87,13 +92,27 @@ python detect_video.py --video "path/to/your_video.mp4"
 
 **Custom Options (Optional):**
 ```bash
-python detect_video.py --video my_video.mp4 --conf 0.30 --stride 2 --output-video outputs/my_result.mp4
+python detect_video.py --video my_video.mp4 --conf 0.35 --iou 0.45 --imgsz 960     --stride 2 --output-video outputs/my_result.mp4
 ```
 - `--video` : Input video path (Required)
-- `--conf` : Confidence threshold (default `0.25`)
+- `--conf` : Confidence threshold (default `0.35`)
+- `--iou` : NMS IoU threshold (default `0.45`) — duplicate boxes per vehicle
+- `--imgsz` : Inference resolution (default `960`) — tight boxes for small/distant vehicles
+- `--vehicle-model` : Vehicle boxes ka weight (`none` = sirf `--model`)
 - `--stride` : Frame stride (default `2`, e.g. 60fps video ko 30fps par process karega)
 - `--max-frames` : Sirf pehle N frames test karne ke liye (e.g. `--max-frames 300`)
 - `--output-video` : Annotated output video save karne ka path
+
+> **Vehicle boxes ka model (zaroori note):** har box ka rectangle model ke
+> apne `xyxy` se aata hai — koi padding, fixed size ya manual shrink nahi.
+> Isliye *tight* boxes ke liye vehicle boxes ek **per-class** weight se nikalte
+> hain (`car / motorcycle / bus / truck`: repo ka `TRINETRAAI/backend/yolo11s.pt`,
+> warna `models/yolo11n.pt`), aur `best.pt` ka `vehicle` class sirf tab use hota
+> hai jab koi per-class weight na mile. Wajah: `best.pt` ek single coarse
+> `vehicle` class par train hua hai, jisme paas-paas khade 3-4 bikes ek hi
+> label ban jaate hain — measured: ek box ne 1280x720 frame ka **74.9%** cover
+> kiya tha. Number-plate class (aur plate crops) unchanged `best.pt` se hi aate
+> hain, `conf 0.25 @ imgsz 640` par — ANPR behaviour badalta hi nahi hai.
 
 ---
 
@@ -125,8 +144,9 @@ import cv2
 from core.detector import VehiclePlateDetector
 from core.visualizer import Visualizer
 
-# 1. Initialize Detector
-detector = VehiclePlateDetector(model_path="models/best.pt", conf_threshold=0.25)
+# 1. Initialize Detector (vehicle boxes: per-class weight; plate boxes: best.pt)
+detector = VehiclePlateDetector(model_path="models/best.pt", conf_threshold=0.35,
+                                iou_threshold=0.45, imgsz=960)
 
 # 2. Load any image
 image = cv2.imread("sample_data/sample_1.jpg")
@@ -155,6 +175,9 @@ cv2.imwrite("annotated.jpg", annotated)
 - **Classes**:
   - `0`: `vehicle` (Cars, SUVs, Bikes, Buses, Trucks)
   - `1`: `number_plate` (High-precision license plate bounding box)
+- **Vehicle boxes at runtime**: ek per-class COCO YOLO11 weight (`yolo11s` /
+  `yolo11n`) — class ids `2 car, 3 motorcycle, 5 bus, 7 truck` — jab tak ki
+  `--vehicle-model none` na ho. Plates hamesha `best.pt` se.
 - **Formats Included**:
   - PyTorch weights: `models/best.pt` (PyTorch / GPU / CPU inference)
   - ONNX weights: `models/best.onnx` (Cross-platform inference)

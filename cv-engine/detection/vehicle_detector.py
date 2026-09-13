@@ -58,11 +58,17 @@ class VehicleDetector:
         imgsz: int = 640,
         device: str = "cpu",
         include_bicycles: bool = False,
+        nms_iou: float = 0.45,
     ):
         self.model_path = model_path
         self.conf_threshold = conf_threshold
         self.imgsz = imgsz
         self.device = device
+        # NMS IoU. Left unset here the model used Ultralytics' default 0.7, which
+        # leaves two or three boxes on a single vehicle; 0.45 keeps the best one
+        # per vehicle. Neighbouring vehicles are unaffected (their mutual IoU is
+        # far below 0.45), so no two vehicles are ever merged into one box.
+        self.nms_iou = nms_iou
         self.class_ids = sorted(
             list(VEHICLE_CLASS_IDS.keys()) + ([1] if include_bicycles else [])
         )
@@ -99,9 +105,14 @@ class VehicleDetector:
                 frame,
                 verbose=False,
                 conf=self.conf_threshold,
+                iou=self.nms_iou,
                 imgsz=self.imgsz,
                 device=self.device,
+                # Vehicle classes only — never a person/bench/shadow.
                 classes=self.class_ids,
+                # One vehicle -> one box, even when the model hedges between
+                # car / bus / truck for the same vehicle.
+                agnostic_nms=True,
             )
         except Exception as exc:
             logger.error("[DETECTOR] inference failed: %s", exc)
@@ -120,6 +131,7 @@ class VehicleDetector:
         confs = r.boxes.conf.cpu().numpy() if hasattr(r.boxes.conf, "cpu") else np.asarray(r.boxes.conf)
         clss = r.boxes.cls.cpu().numpy() if hasattr(r.boxes.cls, "cpu") else np.asarray(r.boxes.cls)
 
+        frame_h, frame_w = frame.shape[:2]
         for box, conf, cls in zip(boxes, confs, clss):
             cls_id = int(cls)
             name = VEHICLE_CLASS_IDS.get(cls_id)
@@ -127,9 +139,19 @@ class VehicleDetector:
                 name = class_name_for(cls_id)
             if name is None:
                 continue
+            # The model's own rectangle, clipped to the frame. Ultralytics has
+            # already undone its letterbox/padding internally, so the values in
+            # `r.boxes.xyxy` are in this exact array's pixel space: rescaling
+            # them again here is the classic way to *create* oversized boxes.
+            x1 = max(0.0, min(float(frame_w) - 1.0, float(box[0])))
+            y1 = max(0.0, min(float(frame_h) - 1.0, float(box[1])))
+            x2 = max(x1 + 1.0, min(float(frame_w), float(box[2])))
+            y2 = max(y1 + 1.0, min(float(frame_h), float(box[3])))
+            if x2 - x1 < 2.0 or y2 - y1 < 2.0:
+                continue
             detections.append(
                 Detection(
-                    bbox=[float(box[0]), float(box[1]), float(box[2]), float(box[3])],
+                    bbox=[x1, y1, x2, y2],
                     class_name=name,
                     confidence=float(conf),
                     camera_id=camera_id,

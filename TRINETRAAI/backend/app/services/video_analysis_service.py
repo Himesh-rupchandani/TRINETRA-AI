@@ -573,7 +573,15 @@ def _run_video(video_id: str) -> None:
             offset_sec = frame_idx / fps
             if frame_idx % every_n == 0:
                 analyzed += 1
-                detections = vehicle_detection_service.detect(frame)
+                # Offline pass: stricter box geometry (bigger inference size)
+                # than the live view, which is latency bound. See ANALYSIS_*
+                # settings — this is what keeps the green boxes on the vehicle
+                # instead of on the vehicle plus its neighbours.
+                detections = vehicle_detection_service.detect(
+                    frame,
+                    conf=float(getattr(settings, "ANALYSIS_CONFIDENCE_THRESHOLD", 0.35)),
+                    imgsz=int(getattr(settings, "ANALYSIS_DETECTION_IMGSZ", 960)),
+                )
                 live, retired = tracker.update(
                     [(d.x1, d.y1, d.x2, d.y2, d.class_name, d.confidence) for d in detections]
                 )

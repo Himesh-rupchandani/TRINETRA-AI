@@ -20,8 +20,15 @@ def main():
     parser = argparse.ArgumentParser(description="Trinetra AI Live Webcam Detection")
     parser.add_argument("--source", default="0", help="Camera index (0, 1) or video/RTSP URL")
     parser.add_argument("--model", default="models/best.pt", help="Path to YOLO weights")
-    parser.add_argument("--conf", type=float, default=0.30, help="Confidence threshold")
-    parser.add_argument("--imgsz", type=int, default=640, help="Inference image size")
+    parser.add_argument("--conf", type=float, default=0.35,
+                        help="Confidence threshold")
+    parser.add_argument("--iou", type=float, default=0.45,
+                        help="NMS IoU threshold (double-box suppression)")
+    parser.add_argument("--imgsz", type=int, default=640,
+                        help="Inference image size (640 keeps the live loop fast; "
+                             "raise to 960 on a strong machine for distant vehicles)")
+    parser.add_argument("--vehicle-model", default=None,
+                        help="Per-class weight for VEHICLE boxes ('none' = keep --model)")
     args = parser.parse_args()
 
     # Determine camera source
@@ -36,10 +43,18 @@ def main():
     print(f"  Source     : {src}")
     print(f"  Model      : {model_path}")
     print(f"  Confidence : {args.conf}")
+    print(f"  NMS IoU    : {args.iou}")
+    print(f"  Vehicle wt : {detector.vehicle_model_path or model_path}")
     print("  Controls   : Press 'q' to Quit | Press 's' to Save Snapshot")
     print("=" * 65)
 
-    detector = VehiclePlateDetector(model_path=model_path, conf_threshold=args.conf)
+    detector = VehiclePlateDetector(
+        model_path=model_path,
+        conf_threshold=args.conf,
+        iou_threshold=args.iou,
+        imgsz=args.imgsz,
+        vehicle_model_path=args.vehicle_model,
+    )
 
     cap = cv2.VideoCapture(src)
     if not cap.isOpened():

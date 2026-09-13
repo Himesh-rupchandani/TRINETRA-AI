@@ -83,6 +83,7 @@ def run_live(args, settings: Settings):
         conf_threshold=settings.conf_threshold,
         imgsz=settings.inference_imgsz,
         device=settings.device,
+        nms_iou=settings.nms_iou,
     )
     detector.warmup()
     ocr = OcrEngine(gpu=settings.device != "cpu") if settings.anpr_enabled else None
