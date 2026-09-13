@@ -46,6 +46,8 @@ class CameraManager:
         self._live_signal: Dict[str, float] = {}
         self._lock = threading.RLock()
         self._pipeline_callback: Optional[Callable[[FramePacket], None]] = None
+        # camera_id -> (monotonic time, jpeg bytes) for grid thumbnails
+        self._snapshot_cache: Dict[str, tuple] = {}
 
     def _note_live_signal(self, camera_id: str) -> None:
         key = (camera_id or "").lower()
@@ -230,10 +232,62 @@ class CameraManager:
                 return self._latest_packets[camera_id].frame.copy()
             return None
 
+    def snapshot_jpeg(self, camera_id: str, quality: int = 78) -> Optional[bytes]:
+        """One JPEG for a grid thumbnail - deliberately not a stream.
+
+        Order of preference: (1) a frame a resident worker already delivered,
+        which costs nothing; (2) for a file-backed source, exactly one frame
+        decoded on demand and cached very briefly.
+
+        A network camera with no running worker is NOT opened for a thumbnail.
+        A grid of thirty tiles asking for thirty RTSP opens every refresh is how
+        a control room loses its cameras, so those tiles keep their placeholder -
+        honest emptiness beats a picture that cost the stream to produce.
+
+        ``None`` means "there is no picture to show", and the caller answers 204.
+        """
+        key = (camera_id or "").lower()
+        frame = self.get_latest_frame(key, annotated=False) or self.get_latest_frame(camera_id, annotated=False)
+        now = time.monotonic()
+        if frame is None:
+            with self._lock:
+                hit = self._snapshot_cache.get(key)
+            if hit and now - hit[0] < self.SNAPSHOT_MIN_INTERVAL_SEC:
+                return hit[1]
+            resolved = self._ondemand_source(key)
+            if resolved is None or not resolved[1]:
+                return None          # no worker frame, and not a recording: leave it
+            source, _is_file = resolved
+            cap = self._open_ondemand_capture(source)
+            try:
+                frame = self._read_ondemand_frame(cap, source)
+            finally:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+            if frame is None:
+                return None
+        try:
+            ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+        except Exception as exc:                       # a bad frame must not 500 a grid
+            logger.warning(f"[{key.upper()}] snapshot encode failed: {exc}")
+            return None
+        if not ok:
+            return None
+        data = buf.tobytes()
+        with self._lock:
+            self._snapshot_cache[key] = (time.monotonic(), data)
+        return data
+
     def get_latest_packet(self, camera_id: str) -> Optional[FramePacket]:
         """Get the latest ingested FramePacket for a camera."""
         with self._lock:
             return self._latest_packets.get(camera_id)
+
+    # Thumbnails are re-decoded at most this often per camera, however often a
+    # grid refreshes, so a wall display cannot turn into a decoding backlog.
+    SNAPSHOT_MIN_INTERVAL_SEC = 2.0
 
     # Stream types openable on demand for a live view. Files are local
     # recordings (stamped as demo footage); rtsp/hls are real network cams.

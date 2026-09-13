@@ -13,7 +13,7 @@ if __name__ == "__main__" and not __package__:
     __package__ = "backend.app.api"
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
@@ -168,6 +168,36 @@ def create_camera(payload: CameraCreate, db: Session = Depends(get_db)):
         auto_start=True,
     )
     return new_cam
+
+
+@router.get(
+    "/{camera_id}/snapshot",
+    summary="Latest single frame as a JPEG (grid thumbnail)",
+    description=(
+        "One frame for a camera tile: whatever a live worker already delivered, "
+        "or one frame decoded from a recording. Never opens a network stream, "
+        "and answers 204 when there is genuinely no picture - the UI then shows "
+        "its placeholder instead of an invented image."
+    ),
+)
+def camera_snapshot(camera_id: str, db: Session = Depends(get_db)):
+    cam = (
+        db.query(Camera)
+        .filter(func.upper(Camera.camera_id) == camera_id.strip().upper())
+        .first()
+    )
+    if cam is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Camera '{camera_id}' not found.")
+    jpg = camera_manager.snapshot_jpeg(cam.camera_id)
+    if not jpg:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    # no-store: a thumbnail that a browser caches forever is a still photo of a
+    # live scene, which is the exact confusion this screen must avoid.
+    return Response(
+        content=jpg,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @router.get("/{camera_id}", response_model=CameraItem, summary="Get camera by ID")

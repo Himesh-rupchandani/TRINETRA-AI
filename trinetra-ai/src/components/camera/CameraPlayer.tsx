@@ -66,7 +66,10 @@ export function CameraPlayer({
   // this camera (OpenCV + YOLO, green boxes) it is shown instead of the raw
   // feed. The operator can switch back to the raw stream at any time, and any
   // failure of the detection view silently falls back to the raw feed.
-  const [aiBoxes, setAiBoxes] = useState(true);
+  // Off by default: the operator opens a camera to see the road, not to see the
+  // model's opinion of it. Boxes are one click away, and the button says which
+  // state is live, so nothing is hidden and nothing is assumed.
+  const [aiBoxes, setAiBoxes] = useState(false);
   const [detectionFailed, setDetectionFailed] = useState(false);
   const detectionActive = aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
   const useImg = isMjpeg || detectionActive;

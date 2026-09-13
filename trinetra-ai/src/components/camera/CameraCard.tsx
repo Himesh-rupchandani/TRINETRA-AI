@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Car, MapPin, Maximize2, Video } from 'lucide-react';
 import type { Camera } from '@/types';
@@ -16,15 +16,50 @@ interface Props {
 }
 
 /**
+ * One-frame preview for a tile, never a mounted stream.
+ *
+ * The backend answers with whatever a live worker already decoded, or with one
+ * frame from a recording, and 204 when there is no picture to offer; opening a
+ * network stream for a thumbnail is refused there on purpose. So a grid of
+ * thirty tiles costs thirty cached JPEG fetches, not thirty ffmpeg sessions.
+ * Refresh stops for good the moment a camera proves it has nothing to show -
+ * no retry storm against a dead feed - and pauses while the tab is hidden.
+ */
+const THUMB_REFRESH_MS = 8000;
+
+function useTileSnapshot(camera: Camera): { src: string; onError: () => void } | null {
+  const [tick, setTick] = useState(0);
+  const [givenUp, setGivenUp] = useState(false);
+  const eligible = !config.useMocks && !givenUp && camera.status !== 'NOT_CONFIGURED';
+  useEffect(() => {
+    if (!eligible) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') setTick((v) => v + 1);
+    }, THUMB_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [eligible]);
+  if (!eligible) return null;
+  const url = `${config.apiBaseUrl}/cameras/${encodeURIComponent(camera.id)}/snapshot`;
+  // the query only breaks the browser's own caching; the route sends no-store
+  return { src: `${url}?t=${tick}`, onError: () => setGivenUp(true) };
+}
+
+/**
  * Registry card. Deliberately does NOT mount a stream — feeds are only
- * loaded when an operator explicitly opens one (see performance notes).
- * In demo mode a clearly-labelled synthetic preview is shown instead.
+ * loaded when an operator explicitly opens one (see performance notes). What it
+ * does show is the single latest frame, so an operator can pick the right
+ * camera from the grid instead of opening thirty of them. In demo mode a
+ * clearly-labelled synthetic preview is shown instead.
  */
 export const CameraCard = memo(function CameraCard({ camera, onView, compact, selected, variant = 'card' }: Props) {
   const preview = useMemo(
     () => (config.useMocks ? cameraStill(camera.id) : null),
     [camera.id],
   );
+  // real mode: the backend's one-frame snapshot; mock mode: the labelled still
+  const live = useTileSnapshot(camera);
+  const thumb = preview ?? live?.src ?? null;
+  const onThumbError = preview ? hideBrokenImage : (live?.onError ?? hideBrokenImage);
 
   if (variant === 'list') {
     return (
@@ -37,11 +72,11 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
       >
         <span className="relative grid h-12 w-[76px] shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-surface-2 text-ink-faint">
           <Video size={16} aria-hidden />
-          {preview && (
+          {thumb && (
             <img
-              src={preview}
+              src={thumb}
               alt=""
-              onError={hideBrokenImage}
+              onError={onThumbError}
               className="absolute inset-0 h-full w-full object-cover"
               loading="lazy"
             />
@@ -72,11 +107,11 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
           <div className="grid aspect-video w-full place-items-center border-b border-line bg-surface-2 text-ink-faint">
             <Video size={18} aria-hidden />
           </div>
-          {preview && (
+          {thumb && (
             <img
-              src={preview}
-              alt=""
-              onError={hideBrokenImage}
+              src={thumb}
+              alt={`Latest frame from ${camera.name}`}
+              onError={onThumbError}
               className="absolute inset-0 aspect-video w-full border-b border-line object-cover"
               loading="lazy"
             />
@@ -84,6 +119,13 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
           {preview && (
             <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-amber-300">
               DEMO
+            </span>
+          )}
+          {/* A real frame is still a frame: say whether it is live or playback,
+              on the image, not only in the card text below it. */}
+          {!preview && thumb && camera.sourceKind && (
+            <span className="absolute bottom-1.5 left-1.5">
+              <SourceKindBadge kind={camera.sourceKind} onDark />
             </span>
           )}
         </div>
