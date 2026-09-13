@@ -254,10 +254,103 @@ class TestDetectPostProcessing:
         assert [d.class_name for d in dets] == ["car"]
 
     def test_analysis_pipeline_asks_for_the_tighter_settings(self):
-        """The offline video pass must run the detector at the ANALYSIS_*
-        settings; the live view keeps the latency-friendly ones."""
+        """The offline video pass runs the detector at the ANALYSIS_* settings,
+        and the LIVE view now runs at the same quality (its frame rate is
+        protected by auto-pacing, not by a lower resolution)."""
         assert float(settings.ANALYSIS_DETECTION_IMGSZ) >= 832
         assert float(settings.ANALYSIS_CONFIDENCE_THRESHOLD) <= 0.45
+        assert int(settings.DETECTION_IMGSZ) == int(settings.ANALYSIS_DETECTION_IMGSZ)
+        assert float(settings.CONFIDENCE_THRESHOLD) <= float(settings.ANALYSIS_CONFIDENCE_THRESHOLD) + 1e-9
+
+
+# ============================================================================
+# Live quality settings + auto-pacing
+# ============================================================================
+class TestLivePacing:
+    @staticmethod
+    def _capturing_model(seen):
+        import torch
+
+        boxes = SimpleNamespace(
+            xyxy=torch.tensor([[10.0, 10.0, 90.0, 90.0]]),
+            conf=torch.tensor([0.9]),
+            cls=torch.tensor([2.0]),
+        )
+
+        class M:
+            def predict(self, frame, **kw):
+                seen.update(kw)
+                return [SimpleNamespace(boxes=boxes)]
+
+        return M()
+
+    def test_live_view_uses_the_tuned_conf_and_imgsz(self, monkeypatch):
+        """No live box can ever be coarser than an analysis box: called without
+        arguments (the live loop does exactly that) the detector must use the
+        tuned settings, not a legacy 640/0.45 pair."""
+        monkeypatch.setattr(settings, "CONFIDENCE_THRESHOLD", 0.35)
+        monkeypatch.setattr(settings, "DETECTION_IMGSZ", 960)
+        monkeypatch.setattr(settings, "LIVE_ADAPTIVE_IMGSZ", False)
+        seen = {}
+        svc = VehicleDetectionService()
+        svc._model = self._capturing_model(seen)
+        svc.detect(np.zeros((720, 1280, 3), dtype=np.uint8))
+        assert seen["conf"] == pytest.approx(0.35)
+        assert seen["imgsz"] == 960
+        assert seen["agnostic_nms"] is True
+
+    def test_pacing_walks_resolution_down_before_frames_are_dropped(self, monkeypatch):
+        monkeypatch.setattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)
+        monkeypatch.setattr(settings, "DETECTION_IMGSZ", 960)
+        monkeypatch.setattr(settings, "LIVE_IMGSZ_FLOOR", 640)
+        monkeypatch.setattr(settings, "LIVE_INFER_BUDGET_MS", 260.0)
+        svc = VehicleDetectionService()
+        assert svc.live_imgsz() == 960
+        for _ in range(3):
+            svc._pace(400.0)                      # slower than the budget
+        assert svc.live_imgsz() == 768             # one rung, not straight to the floor
+        for _ in range(3):
+            svc._pace(400.0)
+        assert svc.live_imgsz() == 640
+        for _ in range(6):
+            svc._pace(400.0)
+        assert svc.live_imgsz() == 640              # the floor is respected
+        for _ in range(3):
+            svc._pace(100.0)                        # CPU freed up again
+        assert svc.live_imgsz() == 768              # climbs back, one rung at a time
+
+    def test_one_slow_frame_does_not_move_the_governor(self, monkeypatch):
+        """Median-of-recent: a single hiccup must not make the overlay flicker."""
+        monkeypatch.setattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)
+        monkeypatch.setattr(settings, "DETECTION_IMGSZ", 960)
+        monkeypatch.setattr(settings, "LIVE_IMGSZ_FLOOR", 640)
+        monkeypatch.setattr(settings, "LIVE_INFER_BUDGET_MS", 260.0)
+        svc = VehicleDetectionService()
+        svc._pace(900.0)
+        for _ in range(4):
+            svc._pace(120.0)
+        assert svc.live_imgsz() == 960
+
+    def test_pacing_off_pins_the_configured_resolution(self, monkeypatch):
+        monkeypatch.setattr(settings, "LIVE_ADAPTIVE_IMGSZ", False)
+        monkeypatch.setattr(settings, "DETECTION_IMGSZ", 960)
+        monkeypatch.setattr(settings, "LIVE_IMGSZ_FLOOR", 640)
+        monkeypatch.setattr(settings, "LIVE_INFER_BUDGET_MS", 260.0)
+        svc = VehicleDetectionService()
+        for _ in range(6):
+            svc._pace(5000.0)
+        assert svc.live_imgsz() == 960
+
+    def test_batch_analysis_timings_never_repacing_the_live_view(self, monkeypatch):
+        monkeypatch.setattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)
+        seen, paced = {}, []
+        svc = VehicleDetectionService()
+        svc._model = self._capturing_model(seen)
+        monkeypatch.setattr(svc, "_pace", lambda ms: paced.append(ms))
+        svc.detect(np.zeros((720, 1280, 3), dtype=np.uint8), conf=0.35, imgsz=960)
+        assert paced == []                          # explicit analysis call: ignored
+        svc.detect(np.zeros((720, 1280, 3), dtype=np.uint8))
+        assert len(paced) == 1                      # live call: measured
 
 
 # ============================================================================

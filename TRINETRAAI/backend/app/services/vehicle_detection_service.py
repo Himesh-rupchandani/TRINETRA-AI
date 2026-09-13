@@ -34,6 +34,12 @@ from ..core.logging_config import logger
 VEHICLE_CLASS_IDS: Dict[int, str] = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 GREEN = (0, 255, 0)  # BGR
 
+# Ladder the live auto-pacing governor walks (see LIVE_ADAPTIVE_IMGSZ). Sizes
+# only ever change the model's INPUT resolution; the returned rectangles are
+# still whatever the model measured, so a lower rung means fewer small distant
+# vehicles, never a bigger or repositioned box.
+IMGSZ_LADDER = (1280, 960, 768, 640, 512)
+
 
 @dataclass
 class VehicleDetection:
@@ -60,6 +66,10 @@ class VehicleDetectionService:
         self._frame_counter: Dict[str, int] = {}
         self._last_detections: Dict[str, List[VehicleDetection]] = {}
         self.last_inference_ms: Optional[float] = None
+        # Live auto-pacing state: the imgsz currently in force and the most
+        # recent inference times it is judged on.
+        self._live_imgsz: Optional[int] = None
+        self._infer_ms_samples: List[float] = []
 
     # ------------------------------------------------------------------ model
     @property
@@ -108,20 +118,99 @@ class VehicleDetectionService:
                 logger.info(f"[DETECTION] Loading vehicle detection model once: {path}")
                 t0 = time.perf_counter()
                 model = YOLO(path)
-                imgsz = int(getattr(settings, "DETECTION_IMGSZ", 640))
+                imgsz = int(getattr(settings, "DETECTION_IMGSZ", 960))
                 # Warm-up so the first real frame is not slow.
                 model.predict(
                     np.zeros((imgsz, imgsz, 3), dtype=np.uint8),
                     verbose=False, imgsz=imgsz, device="cpu",
                 )
                 self._model = model
-                logger.info(f"[DETECTION] Model ready in {time.perf_counter() - t0:.1f}s")
+                logger.info(
+                    f"[DETECTION] Model ready in {time.perf_counter() - t0:.1f}s | live view runs "
+                    f"conf={float(getattr(settings, 'CONFIDENCE_THRESHOLD', 0.35)):.2f} "
+                    f"imgsz={imgsz} iou={float(getattr(settings, 'DETECTION_IOU', 0.45)):.2f} "
+                    f"agnostic_nms={bool(getattr(settings, 'DETECTION_AGNOSTIC_NMS', True))}"
+                    + (" (auto-pacing on)" if bool(getattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)) else "")
+                )
             except Exception as exc:  # missing ultralytics/torch, no weights, no network…
                 self._disabled_reason = str(exc)
                 logger.warning(
                     f"[DETECTION] Vehicle detection disabled — live view continues without boxes: {exc}"
                 )
         return self._model
+
+    # ------------------------------------------------------- live auto-pacing
+    def _ladder(self) -> List[int]:
+        """Allowed live imgsz rungs, from the configured target down to the floor."""
+        target = int(getattr(settings, "DETECTION_IMGSZ", 960))
+        floor = int(getattr(settings, "LIVE_IMGSZ_FLOOR", 640))
+        rungs = [r for r in IMGSZ_LADDER if floor <= r <= target]
+        # Always honour the configured target itself even if it is off-ladder,
+        # and never let a tiny floor leave the list empty.
+        return sorted(set(rungs) | {target}, reverse=True) or [target]
+
+    def live_imgsz(self) -> int:
+        """The inference resolution the live view is currently using."""
+        with self._state_lock:
+            return self._live_imgsz_locked()
+
+    def _live_imgsz_locked(self) -> int:
+        """Same, for callers already holding ``_state_lock`` (it is not reentrant)."""
+        if self._live_imgsz is not None:
+            return self._live_imgsz
+        rungs = self._ladder()
+        return rungs[0] if rungs else int(getattr(settings, "DETECTION_IMGSZ", 960))
+
+    def _pace(self, elapsed_ms: float) -> None:
+        """Feed one live inference time into the governor and re-pick imgsz.
+
+        The stream is paced by *resolution*, not by dropping frames: on a weak
+        CPU the boxes get a little coarser and the distant vehicles thinner,
+        while the view itself stays smooth. Median-of-recent runs is what moves
+        it, and it only steps one rung per inference in either direction, so a
+        single slow frame (another process grabbing the CPU) cannot make the
+        overlay flicker between sizes.
+        """
+        if not bool(getattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)):
+            with self._state_lock:
+                self._live_imgsz = None
+                self._infer_ms_samples = []
+            return
+        budget = float(getattr(settings, "LIVE_INFER_BUDGET_MS", 260.0) or 0.0)
+        if budget <= 0:
+            return
+        with self._state_lock:
+            self._infer_ms_samples = (self._infer_ms_samples + [float(elapsed_ms)])[-5:]
+            if len(self._infer_ms_samples) < 3:
+                return
+            ordered = sorted(self._infer_ms_samples)
+            median = ordered[len(ordered) // 2]
+            rungs = self._ladder()
+            current = self._live_imgsz_locked()
+            try:
+                idx = min(range(len(rungs)), key=lambda i: abs(rungs[i] - current))
+            except ValueError:
+                return
+            if median > budget and idx < len(rungs) - 1:
+                idx += 1
+            elif median < 0.6 * budget and idx > 0:
+                idx -= 1
+            else:
+                return
+            if rungs[idx] == self._live_imgsz:
+                return
+            self._live_imgsz = rungs[idx]
+            self._infer_ms_samples = []
+        logger.info(
+            f"[DETECTION] Live auto-pacing: imgsz {current} -> {rungs[idx]} "
+            f"(median inference {median:.0f} ms, budget {budget:.0f} ms)"
+        )
+
+    def reset_pacing(self) -> None:
+        """Forget the learned pace (used when settings change or on restart)."""
+        with self._state_lock:
+            self._live_imgsz = None
+            self._infer_ms_samples = []
 
     # -------------------------------------------------------------- inference
     def detect(
@@ -141,15 +230,19 @@ class VehicleDetectionService:
 
         ``conf`` / ``imgsz`` let the offline video pass ask for different
         settings than the live view (see the ANALYSIS_* settings) without making
-        the live loop pay for them.
+        the live loop pay for them. Left as ``None`` — i.e. called from the live
+        stream — the settings defaults apply and the inference time is fed to
+        the auto-pacing governor.
         """
         model = self._ensure_model()
         if model is None:
             return []
+        live = imgsz is None and conf is None
         threshold = float(
-            conf if conf is not None else getattr(settings, "CONFIDENCE_THRESHOLD", 0.45)
+            conf if conf is not None else getattr(settings, "CONFIDENCE_THRESHOLD", 0.35)
         )
-        size = int(imgsz if imgsz is not None else getattr(settings, "DETECTION_IMGSZ", 640))
+        size = int(imgsz if imgsz is not None else (self.live_imgsz() if live
+                     else getattr(settings, "DETECTION_IMGSZ", 960)))
         iou = float(getattr(settings, "DETECTION_IOU", 0.45))
         agnostic = bool(getattr(settings, "DETECTION_AGNOSTIC_NMS", True))
         t0 = time.perf_counter()
@@ -174,7 +267,12 @@ class VehicleDetectionService:
         except Exception as exc:
             logger.error(f"[DETECTION] Inference failed: {exc}")
             return []
-        self.last_inference_ms = (time.perf_counter() - t0) * 1000.0
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        self.last_inference_ms = elapsed_ms
+        if live:
+            # Only the live loop re-paces itself; a batch analysis job must not
+            # drag the live view's resolution around with its own timings.
+            self._pace(elapsed_ms)
 
         detections: List[VehicleDetection] = []
         if not results or results[0].boxes is None:
@@ -227,17 +325,26 @@ class VehicleDetectionService:
         # The tint is composited ONCE over the union of all boxes, so a row of
         # neighbouring vehicles (whose boxes touch) does not stack into a green
         # wall — the border is what marks each vehicle.
-        if fill_alpha > 0:
+        if fill_alpha:
             covered = np.zeros((h, w), dtype=bool)
+            boxes = []
             for d in detections:
                 x1, y1 = max(0, d.x1), max(0, d.y1)
                 x2, y2 = min(w, d.x2), min(h, d.y2)
                 if x2 > x1 and y2 > y1:
                     covered[y1:y2, x1:x2] = True
-            if covered.any():
-                green = np.full_like(frame, GREEN)
-                frame[covered] = (
-                    frame[covered] * (1.0 - fill_alpha) + green[covered] * fill_alpha
+                    boxes.append((x1, y1, x2, y2))
+            if boxes:
+                # Work inside the union's bounding box only: on a 1080p live
+                # frame this is a fraction of the pixels and avoids allocating a
+                # second full-size frame every single stream tick.
+                ux1 = min(b[0] for b in boxes); uy1 = min(b[1] for b in boxes)
+                ux2 = max(b[2] for b in boxes); uy2 = max(b[3] for b in boxes)
+                patch = frame[uy1:uy2, ux1:ux2]
+                mask = covered[uy1:uy2, ux1:ux2]
+                tint = np.array(GREEN, dtype=frame.dtype)
+                patch[mask] = (
+                    patch[mask] * (1.0 - fill_alpha) + tint * fill_alpha
                 ).astype(frame.dtype)
 
         for d in detections:

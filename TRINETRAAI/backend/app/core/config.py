@@ -23,7 +23,12 @@ class Settings(BaseSettings):
 
     # AI & Computer Vision Settings
     YOLO_MODEL_PATH: str = "models/yolo11s.pt"
-    CONFIDENCE_THRESHOLD: float = 0.45
+    # Threshold for the LIVE view. It used to be 0.45 while offline analysis ran
+    # at 0.35, so the same vehicle was boxed in the recording but not in the
+    # live stream; 0.35 is what the measured sweep on this repo's own footage
+    # picked (0.45 loses roughly a quarter of the distant vehicles). Raise it to
+    # 0.45+ if a false positive on a pedestrian matters more than a distant car.
+    CONFIDENCE_THRESHOLD: float = 0.35
     PROCESS_EVERY_N_FRAMES: int = 3
     OCR_ENABLED: bool = True
     OCR_MIN_CONFIDENCE: float = 0.60
@@ -34,10 +39,29 @@ class Settings(BaseSettings):
     ANPR_MIN_AGREE_READS: int = 2
     TRACK_BUFFER: int = 30
     # Real-time vehicle detection on the live view (green boxes). Model is
-    # YOLO_MODEL_PATH, detections below CONFIDENCE_THRESHOLD are dropped.
+    # YOLO_MODEL_PATH; detections below CONFIDENCE_THRESHOLD are dropped. These
+    # are the LIVE knobs - the offline video pass has its own ANALYSIS_* pair.
     VEHICLE_DETECTION_ENABLED: bool = True
-    DETECTION_IMGSZ: int = 640            # inference resolution (speed vs accuracy)
-    DETECTION_EVERY_N_FRAMES: int = 2     # run the model every Nth live frame
+    # Inference resolution for the live view, now the SAME 960 the offline pass
+    # uses: 640 was what left distant cars undetected and small boxes coarse.
+    # On a slow CPU the auto-pacing governor below walks this back down to
+    # LIVE_IMGSZ_FLOOR instead of dropping frames, so the stream stays smooth.
+    DETECTION_IMGSZ: int = 960
+    # Run the model every Nth LIVE frame; the frames in between are drawn with
+    # the last real detections so the overlay stays put at full stream rate.
+    # 2 doubles the frame rate for ~200 ms of box lag on a fast-moving vehicle.
+    # Set 1 to annotate every displayed frame (no lag, lower frame rate), 3+ if
+    # the CPU is shared with the ingest workers.
+    DETECTION_EVERY_N_FRAMES: int = 2
+    # ---- live auto-pacing ---------------------------------------------------
+    # Keep the live stream responsive without asking the operator to guess a
+    # resolution: the detector times its own inferences and steps imgsz down the
+    # 1280/960/768/640/512 ladder when the median run exceeds the budget, and
+    # back up when it is comfortably under it. Only boxes get coarser, never
+    # more boxes or bigger ones - geometry always stays the model's own.
+    LIVE_ADAPTIVE_IMGSZ: bool = True
+    LIVE_INFER_BUDGET_MS: float = 260.0   # per-inference time the stream may pay
+    LIVE_IMGSZ_FLOOR: int = 640           # never go below this on the live view
     # NMS IoU used by the detector. Ultralytics' default is 0.7, which let one
     # motorcycle be boxed two or three times over; 0.45 keeps the best box per
     # vehicle while still separating genuinely adjacent vehicles (their mutual
@@ -57,7 +81,8 @@ class Settings(BaseSettings):
     # the frame and finds the small distant ones. Measured on this repo's own
     # traffic stills with the same weight: a night traffic scene went from 0
     # vehicles at imgsz 640 to 27 at 960, mean box area 3.8% -> 2.2% of the
-    # frame, duplicate boxes on one vehicle ~0. Live view keeps 640 for latency.
+    # frame, duplicate boxes on one vehicle ~0. The live view now runs the same
+    # values and protects its frame rate with LIVE_ADAPTIVE_IMGSZ instead.
     ANALYSIS_CONFIDENCE_THRESHOLD: float = 0.35
     ANALYSIS_DETECTION_IMGSZ: int = 960
 

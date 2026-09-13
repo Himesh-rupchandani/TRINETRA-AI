@@ -156,7 +156,9 @@ Location comes **only** from camera metadata; nothing is inferred from video.
 
 `SENTINEL_CATALOGUE_URL`, `BACKEND_BASE_URL`, `MODEL_PATH`, `CONF_THRESHOLD`,
 `ANPR_CONF_THRESHOLD`, `FRAME_SKIP`, `RECONNECT_MIN`, `RECONNECT_MAX`,
-`EVIDENCE_DIR`, plus: `INFERENCE_IMGSZ`, `CV_DEVICE`, `PROCESS_INTERVAL_MS`,
+`EVIDENCE_DIR`, plus: `INFERENCE_IMGSZ`, `LIVE_IMGSZ` (resolution for frames a
+human is watching - the annotated live view; default 960, drop it to 640 on a
+weak CPU), `CV_DEVICE`, `PROCESS_INTERVAL_MS`,
 `ANPR_INTERVAL_MS`, `EVENT_SUPPRESSION_SEC`, `TRACK_MAX_AGE_SEC`, `LOG_LEVEL`…
 (full list in `config/settings.py`). No secrets are ever hard-coded.
 

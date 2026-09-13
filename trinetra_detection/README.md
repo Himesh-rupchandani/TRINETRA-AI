@@ -131,6 +131,25 @@ python detect_video.py --video my_video.mp4 --conf 0.35 --iou 0.45 --imgsz 960  
    ```bash
    python detect_webcam.py --source "rtsp://admin:password@192.168.1.100:554/stream"
    ```
+
+4. **Live view ke settings (default tuned hain - wahi jo offline video pass use karta hai):**
+   ```bash
+   python detect_webcam.py --source 0 --conf 0.35 --iou 0.45 --imgsz 960
+   ```
+   `--imgsz 960` live view ko offline analysis ke barabar rakhta hai (door ki cars
+   bhi milti hain). Kamzor CPU par `--imgsz 640` karein - box tight hi rahenge,
+   bas door ke vehicles kam dikhenge. `--vehicle-model` se vehicle boxes ka weight
+   badla ja sakta hai (default: `models/best.pt` coarse `vehicle` class hone par
+   apne aap per-class weight par switch ho jata hai).
+
+5. **Bina monitor (headless server / NVR) par live stream:**
+   ```bash
+   python detect_webcam.py --source "rtsp://.../stream" --no-display --save /tmp/live_annotated.mp4
+   ```
+   `--no-display` (ya koi bhi GUI na hone par apne aap) window kholne ki koshish
+   nahi karta, warna OpenCV bina GTK wale server par crash ho jata hai.
+   `--max-frames 100` se ek bounded test run bhi ho sakta hai.
+
 *Controls: Press **`q`** to quit | Press **`s`** to save current snapshot frame.*
 
 ---
