@@ -277,5 +277,25 @@ def _touches_inner_edge(b: Sequence[float], region: Sequence[int], shape: Sequen
 # dropping vehicle coverage from 95.1% to 89.3% (65% on a 44-frame 1080p clip),
 # because a vehicle the detector only finds on alternating frames is common.
 #
+# A third idea was measured and rejected the same way: run the cheap pass every
+# cycle for freshness and MERGE IN the boxes that only an occasional deep pass
+# sees - restricted to small (distant) boxes, which barely move between passes.
+# Against per-frame truth on this repo's four clips (mean IoU / misplaced / how
+# much of what the deep detector saw is on screen):
+#
+#   replay only            0.856 /  6.1% / 62.4%      junction_day
+#   + small deep boxes     0.799 / 10.1% / 76.7%      (cover +14.3pp, ghosts +4.0pp)
+#   replay only            0.836 /  1.0% / 75.4%      avenue_1080p
+#   + small deep boxes     0.823 /  1.7% / 85.2%      (cover +9.8pp,  ghosts +0.7pp)
+#   replay only            0.832 /  1.8% / 64.5%      night_bridge
+#   + small deep boxes     0.763 /  7.1% / 81.8%      (cover +17.3pp, ghosts +5.3pp)
+#
+# Unrestricted it is worse everywhere (+7 to +9 pp of misplaced boxes). Only the
+# 1080p case comes out ahead, and even there it is a box drawn from a frame up to
+# half a second old. The rule this file exists to enforce is that a box appears
+# only where the model actually put it on the frame being shown, so the merge
+# stays out; the deep look is offered honestly instead, as LIVE_QUALITY=max -
+# one time base, bounded staleness, no carried geometry.
+#
 # What is kept is therefore boring and correct: draw the freshest real
 # detections, at the freshest possible rate, and drop them when they go stale.
