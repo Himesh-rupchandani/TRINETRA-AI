@@ -404,6 +404,24 @@ def live_mjpeg_stream(camera_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.get(
+    "/{camera_id}/live/signal",
+    summary="Live-view signal probe",
+    description=(
+        "Lightweight probe for the UI: is the live view (resident worker or "
+        "on-demand decode) currently receiving REAL frames from this camera's "
+        "source? The NO-SIGNAL placeholder never counts as signal, so the "
+        "player can show an honest state instead of a fake LIVE badge."
+    ),
+)
+def live_signal_status(camera_id: str):
+    """Report whether real video frames are currently flowing for this camera."""
+    return {
+        "camera_id": camera_id.lower(),
+        "has_signal": camera_manager.has_live_signal(camera_id),
+    }
+
+
 @router.get("/{camera_id}/live/detect")
 def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
     """

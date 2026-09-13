@@ -67,7 +67,8 @@ class VehicleDetectionService:
         return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", True)) and self._disabled_reason is None
 
     def _resolve_model_path(self) -> str:
-        """Find the weights: configured path (relative to backend root) or bare name (auto-download)."""
+        """Find the weights: configured path (relative to backend root), the
+        in-repo fallback weight, or a bare name for one-time auto-download."""
         configured = (getattr(settings, "YOLO_MODEL_PATH", "") or "yolo11s.pt").strip()
         candidates = [configured]
         backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -75,6 +76,14 @@ class VehicleDetectionService:
         for c in candidates:
             if os.path.isfile(c):
                 return c
+        # Offline fallback: the standalone detection module ships the official
+        # YOLO11n (COCO) weight in git. Prefer it over a network download so
+        # vehicle detection works without internet (e.g. at the venue).
+        repo_root = os.path.abspath(os.path.join(backend_root, "..", ".."))
+        local_fallback = os.path.join(repo_root, "trinetra_detection", "models", "yolo11n.pt")
+        if os.path.isfile(local_fallback):
+            logger.info(f"[DETECTION] Using in-repo fallback weights: {local_fallback}")
+            return local_fallback
         # Not on disk: fall back to the bare weight name so Ultralytics can
         # fetch the official asset once and cache it.
         return os.path.basename(configured) or "yolo11s.pt"
@@ -156,9 +165,27 @@ class VehicleDetectionService:
     # ---------------------------------------------------------------- drawing
     @staticmethod
     def draw(frame: np.ndarray, detections: List[VehicleDetection]) -> np.ndarray:
-        """Draw green boxes + class/confidence labels in place with OpenCV."""
+        """Draw green boxes + class/confidence labels in place with OpenCV.
+
+        When ``DETECTION_BOX_FILL_ALPHA > 0`` the detected vehicle is COVERED
+        by a semi-transparent green box fill (the whole vehicle reads as
+        "detected", not just its outline). The solid green border and the
+        class/confidence label are drawn on top of the fill.
+        """
+        fill_alpha = min(
+            max(float(getattr(settings, "DETECTION_BOX_FILL_ALPHA", 0.35) or 0.0), 0.0), 1.0
+        )
+        h, w = frame.shape[:2]
         for d in detections:
-            cv2.rectangle(frame, (d.x1, d.y1), (d.x2, d.y2), GREEN, 2)
+            # Clip the box to the frame before touching pixels.
+            x1, y1 = max(0, d.x1), max(0, d.y1)
+            x2, y2 = min(w, d.x2), min(h, d.y2)
+            if x2 > x1 and y2 > y1:
+                if fill_alpha > 0:
+                    roi = frame[y1:y2, x1:x2]
+                    green_layer = np.full_like(roi, GREEN)
+                    cv2.addWeighted(green_layer, fill_alpha, roi, 1.0 - fill_alpha, 0, dst=roi)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), GREEN, 2)
             label = f"{d.class_name} {d.confidence:.2f}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             ty = d.y1 - 6 if d.y1 - th - 8 > 0 else d.y1 + th + 6

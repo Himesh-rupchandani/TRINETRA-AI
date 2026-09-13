@@ -11,9 +11,12 @@ When weights are not present, TRINETRA AI automatically falls back to its built-
 
 `yolo11s.pt` in this directory powers the real-time green vehicle boxes on the
 live camera view (`GET /api/cameras/{id}/live/detect`). Put the official
-Ultralytics `yolo11s.pt` here (`YOLO_MODEL_PATH=models/yolo11s.pt`); if it is
-missing, Ultralytics downloads it on first use. Without weights the live view
-keeps working — just without boxes.
+Ultralytics `yolo11s.pt` here (`YOLO_MODEL_PATH=models/yolo11s.pt`). If it is
+missing, the in-repo `trinetra_detection/models/yolo11n.pt` (official COCO
+weight, shipped with the standalone detection module) is used so detection
+works offline; if that is also absent, Ultralytics downloads the configured
+weight on first use. Without any weights the live view keeps working — just
+without boxes.
 
 ## Multi-video analysis (`/api/analysis/*`)
 

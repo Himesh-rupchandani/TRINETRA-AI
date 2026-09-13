@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # NMS IoU used by the detector. Ultralytics' default is 0.7; 0.55 separates
     # overlapping vehicles in dense traffic without dropping real boxes.
     DETECTION_IOU: float = 0.55
+    # When AI detection is ON, each detected vehicle is COVERED with a
+    # semi-transparent green box fill (OpenCV), not just a thin outline —
+    # matching the reference look where the whole vehicle reads as green.
+    # 0.0 = outline only (old look); 1.0 = solid green.
+    DETECTION_BOX_FILL_ALPHA: float = 0.55
 
     # ---- Number-plate detection (new pipeline stage) ----
     # A fine-tuned plate detector produced by training/train_plate_detector.py.
