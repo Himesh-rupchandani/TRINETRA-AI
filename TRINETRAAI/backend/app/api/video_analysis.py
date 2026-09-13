@@ -258,6 +258,13 @@ def video_detections(
                 "ocr_confidence": e.plate_confidence,
                 "plate_status": e.plate_status,
                 "evidence_ref": e.evidence_ref,
+                # Served through the confined evidence route, so a browser can
+                # show exactly the pixels the AI judged without being handed a
+                # filesystem path (and cannot walk out of the evidence root).
+                "evidence_url": f"/api/evidence/{e.evidence_ref}" if e.evidence_ref else None,
+                "plate_crop_url": (
+                    f"/api/evidence/{e.plate_evidence_ref}" if e.plate_evidence_ref else None
+                ),
             }
             for e in events
         ],

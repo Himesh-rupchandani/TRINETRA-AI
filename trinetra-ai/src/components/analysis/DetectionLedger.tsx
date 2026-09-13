@@ -19,6 +19,41 @@ interface TrackRow {
   worstAreaPct: number;
 }
 
+/**
+ * One retained crop. If the file cannot be fetched, the cell says so: a broken
+ * image or a placeholder would misrepresent what the pipeline kept.
+ */
+function EvidenceThumb({
+  url,
+  label,
+  className,
+}: {
+  url: string | null;
+  label: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return (
+      <span
+        className={`grid h-12 w-16 place-items-center rounded border border-dashed border-line bg-surface-2 text-center text-[9px] leading-tight text-ink-faint ${className ?? ''}`}
+        title={url ? 'Crop could not be fetched from the evidence store.' : label}
+      >
+        no crop
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={label}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className={`h-12 w-16 rounded border border-line bg-surface-2 object-cover ${className ?? ''}`}
+    />
+  );
+}
+
 function fmtPct(v: number | null | undefined): string {
   if (v == null || Number.isNaN(v)) return '—';
   return `${(v <= 1 ? v * 100 : v).toFixed(0)}%`;
@@ -154,10 +189,11 @@ export function DetectionLedger({ videos }: { videos: AnalysisVideo[] }) {
               <tr>
                 <th className="px-4 py-2 font-semibold">Track</th>
                 <th className="px-3 py-2 font-semibold">Class</th>
-                <th className="px-3 py-2 font-semibold">Confidence</th>
-                <th className="px-3 py-2 font-semibold">Frames</th>
+                <th className="px-3 py-2 text-right font-semibold">Confidence</th>
+                <th className="px-3 py-2 text-right font-semibold">Frames</th>
                 <th className="px-3 py-2 font-semibold">Seen from</th>
-                <th className="px-3 py-2 font-semibold">Box size</th>
+                <th className="px-3 py-2 text-right font-semibold">Box size</th>
+                <th className="px-3 py-2 font-semibold">Crops kept</th>
                 <th className="px-3 py-2 font-semibold">Number plate</th>
               </tr>
             </thead>
@@ -179,16 +215,29 @@ export function DetectionLedger({ videos }: { videos: AnalysisVideo[] }) {
                         {t.trackId != null ? `#${t.trackId}` : <span className="text-ink-faint">untracked</span>}
                       </td>
                       <td className="px-3 py-2 text-ink">{prettyVehicleClass(t.best.vehicle_class)}</td>
-                      <td className="px-3 py-2 font-mono tabular-nums text-ink-muted">
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-ink-muted">
                         {fmtPct(t.best.detection_confidence)}
                       </td>
-                      <td className="px-3 py-2 font-mono tabular-nums text-ink-muted">{t.frames.length}</td>
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-ink-muted">{t.frames.length}</td>
                       <td className="px-3 py-2 font-mono tabular-nums text-ink-muted">
                         {t.first.timestamp ?? `f${t.first.frame_number}`}
                         {t.frames.length > 1 ? ` → ${t.last.timestamp ?? `f${t.last.frame_number}`}` : ''}
                       </td>
-                      <td className="px-3 py-2 font-mono tabular-nums text-ink-muted">
-                        {t.worstAreaPct ? `${t.worstAreaPct.toFixed(1)}% of frame` : '—'}
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-ink-muted">
+                        {t.worstAreaPct ? `${t.worstAreaPct.toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="flex items-center gap-1.5">
+                          <EvidenceThumb
+                            url={t.best.evidence_url ?? t.frames.find((f) => f.evidence_url)?.evidence_url ?? null}
+                            label={`Vehicle crop, track ${t.trackId ?? '?'}`}
+                          />
+                          <EvidenceThumb
+                            url={t.best.plate_crop_url ?? t.frames.find((f) => f.plate_crop_url)?.plate_crop_url ?? null}
+                            label={`Plate crop, track ${t.trackId ?? '?'}`}
+                            className="w-20"
+                          />
+                        </span>
                       </td>
                       <td className="px-3 py-2">
                         {plate ? (
@@ -209,7 +258,7 @@ export function DetectionLedger({ videos }: { videos: AnalysisVideo[] }) {
                     </tr>
                     {isOpen && (
                       <tr className="bg-surface-2/40">
-                        <td colSpan={7} className="px-4 py-2">
+                        <td colSpan={8} className="px-4 py-2">
                           <ul className="space-y-1 font-mono text-2xs text-ink-muted">
                             {t.frames.map((f) => (
                               <li key={f.event_id} className="flex flex-wrap gap-x-4 gap-y-0.5">
@@ -231,7 +280,10 @@ export function DetectionLedger({ videos }: { videos: AnalysisVideo[] }) {
               })}
             </tbody>
           </table>
-          <p className="border-t border-line/60 px-4 py-2 text-2xs text-ink-faint">
+          <p className="border-t border-line/60 px-4 py-2 text-2xs leading-relaxed text-ink-faint">
+            &ldquo;Crops kept&rdquo; shows the vehicle image the pipeline retained for that track, and the
+            plate image when the plate stage located one. &ldquo;no crop&rdquo; means exactly that: nothing was
+            captured for it — no image is generated to fill the gap.
             Boxes are the detector&apos;s own coordinates clipped to the frame. {active?.framesAnalyzed ?? 0} frames
             analysed of {active?.framesTotal ?? 0} — a vehicle is listed once per track, not once per frame.
           </p>

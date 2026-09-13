@@ -355,7 +355,7 @@ export function CameraPlayer({
             {demoFeed ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-lg bg-black/55 px-3 py-2">
                 <span className="flex items-center gap-2">
-                  <span className="chip border-amber-400/50 bg-black/40 text-amber-300">
+                  <span className="chip border-degraded/50 bg-black/40 text-degraded">
                     <CircleDot size={9} className="animate-pulse" aria-hidden /> DEMO FEED
                   </span>
                   <span className="text-2xs text-white/75">

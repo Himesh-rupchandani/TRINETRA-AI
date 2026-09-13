@@ -88,6 +88,7 @@ def _auto_migrate(target_engine=None):
             ("vehicle_confidence", "FLOAT"),
             ("bbox_json", "VARCHAR(200)"),
             ("plate_status", "VARCHAR(20)"),
+            ("plate_evidence_ref", "VARCHAR(500)"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE vehicle_events ADD COLUMN {col} {col_def}"))

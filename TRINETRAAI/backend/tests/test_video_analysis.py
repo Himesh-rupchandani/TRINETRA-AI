@@ -10,6 +10,7 @@ Nothing here writes fabricated plates into the product database: the tests use
 their own camera ids (``TCAM*``) and delete every row and file they create.
 """
 import sys
+import shutil
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -156,6 +157,15 @@ def client(tmp_path_factory):
         db.query(VideoSource).filter(
             VideoSource.camera_id.like(f"{TEST_PREFIX}%")
         ).delete(synchronize_session=False)
+        # Evidence crops are written for every retained vehicle, so they are
+        # removed with the rows that referenced them (the repo's evidence dir is
+        # not ignored, and test artefacts must not survive a test run).
+        from app.core.paths import evidence_root
+
+        for v in videos:
+            ev_dir = evidence_root(create=False) / "analysis" / v.camera_id.lower()
+            if ev_dir.is_dir():
+                shutil.rmtree(ev_dir, ignore_errors=True)
         db.query(VehicleEvent).filter(
             VehicleEvent.camera_id.like(f"{TEST_PREFIX}%")
         ).delete(synchronize_session=False)
@@ -529,3 +539,51 @@ def test_17_delete_video_and_no_regression(client, analysed, clips):
 
     after = client.get("/api/analysis/results").json()
     assert after["total_videos"] == before - 1
+
+
+# --------------------------------------------------------------------------- #
+# 18. A vehicle keeps its own crop even when the plate could not be read
+# --------------------------------------------------------------------------- #
+def test_18_vehicle_crop_is_retained_when_the_plate_is_unreadable(client, tmp_path):
+    """The evidence rule behind the results UI.
+
+    This runs its own one-clip batch rather than reusing the shared ``analysed``
+    fixture: the camera it needs is deliberately one the plate stage finds
+    nothing on, and a later test deletes videos from the shared batch.
+
+    A vehicle the detector held must still be listed AND still keep its crop,
+    because "we could not read this plate" is a fact about the plate, not a
+    reason to hide a vehicle that was seen. The plate crop is absent by design -
+    nothing was located, so nothing is invented.
+    """
+    clip = tmp_path / "TCROP1.mp4"
+    _write_clip(clip)
+    res = client.post("/api/analysis/videos/upload",
+                      files=[("files", ("TCROP1.mp4", clip.read_bytes(), "video/mp4"))])
+    assert res.status_code in (200, 201), res.text
+    body = res.json()
+    batch, vid = body["batch_id"], body["added"][0]["video_id"]
+    assert client.post("/api/analysis/run", json={"video_ids": [vid]}).status_code == 200
+    _wait_done(client, batch)
+    try:
+        dets = client.get(f"/api/analysis/videos/{vid}/detections").json()["detections"]
+        assert dets, "an unreadable plate must not remove the vehicle from the results"
+        assert all(d["plate"] is None for d in dets)
+        assert {d["plate_status"] for d in dets} == {"UNKNOWN"}
+
+        kept = [d for d in dets if d["evidence_ref"]]
+        assert kept, "the vehicle crop is stored even with no plate read"
+        assert all(d["evidence_url"].startswith("/api/evidence/") for d in kept)
+        assert all(d["plate_crop_url"] is None for d in dets), "no plate located, so no plate crop"
+
+        blob = client.get(kept[0]["evidence_url"])
+        assert blob.status_code == 200, blob.text
+        assert blob.content[:2] == b"\xff\xd8", "the stored crop is a real JPEG, not a placeholder"
+    finally:
+        client.delete(f"/api/analysis/videos/{vid}")
+
+
+def test_19_evidence_route_stays_inside_its_root(client):
+    """Serving crops must not turn into a file read anywhere on disk."""
+    for ref in ("../../etc/passwd", "/etc/passwd", "analysis/../../secrets.txt"):
+        assert client.get(f"/api/evidence/{ref}").status_code in (400, 404)

@@ -163,6 +163,10 @@ class VehicleEvent(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     evidence_ref = Column(String(500), nullable=True)  # S3/URL reference to snapshot/clip
+    # The plate crop that produced this read, when one could be cut. Kept
+    # separate from ``evidence_ref`` (the vehicle) because the two answer
+    # different questions: "what vehicle was this" vs "what did the plate say".
+    plate_evidence_ref = Column(String(500), nullable=True)
     watchlist_match = Column(Boolean, default=False, index=True, nullable=False)
     # Manually-uploaded CCTV video provenance (NULL for live-camera sightings).
     video_file = Column(String(255), nullable=True)      # uploaded filename, e.g. cam1.mp4

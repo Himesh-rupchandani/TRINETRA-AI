@@ -460,6 +460,12 @@ def _run_video(video_id: str) -> None:
         track_meta: Dict[int, dict] = {}
         cooldown: Dict[int, int] = {}
         best_crop: Dict[int, bytes] = {}
+        # ...and the plate crop of that same best read, plus a vehicle crop kept
+        # even for vehicles whose plate was never legible: an unreadable plate is
+        # a reason to show the vehicle without a plate image, never a reason to
+        # drop the vehicle from the results.
+        best_plate_crop: Dict[int, bytes] = {}
+        fallback_crop: Dict[int, bytes] = {}
 
         counters = {"vehicles": 0, "plates": 0, "unknown": 0}
         seen_tracks: set = set()
@@ -467,11 +473,33 @@ def _run_video(video_id: str) -> None:
         analyzed = 0
         video_filename = os.path.basename(video.file_path or "")
 
+        def _encode(box) -> Optional[bytes]:
+            """Cut one crop out of the current frame as JPEG, or None.
+
+            The box is used exactly as the detector reported it, clipped to the
+            frame - a crop is not a place to restyle anything.
+            """
+            x1, y1, x2, y2 = box
+            fh, fw = frame.shape[:2] if frame is not None else (0, 0)
+            ix1 = max(0, min(fw - 1, int(x1)))
+            iy1 = max(0, min(fh - 1, int(y1)))
+            ix2 = max(ix1 + 1, min(fw, int(x2)))
+            iy2 = max(iy1 + 1, min(fh, int(y2)))
+            crop = frame[iy1:iy2, ix1:ix2]
+            if crop is None or crop.size == 0:
+                return None
+            try:
+                ok_enc, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+            except Exception:
+                return None
+            return buf.tobytes() if ok_enc else None
+
         def finalize(track_id: int) -> None:
             meta = track_meta.pop(track_id, None)
             acc = accum.pop(track_id, None)
             cooldown.pop(track_id, None)
-            crop_bytes = best_crop.pop(track_id, None)
+            crop_bytes = best_crop.pop(track_id, None) or fallback_crop.pop(track_id, None)
+            plate_crop_bytes = best_plate_crop.pop(track_id, None)
             if meta is None or meta["hits"] < min_hits:
                 return  # detector flicker, not a real vehicle sighting
 
@@ -498,6 +526,18 @@ def _run_video(video_id: str) -> None:
                 except Exception as exc:
                     logger.warning(f"[ANALYSIS:{video.camera_id}] evidence write failed: {exc}")
 
+            plate_evidence_ref = None
+            if plate_crop_bytes:
+                try:
+                    ev_dir = _evidence_root() / "analysis" / video.camera_id.lower()
+                    ev_dir.mkdir(parents=True, exist_ok=True)
+                    tag = (plate_norm or "unknown").lower()
+                    pfname = f"{video.camera_id.lower()}_{track_id}_{int(offset * 1000)}ms_{tag}_plate.jpg"
+                    (ev_dir / pfname).write_bytes(plate_crop_bytes)
+                    plate_evidence_ref = f"analysis/{video.camera_id.lower()}/{pfname}"
+                except Exception as exc:
+                    logger.warning(f"[ANALYSIS:{video.camera_id}] plate crop write failed: {exc}")
+
             event = VehicleEvent(
                 camera_id=video.camera_id,
                 vehicle_track_id=track_id,
@@ -511,6 +551,7 @@ def _run_video(video_id: str) -> None:
                 latitude=cam.latitude if cam else None,
                 longitude=cam.longitude if cam else None,
                 evidence_ref=evidence_ref,
+                plate_evidence_ref=plate_evidence_ref,
                 video_file=video_filename,
                 video_offset_sec=offset,
                 video_id=video.video_id,
@@ -597,6 +638,9 @@ def _run_video(video_id: str) -> None:
                     # Keep the *largest* (closest / sharpest) view of the vehicle
                     # as its representative record.
                     if prev is None or area >= prev["area"]:
+                        fallback_crop[track.track_id] = _encode(
+                            (track.x1, track.y1, track.x2, track.y2)
+                        )
                         track_meta[track.track_id] = {
                             "class_name": track.class_name,
                             "confidence": track.confidence,
@@ -623,15 +667,16 @@ def _run_video(video_id: str) -> None:
                     if read is None:
                         continue
                     accum.setdefault(track.track_id, TrackPlateAccumulator()).add(read)
-                    # Snapshot the vehicle at the best read for evidence.
-                    try:
-                        crop = frame[max(0, track.y1):track.y2, max(0, track.x1):track.x2]
-                        if crop.size:
-                            ok_enc, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
-                            if ok_enc:
-                                best_crop[track.track_id] = buf.tobytes()
-                    except Exception:
-                        pass
+                    # Snapshot the vehicle at the best read for evidence, and the
+                    # plate itself when the plate stage reported where it was.
+                    snap = _encode((track.x1, track.y1, track.x2, track.y2))
+                    if snap:
+                        best_crop[track.track_id] = snap
+                    pbox = getattr(read, "plate_box", None)
+                    if pbox is not None:
+                        pcrop = _encode((pbox.x1, pbox.y1, pbox.x2, pbox.y2))
+                        if pcrop:
+                            best_plate_crop[track.track_id] = pcrop
 
                 if analyzed % 10 == 0:
                     video.frames_read = frame_idx + 1

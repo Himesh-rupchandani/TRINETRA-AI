@@ -28,6 +28,9 @@ export interface VideoDetectionRow {
   ocr_confidence: number | null;
   plate_status: PlateStatus | null;
   evidence_ref: string | null;
+  /** Cropped imagery retained for this sighting, served by /api/evidence. */
+  evidence_url: string | null;
+  plate_crop_url: string | null;
 }
 
 export interface VideoDetectionPage {
