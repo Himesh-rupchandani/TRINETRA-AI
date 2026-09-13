@@ -179,10 +179,12 @@ def _upload(client, clips, cams):
     return client.post("/api/analysis/videos/upload", files=files)
 
 
-def _wait_done(client, timeout=120.0):
+def _wait_done(client, batch_id, timeout=120.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        body = client.get("/api/analysis/status").json()
+        # Scoped to this batch: other videos in the product database (e.g. a
+        # real operator's upload still being analysed) must not block the test.
+        body = client.get("/api/analysis/status", params={"batch_id": batch_id}).json()
         if body["status"] in ("DONE", "EMPTY") and body["total_videos"]:
             if all(v["status"] in ("DONE", "FAILED") for v in body["videos"]):
                 return body
@@ -196,10 +198,18 @@ def analysed(client, clips):
     res = _upload(client, clips, list(SCRIPT))
     assert res.status_code in (200, 201), res.text
     assert res.json()["errors"] == []
-    run = client.post("/api/analysis/run", json={})
+    batch = res.json()
+    # Run ONLY this batch's videos — never pull unrelated uploads into the
+    # stubbed test pipeline.
+    run = client.post(
+        "/api/analysis/run",
+        json={"video_ids": [v["video_id"] for v in batch["added"]]},
+    )
     assert run.status_code == 200, run.text
-    status = _wait_done(client)
-    results = client.get("/api/analysis/results").json()
+    status = _wait_done(client, batch["batch_id"])
+    results = client.get(
+        "/api/analysis/results", params={"batch_id": batch["batch_id"]}
+    ).json()
     return {"status": status, "results": results}
 
 

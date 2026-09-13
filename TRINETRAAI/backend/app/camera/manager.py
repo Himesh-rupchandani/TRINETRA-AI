@@ -39,8 +39,24 @@ class CameraManager:
         self._latest_annotated_frames: Dict[str, np.ndarray] = {}
         self._threads: Dict[str, threading.Thread] = {}
         self._stop_events: Dict[str, threading.Event] = {}
+        # camera_id (lowercase) -> monotonic time of the last REAL frame that
+        # the live view delivered (worker or on-demand decode). Placeholder
+        # "NO SIGNAL" frames never update this, so the UI can tell a live
+        # picture from a no-signal placeholder.
+        self._live_signal: Dict[str, float] = {}
         self._lock = threading.RLock()
         self._pipeline_callback: Optional[Callable[[FramePacket], None]] = None
+
+    def _note_live_signal(self, camera_id: str) -> None:
+        key = (camera_id or "").lower()
+        if key:
+            self._live_signal[key] = time.monotonic()
+
+    def has_live_signal(self, camera_id: str, window_sec: float = 6.0) -> bool:
+        """True when this camera's live view received a real frame within the
+        last `window_sec` seconds (False for placeholder/NO-SIGNAL streams)."""
+        last = self._live_signal.get((camera_id or "").lower())
+        return bool(last is not None and (time.monotonic() - last) <= window_sec)
 
     def set_pipeline_callback(self, callback: Callable[[FramePacket], None]):
         """Set callback to receive FramePacket objects for AI processing."""
@@ -87,6 +103,7 @@ class CameraManager:
                 del self._latest_packets[camera_id]
             if camera_id in self._latest_annotated_frames:
                 del self._latest_annotated_frames[camera_id]
+            self._live_signal.pop(camera_id.lower(), None)
             logger.info(f"[{camera_id}] Camera removed from CameraManager.")
             return True
         return False
@@ -349,6 +366,8 @@ class CameraManager:
                 frame = self.get_latest_frame(camera_id, annotated=True)
                 if frame is None:
                     frame = self.get_latest_frame(camera_id.upper(), annotated=True)
+                if frame is not None:
+                    self._note_live_signal(camera_id)  # real frame from the resident worker
                 if frame is None and ondemand_source is None and ondemand_cap is None:
                     if ondemand_candidates is None:
                         ondemand_candidates = self._ondemand_candidates(camera_id)
@@ -365,6 +384,7 @@ class CameraManager:
                     frame = self._read_ondemand_frame(ondemand_cap, ondemand_source)
                     if frame is not None:
                         ondemand_failures = 0
+                        self._note_live_signal(camera_id)  # real frame from on-demand decode
                         frame = self._stamp_source_osd(frame, ondemand_is_file)
                     elif not ondemand_is_file:
                         # Network source not delivering: after a few misses, move

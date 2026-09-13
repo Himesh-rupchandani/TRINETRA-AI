@@ -71,6 +71,34 @@ export function CameraPlayer({
   const detectionActive = aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
   const useImg = isMjpeg || detectionActive;
 
+  // The MJPEG views (file feed / AI detection view) can also serve an honest
+  // "NO SIGNAL" placeholder when the camera source is unreachable from this
+  // network. Probe the backend so the chips reflect reality — a LIVE /
+  // AI DETECTION badge over a NO-SIGNAL frame would mislead the operator.
+  const [mjpegSignal, setMjpegSignal] = useState(true);
+  useEffect(() => {
+    if (!useImg || !wanted) return;
+    if (config.useMocks) {
+      setMjpegSignal(true);
+      return;
+    }
+    let stop = false;
+    const check = async () => {
+      try {
+        const ok = await cameraService.signal(camera.id);
+        if (!stop) setMjpegSignal(ok);
+      } catch {
+        if (!stop) setMjpegSignal(false);
+      }
+    };
+    void check();
+    const timer = window.setInterval(check, 3000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [useImg, wanted, camera.id]);
+
   // Transport ladder: WebRTC first, HLS compatibility stream when WebRTC
   // cannot get through (guide §1: HLS is the restricted-network fallback).
   const [transport, setTransport] = useState<'whep' | 'hls'>('whep');
@@ -267,14 +295,19 @@ export function CameraPlayer({
         {/* Chips only: the source burns its own timestamp into the top-left corner. */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-end gap-2 bg-gradient-to-b from-black/60 to-transparent px-2.5 py-1.5">
           <span className="flex items-center gap-1.5">
-            {(phase === 'LIVE' || (detectionActive && mjpegAlive)) && (
+            {(phase === 'LIVE' || (detectionActive && mjpegAlive && mjpegSignal)) && (
               <span className="chip border-critical/60 bg-critical/25 text-white">
                 <CircleDot size={9} className="animate-pulse" aria-hidden /> LIVE
               </span>
             )}
-            {detectionActive && mjpegAlive && (
+            {detectionActive && mjpegAlive && mjpegSignal && (
               <span className="chip border-online/60 bg-online/25 text-white">
                 <ScanSearch size={9} aria-hidden /> AI DETECTION
+              </span>
+            )}
+            {useImg && mjpegAlive && !mjpegSignal && (
+              <span className="chip border-degraded/60 bg-degraded/25 text-white">
+                <CircleDot size={9} aria-hidden /> NO LIVE SIGNAL
               </span>
             )}
             {phase === 'STALLED' && (
@@ -445,11 +478,19 @@ export function CameraPlayer({
                   <span
                     className={cn(
                       'h-2 w-2 rounded-full',
-                      quality === 'Good' ? 'bg-online' : 'bg-degraded',
+                      useImg && !mjpegSignal
+                        ? 'bg-degraded'
+                        : quality === 'Good'
+                          ? 'bg-online'
+                          : 'bg-degraded',
                     )}
                     aria-hidden
                   />
-                  {quality === 'Good' ? 'Video is clear' : 'Video quality is poor'}
+                  {useImg && !mjpegSignal
+                    ? 'No live signal — source unreachable from this network'
+                    : quality === 'Good'
+                      ? 'Video is clear'
+                      : 'Video quality is poor'}
                 </span>
               ) : (
                 <span>Connecting…</span>

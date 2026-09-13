@@ -43,4 +43,18 @@ export const cameraService = {
       await get<StreamTicketDto>(`/cameras/${encodeURIComponent(id)}/stream`),
     );
   },
+
+  /**
+   * Probe whether this camera's live view is receiving REAL frames right now.
+   * False while the backend is serving the NO-SIGNAL placeholder (source
+   * unreachable from this network) — the UI then shows an honest state
+   * instead of a fake LIVE badge.
+   */
+  async signal(id: string): Promise<boolean> {
+    if (isMockMode) return true;
+    const res = await get<{ has_signal?: boolean }>(
+      `/cameras/${encodeURIComponent(id)}/live/signal`,
+    );
+    return res.has_signal !== false;
+  },
 };
