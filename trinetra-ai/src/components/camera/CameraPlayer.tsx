@@ -7,7 +7,7 @@ import { useHlsStream, whepUrlToHls } from '@/hooks/useHlsStream';
 import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
 import { config } from '@/lib/config';
-import { StatusChip } from '@/components/common/Chips';
+import { SourceKindBadge, StatusChip } from '@/components/common/Chips';
 
 /**
  * Live camera player (WebRTC / WHEP).
@@ -211,6 +211,11 @@ export function CameraPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera.id]);
 
+  // Source truth comes from the backend, not from playback: a looping file
+  // reaches phase === 'LIVE' exactly as a real camera does, and that is how a
+  // recording ends up believed as live.
+  const sourceKind = ticket?.sourceKind ?? camera.sourceKind ?? 'LIVE';
+  const isRecorded = sourceKind === 'RECORDED';
   const noSource = Boolean(ticket && !ticket.streamUrl);
   const connecting =
     requesting || phase === 'CONNECTING' || phase === 'BUFFERING' || phase === 'AWAITING_KEYFRAME';
@@ -295,10 +300,14 @@ export function CameraPlayer({
         {/* Chips only: the source burns its own timestamp into the top-left corner. */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-end gap-2 bg-gradient-to-b from-black/60 to-transparent px-2.5 py-1.5">
           <span className="flex items-center gap-1.5">
-            {(phase === 'LIVE' || (detectionActive && mjpegAlive && mjpegSignal)) && (
+            {!isRecorded && (phase === 'LIVE' || (detectionActive && mjpegAlive && mjpegSignal)) && (
               <span className="chip border-critical/60 bg-critical/25 text-white">
                 <CircleDot size={9} className="animate-pulse" aria-hidden /> LIVE
               </span>
+            )}
+            {isRecorded && <SourceKindBadge kind={sourceKind} onDark />}
+            {isRecorded && (phase === 'LIVE' || mjpegAlive) && (
+              <span className="chip border-line/70 bg-black/35 text-ink-muted">PLAYBACK</span>
             )}
             {detectionActive && mjpegAlive && mjpegSignal && (
               <span className="chip border-online/60 bg-online/25 text-white">

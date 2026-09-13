@@ -116,6 +116,7 @@ export async function getCameraStream(id: string): Promise<CameraStreamTicket> {
   return {
     cameraId: cam.id,
     streamType: live ? 'WEBRTC' : (cam.streamType ?? 'HLS'),
+    sourceKind: cam.sourceKind ?? 'RECORDED',
     streamUrl: live ? `${config.streamBasePath}/${cam.id}/whep` : '',
     expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
     poster: cam.status === 'OFFLINE' ? syntheticPoster(cam.name, cam.status) : cameraStill(cam.id),

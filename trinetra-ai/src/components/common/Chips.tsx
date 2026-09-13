@@ -1,4 +1,5 @@
-import type { AlertStatus, CameraStatus, ServiceStatus, Severity } from '@/types';
+import { Archive } from 'lucide-react';
+import type { AlertStatus, CameraSourceKind, CameraStatus, ServiceStatus, Severity } from '@/types';
 import {
   alertStatusClass,
   cameraStatusClass,
@@ -104,4 +105,37 @@ export function Chip({
     warn: 'border-degraded/45 bg-degraded/10 text-degraded',
   };
   return <span className={cn('chip', tones[tone], className)}>{children}</span>;
+}
+
+
+/**
+ * Source truth, stated plainly. Kept separate from StatusChip on purpose:
+ * "Working" says the feed is healthy, this says whether what is on screen is
+ * happening now. An officer acting on a LIVE label must be able to trust it,
+ * so a recorded file can only ever render as RECORDED.
+ */
+export function SourceKindBadge({
+  kind,
+  className,
+  onDark = false,
+}: {
+  kind?: CameraSourceKind;
+  className?: string;
+  onDark?: boolean;
+}) {
+  if (!kind || kind === 'LIVE') return null;
+  const label = kind === 'RECORDED' ? 'RECORDED — NOT LIVE' : 'NO SOURCE SET';
+  const tone = kind === 'RECORDED' ? 'border-degraded/60' : 'border-line';
+  return (
+    <span
+      className={cn('chip', tone, onDark ? 'bg-degraded/20 text-white' : 'bg-degraded/10 text-ink-muted', className)}
+      title={
+        kind === 'RECORDED'
+          ? 'This camera plays a stored video file. It is useful for testing detection, but it is not a live view.'
+          : 'No stream source is configured for this camera.'
+      }
+    >
+      <Archive size={9} aria-hidden /> {label}
+    </span>
+  );
 }

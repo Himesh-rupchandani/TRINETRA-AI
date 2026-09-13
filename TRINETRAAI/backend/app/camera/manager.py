@@ -273,6 +273,22 @@ class CameraManager:
                     0.55, color, 1, cv2.LINE_AA)
         return frame
 
+    def is_recording_backed(self, camera_id: str) -> bool:
+        """True when this camera's frames come from a file, not a live feed.
+
+        A file-backed source plays perfectly in real time, which is exactly why
+        the distinction cannot be left to the viewer: without this, a looping
+        clip looks identical to a camera and gets believed. Used to stamp the
+        OSD on frames published by a resident worker, where the on-demand path
+        never runs.
+        """
+        with self._lock:
+            key = (camera_id or "").lower()
+            stream = self._streams.get(key) or self._streams.get(camera_id)
+            if stream is None:
+                return False
+            return (getattr(stream, "source_type", "") or "").lower() == "file"
+
     def _ondemand_candidates(self, camera_id: str):
         """Ordered (source, is_file) candidates for an on-demand live view.
 
@@ -368,6 +384,11 @@ class CameraManager:
                     frame = self.get_latest_frame(camera_id.upper(), annotated=True)
                 if frame is not None:
                     self._note_live_signal(camera_id)  # real frame from the resident worker
+                    # A resident worker never goes through the on-demand branch
+                    # below, so without this a file-backed camera fed by a
+                    # background worker would stream unlabelled and read as live.
+                    if self.is_recording_backed(camera_id):
+                        frame = self._stamp_source_osd(frame, True)
                 if frame is None and ondemand_source is None and ondemand_cap is None:
                     if ondemand_candidates is None:
                         ondemand_candidates = self._ondemand_candidates(camera_id)

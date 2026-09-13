@@ -112,6 +112,12 @@ class CameraItem(TRINETRASchema):
     stream_type: str = "HLS"
     stream_url: str
     last_seen: Optional[datetime] = None
+    # What the pixels actually are, as opposed to what the registry calls the
+    # camera: LIVE = an authorized network source, RECORDED = a file-backed clip
+    # (playable, but NOT a live feed and never labelled as one), UNPROVISIONED =
+    # no source configured. The frontend derives its badge from this, not from
+    # the playback phase, so a recording can never present itself as live.
+    source_kind: str = "LIVE"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -128,6 +134,9 @@ class CameraStreamTicket(TRINETRASchema):
     expires_at: datetime
     playable: bool = False
     reason: Optional[str] = None
+    # See CameraItem.source_kind. Sent with the ticket because the player is the
+    # component that would otherwise show a LIVE chip for a looping clip.
+    source_kind: str = "LIVE"
     # Same-origin MJPEG view of the same camera with real-time OpenCV vehicle
     # detection (green boxes). None when the source cannot be processed.
     detection_url: Optional[str] = None

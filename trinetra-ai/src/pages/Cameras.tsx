@@ -40,6 +40,14 @@ export default function Cameras() {
   );
 
   const { filtered, facets, stats, loading, error, refresh } = useCameras(filters);
+  const liveCams = useMemo(
+    () => filtered.filter((c) => c.sourceKind !== 'RECORDED'),
+    [filtered],
+  );
+  const recordedCams = useMemo(
+    () => filtered.filter((c) => c.sourceKind === 'RECORDED'),
+    [filtered],
+  );
   const hasFilters =
     Boolean(query) || status !== 'ALL' || department !== 'ALL' || zone !== 'ALL' || codec !== 'ALL' || activity !== 'ANY';
 
@@ -210,10 +218,30 @@ export default function Cameras() {
           loadingLabel="Loading camera registry"
         >
           {view === 'grid' ? (
-            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
-              {filtered.map((c) => (
-                <CameraCard key={c.id} camera={c} onView={setPreview} />
-              ))}
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+                {liveCams.map((c) => (
+                  <CameraCard key={c.id} camera={c} onView={setPreview} />
+                ))}
+              </div>
+              {/* Recorded sources are kept out of the live grid, not hidden: an
+                  officer still needs them to test detection, but never among the
+                  cameras believed to be showing what is happening now. */}
+              {recordedCams.length > 0 && (
+                <section aria-label="Recorded and test feeds">
+                  <h3 className="mb-2 flex items-center gap-2 text-2xs font-semibold uppercase text-ink-faint">
+                    Recorded / test feeds
+                    <span className="chip border-line bg-surface-2 text-ink-muted">
+                      {recordedCams.length}
+                    </span>
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+                    {recordedCams.map((c) => (
+                      <CameraCard key={c.id} camera={c} onView={setPreview} />
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           ) : (
             <Panel>

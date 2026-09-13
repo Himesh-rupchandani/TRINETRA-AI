@@ -48,6 +48,24 @@ _LIVE_TO_API_STATUS = {
 }
 
 
+def _source_kind(cam) -> str:
+    """Whether the frames this camera serves are genuinely live.
+
+    Single authority for the honest label, deliberately stricter than
+    ``stream_type`` alone: a file-backed source is RECORDED even though it
+    streams perfectly well in real time, because a looping clip is not a live
+    feed and must never be presented as one. A configured-but-missing file is
+    UNPROVISIONED rather than pretending to be either.
+    """
+    url = (getattr(cam, "stream_url", "") or "").strip()
+    stype = (getattr(cam, "stream_type", "") or "").lower()
+    if not url:
+        return "UNPROVISIONED"
+    if stype == "file" or url.lower().endswith((".mp4", ".avi", ".mkv", ".mov")):
+        return "RECORDED" if os.path.exists(url) else "UNPROVISIONED"
+    return "LIVE"
+
+
 def _resolve_camera_status(cam: "Camera") -> tuple:
     """Return (status, last_seen) for a camera.
 
@@ -96,6 +114,7 @@ def list_cameras(db: Session = Depends(get_db)):
                 stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
                 stream_url=cam.stream_url,
                 last_seen=last_seen,
+                source_kind=_source_kind(cam),
             )
         )
     return CameraListResponse(data=items)
@@ -179,6 +198,7 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
         height=cam.height or 1080,
         fps=cam.fps,
         stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
+        source_kind=_source_kind(cam),
         stream_url=cam.stream_url,
         last_seen=last_seen,
     )
@@ -217,6 +237,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         return CameraStreamTicket(
             camera_id=cam.camera_id.lower(),
             stream_type=(cam.stream_type or "rtsp").upper(),
+            source_kind=_source_kind(cam),
             stream_url="",
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
             playable=False,
@@ -255,6 +276,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
             playable=True,
             reason=None,
             detection_url=detection_url,
+            source_kind=_source_kind(cam),
         )
 
     # Sentinel WHEP endpoint is /stream/<id>/whep on the gateway (integrator
@@ -271,6 +293,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         playable=playable,
         reason=None if playable else f"Camera is {status_value}",
         detection_url=detection_url,
+        source_kind=_source_kind(cam),
     )
 
 

@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Car, MapPin, Maximize2, Video } from 'lucide-react';
 import type { Camera } from '@/types';
-import { StatusChip } from '@/components/common/Chips';
+import { SourceKindBadge, StatusChip } from '@/components/common/Chips';
 import { cn, formatTime, relativeTime } from '@/lib/utils';
 import { config } from '@/lib/config';
 import { cameraStill, hideBrokenImage } from '@/utils/mediaAssets';
@@ -55,6 +55,7 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
           </p>
         </div>
         <StatusChip status={camera.status} />
+        <SourceKindBadge kind={camera.sourceKind} />
       </Link>
     );
   }

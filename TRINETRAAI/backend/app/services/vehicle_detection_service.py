@@ -31,12 +31,72 @@ from ..core.config import settings
 from ..core.logging_config import logger
 from .detection_core import (
     collect_multiscale,
+    iou as _iou_fn,
     suppress_duplicates,
 )
 
-# COCO class id -> label, restricted to road vehicles.
+# COCO class id -> label, restricted to road vehicles. This is the FALLBACK for
+# weights whose class names do not describe road vehicles by name; it is not a
+# hard assumption about the model.
 VEHICLE_CLASS_IDS: Dict[int, str] = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
+
+# Normalised class name -> the label this product displays. Listing synonyms
+# (not just COCO names) is what lets a fine-tuned weight add classes - an
+# auto-rickshaw is its own class in Indian CCTV datasets and must not be shown
+# as a "bus" because the backend happened to be written against COCO ids.
+_VEHICLE_LABELS: Dict[str, str] = {
+    "car": "car", "sedan": "car", "hatchback": "car", "suv": "car", "jeep": "car",
+    "van": "van", "pickup": "pickup", "pickup_truck": "pickup",
+    "motorcycle": "motorcycle", "motorbike": "motorcycle", "bike": "motorcycle",
+    "scooter": "scooter", "motorcycle_and_rider": "motorcycle",
+    "bus": "bus", "coach": "bus", "minibus": "bus",
+    "truck": "truck", "lorry": "truck", "tanker": "truck", "tipper_truck": "truck",
+    "auto_rickshaw": "auto-rickshaw", "autorickshaw": "auto-rickshaw",
+    "tuk_tuk": "auto-rickshaw", "three_wheeler": "auto-rickshaw",
+    "three_wheel": "auto-rickshaw", "tempo": "auto-rickshaw",
+    "ambulance": "ambulance", "fire_truck": "fire-truck", "police_vehicle": "car",
+    "tractor": "tractor", "bicycle": "bicycle", "e_bicycle": "bicycle",
+}
+# Never a vehicle, whatever the weight calls it. `vehicle` is excluded on
+# purpose: a single all-vehicles class is the coarse 2-box head that produced
+# one rectangle around a whole row of parked bikes, so it is not accepted as a
+# vehicle source even though the label reads plausibly.
+_NON_VEHICLE_LABELS = {
+    "number_plate", "license_plate", "licence_plate", "plate", "person",
+    "pedestrian", "two_wheeler_rider_only", "traffic_light", "stop_sign",
+    "vehicle",
+}
+
+
+def resolve_vehicle_classes(model) -> Dict[int, str]:
+    """Which class ids of THIS weight are road vehicles, and what to call them.
+
+    Read from the model rather than assumed, so that swapping in a stronger or
+    fine-tuned detector (YOLO11m, a vehicle-only head, an Indian-traffic set
+    with a real auto-rickshaw class) changes what is detected and how it is
+    labelled without touching this file. Filtering happens inside the model call
+    via ``classes=``, so a person or a bench can never reach the drawing code.
+    """
+    names = getattr(model, "names", None) or {}
+    try:
+        items = list(names.items())
+    except AttributeError:  # a list-style names map
+        items = list(enumerate(names))
+    found: Dict[int, str] = {}
+    for cid, raw in items:
+        key = str(raw).lower().replace("-", "_").replace(" ", "_").strip()
+        if key in _NON_VEHICLE_LABELS:
+            continue
+        label = _VEHICLE_LABELS.get(key)
+        if label:
+            found[int(cid)] = label
+    return found or dict(VEHICLE_CLASS_IDS)
 GREEN = (0, 255, 0)  # BGR
+
+# How much two passes must overlap for the second box to be "the same vehicle"
+# for numbering purposes. Loose on purpose: a wrong number is cosmetic, a wrong
+# box is not, and only confirmed boxes are ever drawn.
+_LIVE_ID_IOU = 0.35
 
 # Ladder the live auto-pacing governor walks (see LIVE_ADAPTIVE_IMGSZ). Sizes
 # only ever change the model's INPUT resolution; the returned rectangles are
@@ -55,6 +115,9 @@ class VehicleDetection:
     y2: int
     class_name: str
     confidence: float
+    # Stable id across consecutive inference passes, assigned by the live view
+    # only. None whenever it is not known - the UI shows it "if available".
+    track_id: Optional[int] = None
 
 
 def _stale_window_ms(cost_ms: float) -> float:
@@ -72,6 +135,40 @@ def _stale_window_ms(cost_ms: float) -> float:
         return 0.0
     ceiling = max(floor, float(getattr(settings, "LIVE_STALENESS_CEILING_MS", 2500.0)))
     return min(max(floor, 2.0 * float(cost_ms or 0.0)), ceiling)
+
+
+def assign_track_ids(dets: List["VehicleDetection"], state: Dict[str, Any]) -> None:
+    """Number this pass's boxes, reusing the previous pass's numbers.
+
+    Deliberately NOT a tracker: nothing is predicted, carried forward or drawn
+    from history, so a box on screen is always a box the model produced on a
+    frame the viewer has actually replayed. The association buys continuity of
+    the NUMBER only, and when it is wrong the worst case is a vehicle whose id
+    changes - cosmetic, unlike a box that kept following a vehicle after the
+    detector stopped confirming it (measured: an extrapolating tracker put 20%
+    of live boxes in the wrong place, replay of confirmed detections put 4%).
+    """
+    prev = state.get("prev") or []
+    nxt = int(state.get("next") or 1)
+    matched: List[tuple] = []
+    taken = set()
+    for d in sorted(dets, key=lambda x: -x.confidence):
+        box = (d.x1, d.y1, d.x2, d.y2)
+        best, best_i = _LIVE_ID_IOU, -1
+        for i, (pbox, pid) in enumerate(prev):
+            if i in taken:
+                continue
+            if _iou_fn(box, pbox) > best:
+                best, best_i = _iou_fn(box, pbox), i
+        if best_i >= 0:
+            taken.add(best_i)
+            d.track_id = prev[best_i][1]
+        else:
+            d.track_id = nxt
+            nxt += 1
+        matched.append((box, d.track_id))
+    state["prev"] = matched
+    state["next"] = nxt
 
 
 class _LiveView:
@@ -94,6 +191,9 @@ class _LiveView:
         self._busy = False
         self._result: List[VehicleDetection] = []
         self._result_at = 0.0
+        # (box, id) from the previous pass - ids only, never boxes.
+        self._prev_ids: List[tuple] = []
+        self._next_id = 1
         self._thread = threading.Thread(target=self._run, name=f"live-detect-{camera_id}", daemon=True)
         self._thread.start()
 
@@ -115,6 +215,8 @@ class _LiveView:
             more = False
             try:
                 dets = self._svc.detect(frame)
+                if dets:
+                    self._assign_ids(dets)
             except Exception as exc:          # a bad frame must not kill the worker
                 logger.warning(f"[DETECTION] live pass failed for {self._camera_id}: {exc}")
                 dets = None
@@ -151,6 +253,8 @@ class _LiveView:
             return fresh
         try:
             dets = self._svc.detect(frame)
+            if dets:
+                self._assign_ids(dets)
         except Exception:
             return []
         with self._lock:
@@ -162,6 +266,14 @@ class _LiveView:
         """How old this view's result may be before it is dropped, not drawn."""
         return _stale_window_ms(float(getattr(self._svc, "last_inference_ms", 0.0) or 0.0))
 
+    def _assign_ids(self, dets: List["VehicleDetection"]) -> None:
+        """Number this worker's pass (see assign_track_ids)."""
+        with self._lock:
+            state = {"prev": self._prev_ids, "next": self._next_id}
+            assign_track_ids(dets, state)
+            self._prev_ids = state["prev"]
+            self._next_id = state["next"]
+
     def stop(self) -> None:
         self._stop.set()
         self._wake.set()
@@ -172,6 +284,10 @@ class VehicleDetectionService:
 
     def __init__(self) -> None:
         self._model = None
+        self._vehicle_classes: Optional[Dict[int, str]] = None
+        # camera_id -> {"prev": [(box, id)], "next": int}. Ids only: the boxes
+        # this numbers are always the ones the model confirmed on this pass.
+        self._id_state: Dict[str, Dict[str, Any]] = {}
         self._model_lock = threading.Lock()
         self._infer_lock = threading.Lock()
         self._disabled_reason: Optional[str] = None
@@ -245,6 +361,10 @@ class VehicleDetectionService:
                     verbose=False, imgsz=imgsz, device="cpu",
                 )
                 self._model = model
+                self._vehicle_classes = resolve_vehicle_classes(model)
+                logger.info(
+                    f"[DETECTION] Vehicle classes from this weight: "
+                    f"{self._vehicle_classes or 'none'}")
                 logger.info(
                     f"[DETECTION] Model ready in {time.perf_counter() - t0:.1f}s | live view runs "
                     f"conf={float(getattr(settings, 'CONFIDENCE_THRESHOLD', 0.35)):.2f} "
@@ -390,6 +510,12 @@ class VehicleDetectionService:
             self._infer_ms_samples = []
 
     # -------------------------------------------------------------- inference
+    def _class_ids_for(self, model) -> List[int]:
+        """Class ids to request from THIS weight (never an assumed COCO layout)."""
+        mapping = self._vehicle_classes or resolve_vehicle_classes(model)
+        self._vehicle_classes = mapping
+        return sorted(mapping.keys())
+
     def _predict_raw(self, model, image, conf: float, size: int, iou: float,
                      agnostic: bool) -> List[tuple]:
         """One model call, returned as ``(x1, y1, x2, y2, class_id, score)``.
@@ -406,7 +532,7 @@ class VehicleDetectionService:
             device="cpu",
             # Only road vehicles are requested, so a person, a bench or a
             # shadow cannot come back as a "vehicle" in the first place.
-            classes=list(VEHICLE_CLASS_IDS.keys()),
+            classes=self._class_ids_for(model),
             # One box per vehicle even when the model hedges between car/bus/
             # truck for the same one. Suppression is IoU based, so two separate
             # vehicles stay two separate detections.
@@ -507,7 +633,7 @@ class VehicleDetectionService:
         detections: List[VehicleDetection] = []
         h, w = frame.shape[:2]
         for x1, y1, x2, y2, k, c in kept:
-            name = VEHICLE_CLASS_IDS.get(int(k))
+            name = (self._vehicle_classes or VEHICLE_CLASS_IDS).get(int(k))
             if name is None or float(c) < threshold:
                 continue
             # Clip to the real frame bounds (this only ever *bounds* a box, it
@@ -587,6 +713,10 @@ class VehicleDetectionService:
 
             # Small label, sized to the box, kept inside the frame.
             label = f"{d.class_name} {d.confidence:.2f}"
+            if getattr(d, "track_id", None) is not None:
+                # The id ties the same vehicle across frames, which is what an
+                # operator needs to follow one vehicle through a junction.
+                label += f" #{d.track_id}"
             box_h = max(6, y2 - y1)
             font = max(0.32, min(0.55, box_h / 130.0))
             tth = 1 if box_h < 110 else 2
@@ -650,6 +780,8 @@ class VehicleDetectionService:
         if n % every_n == 0:
             detections = self.detect(frame)
             with self._state_lock:
+                state = self._id_state.setdefault(camera_id, {})
+                assign_track_ids(detections, state)
                 self._last_detections[camera_id] = detections
                 self._last_detections_at[camera_id] = time.monotonic() * 1000.0
             cached = detections
@@ -674,7 +806,8 @@ class VehicleDetectionService:
         """
         key = (camera_id or "").strip().lower()
         with self._state_lock:
-            for bucket in (self._frame_counter, self._last_detections, self._last_detections_at):
+            for bucket in (self._frame_counter, self._last_detections, self._last_detections_at,
+                           self._id_state):
                 bucket.pop(key, None)
                 if camera_id != key:
                     bucket.pop(camera_id, None)
