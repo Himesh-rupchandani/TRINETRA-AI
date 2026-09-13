@@ -29,6 +29,7 @@ from app.core.logging_config import logger  # noqa: F401  (keeps logging consist
 from app.database.models import Base, Camera
 from app.database.database import get_db
 from app.services.vehicle_detection_service import (
+    _stale_window_ms,
     VEHICLE_CLASS_IDS,
     VehicleDetection,
     VehicleDetectionService,
@@ -210,6 +211,90 @@ class TestAnnotate:
         assert _green_pixels(svc.annotate("cam-b", frame.copy())) == 0    # dropped
         gate.set()
         svc.forget("cam-b")
+
+    def test_an_unknown_quality_value_is_loud_not_silent(self, monkeypatch, caplog):
+        """A typo in LIVE_QUALITY must say so instead of quietly changing quality."""
+        import logging
+
+        svc = VehicleDetectionService()
+        monkeypatch.setattr(settings, "LIVE_QUALITY", "turbo")
+        auto_pick = None
+        with caplog.at_level(logging.WARNING, logger="app.services.vehicle_detection_service"):
+            svc.reset_pacing()
+            auto_pick = (svc.live_imgsz(), svc.live_mode())
+            svc.reset_pacing()                    # second call: must not re-warn
+            assert (svc.live_imgsz(), svc.live_mode()) == auto_pick
+        assert auto_pick[1] == "single", "a typo must land on auto, which starts on one pass"
+        notes = [r for r in caplog.records if "Unknown LIVE_QUALITY" in r.getMessage()]
+        assert len(notes) == 1, f"expected exactly one warning, got {len(notes)}"
+        assert "auto | eco | max" in notes[0].getMessage()
+        # and the valid values still mean what they say
+        monkeypatch.setattr(settings, "LIVE_QUALITY", "eco")
+        assert svc.live_mode() == "single"
+        monkeypatch.setattr(settings, "LIVE_QUALITY", "max")
+        assert svc.live_mode() == "strips"
+
+    def test_the_staleness_window_follows_the_detectors_cadence(self, monkeypatch):
+        """A deep pass must not make the overlay flicker; a stalled one must go.
+
+        The window is a floor that widens to twice the measured pass cost and
+        stops at a ceiling: the point is that dropping boxes is about *truth*, not
+        about a constant that a slow machine happens to exceed.
+        """
+        monkeypatch.setattr(settings, "LIVE_BOX_MAX_AGE_MS", 300.0)
+        monkeypatch.setattr(settings, "LIVE_STALENESS_CEILING_MS", 2500.0)
+        assert _stale_window_ms(100.0) == 300.0          # fast pass: the floor holds
+        assert _stale_window_ms(900.0) == 1800.0          # deep pass: widened, no flicker
+        assert _stale_window_ms(5000.0) == 2500.0         # pathological: capped, then dropped
+        monkeypatch.setattr(settings, "LIVE_BOX_MAX_AGE_MS", 0.0)
+        assert _stale_window_ms(900.0) == 0.0             # 0 = ageing disabled
+
+    def test_a_failing_live_pass_does_not_wedge_the_camera(self, monkeypatch):
+        """One bad frame must not leave a camera frozen behind a stuck busy flag."""
+        import time as _t
+
+        svc = VehicleDetectionService()
+        calls = []
+
+        def flaky(frame):
+            calls.append(1)
+            if len(calls) == 2:               # fail the worker's first pass
+                raise RuntimeError("deliberate")
+            return _dets()
+
+        monkeypatch.setattr(svc, "detect", flaky)
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+        assert _green_pixels(svc.annotate("cam-w", frame.copy())) > 100   # cold start ok
+        svc.annotate("cam-w", frame.copy())                               # worker fails here
+        deadline = _t.time() + 3.0
+        while _t.time() < deadline and len(calls) < 3:
+            svc.annotate("cam-w", frame.copy())
+            _t.sleep(0.05)
+        view = svc._live_view("cam-w")
+        assert len(calls) >= 3, "the worker stopped queueing frames after one failure"
+        assert view._busy is False, "the failed pass left the view marked busy forever"
+        svc.forget("cam-w")
+
+    def test_sync_fallback_also_drops_a_stale_replay(self, monkeypatch):
+        """The inline path replays between passes; that replay ages too."""
+        import app.services.vehicle_detection_service as mod
+
+        svc = VehicleDetectionService()
+        clock = [1000.0]
+        monkeypatch.setattr(mod.time, "monotonic", lambda: clock[0] / 1000.0)
+        monkeypatch.setattr(svc, "detect", lambda frame: _dets())
+        monkeypatch.setattr(settings, "LIVE_ASYNC_DETECT", False)
+        monkeypatch.setattr(settings, "DETECTION_EVERY_N_FRAMES", 5)
+        monkeypatch.setattr(settings, "LIVE_BOX_MAX_AGE_MS", 400.0)
+        monkeypatch.setattr(settings, "LIVE_STALENESS_CEILING_MS", 400.0)
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+
+        assert _green_pixels(svc.annotate("cam-s", frame.copy())) > 100   # real pass
+        clock[0] += 100.0
+        assert _green_pixels(svc.annotate("cam-s", frame.copy())) > 100   # replay, still fresh
+        clock[0] += 500.0
+        assert _green_pixels(svc.annotate("cam-s", frame.copy())) == 0     # replay went stale
+        svc.forget("cam-s")
 
     def test_forget_stops_the_camera_worker(self, monkeypatch):
         svc = VehicleDetectionService()

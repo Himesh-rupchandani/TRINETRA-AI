@@ -64,7 +64,9 @@ class Settings(BaseSettings):
     LIVE_IMGSZ_FLOOR: int = 640           # never go below this on the live view
     # Quality policy for the live view. "auto" lets the governor choose from the
     # ladder (single passes up to DETECTION_IMGSZ, then the same plus native
-    # strips); "eco" never spends a second pass; "max" always looks twice.
+    # strips); "eco" never spends a second pass; "max" always looks twice. An
+    # unrecognised value is logged once and treated as "auto", because a typo here
+    # would otherwise change box quality in silence.
     LIVE_QUALITY: str = "auto"
     # How a frame is looked at a second time. Vertical strips at native
     # resolution: on 1280x720 footage this took live recall from 48% to 88% of
@@ -92,7 +94,16 @@ class Settings(BaseSettings):
     # Boxes older than this are dropped instead of drawn. Without it a camera
     # whose detector stalled would keep a vehicle boxed in front of an empty
     # road; with it the worst case is a brief gap, never a wrong box.
+    # This is a FLOOR, not a fixed window: it widens to two passes of the
+    # detector's measured cadence (bounded by LIVE_STALENESS_CEILING_MS), because
+    # on a weak CPU a deep pass costs about this much and a cap equal to the
+    # refresh interval makes the overlay flicker - measured: 17.2% of a live
+    # stream's frames drew no boxes at all with a fixed 900 ms cap at
+    # LIVE_QUALITY=max, 0% with the window following cadence. 0 disables ageing.
     LIVE_BOX_MAX_AGE_MS: float = 900.0
+    # Hard limit on that widening. Beyond it the boxes are wrong wherever they
+    # are, so a detector slower than this loses its overlay instead of lying.
+    LIVE_STALENESS_CEILING_MS: float = 2500.0
 
     # NMS IoU used by the detector. Ultralytics' default is 0.7, which let one
     # motorcycle be boxed two or three times over; 0.45 keeps the best box per

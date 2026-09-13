@@ -57,6 +57,23 @@ class VehicleDetection:
     confidence: float
 
 
+def _stale_window_ms(cost_ms: float) -> float:
+    """Age after which live boxes are dropped rather than drawn.
+
+    ``LIVE_BOX_MAX_AGE_MS`` is the floor; it widens to two passes of the
+    detector's measured cadence so a deliberately deep look (LIVE_QUALITY=max on
+    a weak CPU costs ~900 ms a pass here) does not make the overlay flicker, and
+    stops widening at ``LIVE_STALENESS_CEILING_MS`` so a detector that has really
+    stopped loses its boxes instead of painting a vehicle onto an empty road.
+    ``0`` means "never age" - the boxes then stay until replaced.
+    """
+    floor = float(getattr(settings, "LIVE_BOX_MAX_AGE_MS", 900.0))
+    if floor <= 0:
+        return 0.0
+    ceiling = max(floor, float(getattr(settings, "LIVE_STALENESS_CEILING_MS", 2500.0)))
+    return min(max(floor, 2.0 * float(cost_ms or 0.0)), ceiling)
+
+
 class _LiveView:
     """One camera's background detection worker.
 
@@ -95,17 +112,21 @@ class _LiveView:
                 frame, self._pending = self._pending, None
                 if frame is None:
                     continue
+            more = False
             try:
                 dets = self._svc.detect(frame)
             except Exception as exc:          # a bad frame must not kill the worker
                 logger.warning(f"[DETECTION] live pass failed for {self._camera_id}: {exc}")
                 dets = None
-            if dets is not None:
-                with self._lock:
+            # _busy is cleared on BOTH paths: a raised pass that left it set would
+            # stop this camera ever queueing another frame, and the viewer would
+            # keep seeing one frozen set of boxes with nothing to say so.
+            with self._lock:
+                self._busy = False
+                if dets is not None:
                     self._result = dets
                     self._result_at = time.monotonic() * 1000.0
-                    self._busy = False
-                    more = self._pending is not None
+                more = self._pending is not None
             if more:
                 self._wake.set()
 
@@ -117,7 +138,7 @@ class _LiveView:
         stares at an unboxed feed for a whole inference before anything appears -
         and once one look is in flight later frames never pile up behind it.
         """
-        max_age = float(getattr(settings, "LIVE_BOX_MAX_AGE_MS", 900.0))
+        max_age = self._stale_after_ms()
         with self._lock:
             have = bool(self._result)
             age = time.monotonic() * 1000.0 - self._result_at
@@ -137,6 +158,10 @@ class _LiveView:
             self._result_at = time.monotonic() * 1000.0
         return list(dets)
 
+    def _stale_after_ms(self) -> float:
+        """How old this view's result may be before it is dropped, not drawn."""
+        return _stale_window_ms(float(getattr(self._svc, "last_inference_ms", 0.0) or 0.0))
+
     def stop(self) -> None:
         self._stop.set()
         self._wake.set()
@@ -154,7 +179,8 @@ class VehicleDetectionService:
         # camera_id -> (frame counter, last detections, last inference ms)
         self._frame_counter: Dict[str, int] = {}
         self._last_detections: Dict[str, List[VehicleDetection]] = {}
-        self._last_frame_ms: Dict[str, float] = {}
+        self._last_detections_at: Dict[str, float] = {}
+        self._quality_warned = False
         self.last_inference_ms: Optional[float] = None
         # what produced the last result: [{"region": ..., "imgsz": ..., "count": n}]
         self.last_passes: List[dict] = []
@@ -254,7 +280,7 @@ class VehicleDetectionService:
         """Ladder rungs allowed by the configuration, cheapest first."""
         target = int(getattr(settings, "DETECTION_IMGSZ", 960))
         floor = int(getattr(settings, "LIVE_IMGSZ_FLOOR", 640))
-        quality = str(getattr(settings, "LIVE_QUALITY", "auto") or "auto").lower()
+        quality = self._quality_locked()
         allow_multiscale = quality in ("auto", "max") and bool(
             getattr(settings, "LIVE_ADAPTIVE_IMGSZ", True)
         )
@@ -269,12 +295,26 @@ class VehicleDetectionService:
             out = [lv for lv in out if lv[1] == "single"] or out
         return out
 
+    def _quality_locked(self) -> str:
+        """LIVE_QUALITY, validated once. Unknown values would silently pick a
+        quality level, so say which one is actually in force."""
+        raw = str(getattr(settings, "LIVE_QUALITY", "auto") or "auto").lower()
+        if raw not in ("auto", "eco", "max"):
+            if not self._quality_warned:
+                self._quality_warned = True
+                logger.warning(
+                    f"[DETECTION] Unknown LIVE_QUALITY={raw!r}; using 'auto'. "
+                    "Valid values are auto | eco | max."
+                )
+            return "auto"
+        return raw
+
     def _active_locked(self) -> tuple:
         """The level currently in force (imgsz, mode, relative cost)."""
         if self._live_level is not None:
             return self._live_level
         levels = self._levels()
-        quality = str(getattr(settings, "LIVE_QUALITY", "auto") or "auto").lower()
+        quality = self._quality_locked()
         target = int(getattr(settings, "DETECTION_IMGSZ", 960))
         if quality == "max":
             return levels[-1]
@@ -308,9 +348,9 @@ class VehicleDetectionService:
         Pacing changes how *much* of the frame the model is shown, never what it
         said: no box is resized, moved or invented here.
         """
-        quality = str(getattr(settings, "LIVE_QUALITY", "auto") or "auto").lower()
+        quality = self._quality_locked()
         adaptive = bool(getattr(settings, "LIVE_ADAPTIVE_IMGSZ", True))
-        budget = float(getattr(settings, "LIVE_INFER_BUDGET_MS", 260.0) or 0.0)
+        budget = float(getattr(settings, "LIVE_INFER_BUDGET_MS", 450.0) or 0.0)
         if not adaptive or quality == "max" or budget <= 0:
             with self._state_lock:
                 self._live_level = None
@@ -611,21 +651,38 @@ class VehicleDetectionService:
             detections = self.detect(frame)
             with self._state_lock:
                 self._last_detections[camera_id] = detections
+                self._last_detections_at[camera_id] = time.monotonic() * 1000.0
             cached = detections
+        else:
+            # Same rule the async worker uses: a replay that has gone stale is not
+            # information any more, it is a box where a vehicle used to be.
+            window = _stale_window_ms(float(self.last_inference_ms or 0.0))
+            if window > 0:
+                with self._state_lock:
+                    then = self._last_detections_at.get(camera_id, 0.0)
+                if time.monotonic() * 1000.0 - then > window:
+                    cached = []
         return self.draw(frame, cached)
 
     def forget(self, camera_id: str) -> None:
-        """Drop cached state for a camera whose live view has ended."""
-        key = (camera_id or "").lower()
+        """Drop cached state for a camera whose live view has ended.
+
+        Called from the MJPEG generator's finally block, so this is also what
+        stops a per-camera worker thread from outliving its viewers. The worker
+        is stopped OUTSIDE the lock: a running pass may itself be waiting for
+        that lock, and join() while holding it would deadlock.
+        """
+        key = (camera_id or "").strip().lower()
         with self._state_lock:
-            self._frame_counter.pop(camera_id, None)
-            self._last_detections.pop(camera_id, None)
-            self._last_frame_ms.pop(camera_id, None)
-            view = self._live_views.pop(key, None)
-            view2 = self._live_views.get(camera_id)
-        for v in (view, view2):
-            if v is not None:
-                v.stop()
+            for bucket in (self._frame_counter, self._last_detections, self._last_detections_at):
+                bucket.pop(key, None)
+                if camera_id != key:
+                    bucket.pop(camera_id, None)
+            views = [v for k, v in list(self._live_views.items()) if k in (key, camera_id)]
+            for v in views:
+                self._live_views.pop(v._camera_id, None)
+        for v in views:
+            v.stop()
 
 
 # Global singleton — the model is loaded once per backend process.
