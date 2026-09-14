@@ -42,7 +42,7 @@ Evidence consistency (verified by re-OCR of the saved crops):
 | P0 | Database persistence | ✅ PASS | 9 `VehicleEvent` rows; re-run kept 7 (no duplicates) |
 | P0 | Plate search (normalized) | ✅ PASS | `plate_matching.search` exact-match on `GJ03AG6167` / `GJ03DE8157` |
 | P0 | Camera + location + lat/lng | ✅ PASS | camera rows carry **real** coords; uploaded videos carry `NULL` (no fake pin) |
-| P0 | Map result | ✅ PASS | 1 valid location → 1 marker; no-GPS footage → no fabricated pin |
+| P0 | Map result | ✅ PASS | UI plots only located items: 1 marker for 1 valid location, none for no-GPS footage |
 
 ### End-to-end PASS detail
 
@@ -58,7 +58,7 @@ Evidence consistency (verified by re-OCR of the saved crops):
 3. **Enhancement pre-processing could flip digits** — CLAHE/Otsu variants ran before the raw crop and could override a correct read (`96980` vs `08696`). Reordered `preprocess_variants` so the **raw colour crop is authoritative** and `anpr_pipeline` stops once the raw crop reads.
 4. **Evidence/frame mismatch** — the annotated label was drawn from a stale plate dict, so the displayed label could differ from the stored plate. The label is now drawn **before** the snapshot, and every field of a sighting (frame number, timestamp, bboxes, crops, plate) comes from one immutable `Sighting` object.
 5. **Non-deterministic output order** — sightings were emitted in track-retirement order; now sorted by `(track_id, frame_number)` so CSV/JSON/detection ids are stable across identical runs.
-6. **Fabricated GPS** — `Camera.latitude/longitude` defaulted to `23.0225 / 72.5714` (Ahmedabad), so every camera — including uploaded videos with no known location — got a fake map pin. Removed the scalar defaults; the upload APIs and the analysis registration now store `NULL` for footage with no real-world position. Real seeded/live cameras keep their real configured coordinates.
+6. **Fabricated GPS** — `Camera.latitude/longitude` defaulted to `23.0225 / 72.5714` (Ahmedabad), so every camera — including uploaded videos with no known location — got a fake map pin. Removed the scalar defaults; the upload APIs and the analysis registration now store `NULL` for footage with no real-world position. Real seeded/live cameras keep their real configured coordinates. The frontend `toCamera`/`toVehicleEvent`/`toVehicleRoute` adapters also coerced `null → 0` (plotting the uploaded camera at 0°N 0°E); they now preserve `null`, and the map/registry/popups render only located items.
 7. **Duplicate persistence on re-run** — re-running analysis appended a second copy of each track. `_run_video` now replaces the video's prior sightings before writing (verified: re-run kept the exact row count).
 
 ### Deliberately NOT changed
@@ -72,6 +72,8 @@ Evidence consistency (verified by re-OCR of the saved crops):
 |---|---|
 | Backend `pytest` | **272 passed, 0 failed, 0 skipped, 2 deselected** |
 | Frontend `npm test` | **48 / 48 passed** |
+| Frontend `tsc --noEmit` (typecheck) | **clean** |
+| Frontend `oxlint` | **0 errors** (48 pre-existing warnings) |
 | cv-engine `pytest` | 92 passed; 2 failed + 1 collection error — **pre-existing at base commit `2fe0cae`** (reproduced in a clean worktree; unrelated to this change, no cv-engine file was modified) |
 
 ## 6. Files changed
@@ -89,5 +91,16 @@ Evidence consistency (verified by re-OCR of the saved crops):
 | `process_video.py` | **new** — deterministic CLI (`<video> [--output] [--sample N]`) producing annotated video + CSV/JSON + evidence |
 | `TRINETRAAI/backend/run_full_demo.py` | **new** — one-shot full-video DB persistence run |
 | `TRINETRAAI/backend/check_db_e2e.py` | **new** — short-clip DB end-to-end + search verification |
+| `trinetra-ai/src/types/{camera,event,vehicle,alert}.ts` | camera/event/route/alert coordinates are now `number \| null` |
+| `trinetra-ai/src/services/adapters.ts` | `toCamera`/`toVehicleEvent`/`toVehicleRoute` preserve `null` coords (no `?? 0` fabrication) |
+| `trinetra-ai/src/components/gis/MapView.tsx` | filters to located items for markers/bounds/route/replay |
+| `trinetra-ai/src/components/gis/MapPopups.tsx` | camera popup shows `—` when coordinates are absent |
+| `trinetra-ai/src/components/vehicle/EvidencePanel.tsx` | evidence coordinates show `—` when absent |
+| `trinetra-ai/src/pages/CameraDetail.tsx` | "Not recorded" + no map when a camera has no position |
+| `trinetra-ai/src/pages/Registry.tsx` | CSV/table render `—` for missing coordinates |
+| `trinetra-ai/src/pages/GIS.tsx`, `VehicleInvestigation.tsx` | pan-to guarded for null coordinates |
+| `trinetra-ai/src/lib/geo/districtIndex.ts` | district aggregation skips unlocated items |
+| `trinetra-ai/src/hooks/useRoadLegs.ts`, `useRoutePlayback.ts` | legs/replay only between located points |
+| `trinetra-ai/src/services/realtimeService.ts`, `mocks/{events,mockBackend}.ts` | null-coordinate plumbing |
 
 Committed to `arena/01a09e58-hack` (HEAD `422d71c`) and pushed.
