@@ -69,8 +69,8 @@ export const readStore = () => store;
 
 /* --------------------------------- helpers --------------------------------- */
 
-/** Simulated network latency so loading states are exercised in the demo. */
-const latency = (ms = 140) => sleep(ms + Math.random() * 120);
+/** Simulated network latency — tuned for faster Vehicle Log (user requested "faster and proper"). */
+const latency = (ms = 60) => sleep(ms + Math.random() * 40);
 
 function decorateCamera(c: Camera): Camera {
   const evts = store.events.filter((e) => e.cameraId === c.id);
@@ -174,7 +174,7 @@ export async function getEvent(id: string): Promise<VehicleEvent> {
 /* ------------------------------- VEHICLES API ------------------------------- */
 
 export async function getVehicleEvents(plate: string): Promise<VehicleEvent[]> {
-  await latency(240);
+  await latency(40);
   const p = normalisePlate(plate);
   return store.events
     .filter((e) => e.plate === p)
@@ -182,7 +182,7 @@ export async function getVehicleEvents(plate: string): Promise<VehicleEvent[]> {
 }
 
 export async function getVehicleRoute(plate: string): Promise<VehicleRoute> {
-  await latency(200);
+  await latency(50);
   const events = await getVehicleEvents(plate);
   const points: RoutePoint[] = events.map((e, i) => {
     const prev = events[i - 1];

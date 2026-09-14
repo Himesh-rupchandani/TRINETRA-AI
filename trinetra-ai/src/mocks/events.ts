@@ -2,6 +2,7 @@ import type { VehicleClass, VehicleEvent, EventType, Severity } from '@/types';
 import { mockCameras, cameraByName } from './cameras';
 import { atToday, watchlistByPlate } from './watchlist';
 import { syntheticFrame, syntheticPlateCrop } from '@/utils/syntheticEvidence';
+import { isProvidedPlate, providedFrameUrl, providedPlateCropUrl } from '@/utils/providedPlates';
 
 /* ------------------------------------------------------------------ *
  * Deterministic PRNG so every reload of the demo shows the same data. *
@@ -44,6 +45,23 @@ function randomPlate(): string {
 
 function attachEvidence(e: VehicleEvent): VehicleEvent {
   const ref = `ev/${e.cameraId}/${e.id}`;
+  // User-provided plates use the EXACT photo (no AI substitute). Static URL
+  // is browser-cached, lazy-loaded, and visible instantly in Vehicle Log.
+  if (isProvidedPlate(e.plate)) {
+    const frame = providedFrameUrl(e.plate)!;
+    const crop = providedPlateCropUrl(e.plate)!;
+    return {
+      ...e,
+      evidenceRef: ref,
+      evidence: {
+        ref,
+        capturedAt: e.timestamp,
+        synthetic: false,
+        frameUrl: frame,
+        plateCropUrl: crop,
+      },
+    };
+  }
   return {
     ...e,
     evidenceRef: ref,
@@ -124,6 +142,78 @@ export const JOURNEY_SEEDS: JourneySeed[] = [
       { cam: 'CAM21', h: 2, m: 7, s: 53, conf: 87.9 },
       { cam: 'CAM22', h: 2, m: 34, s: 41, conf: 93.6 },
       { cam: 'CAM30', h: 5, m: 58, s: 19, conf: 91.2 },
+    ],
+  },
+  // --- PROVIDED PLATES — exact user images, no AI substitute ---
+  // Each plate has 3-4 cross-camera hops so Vehicle Log shows the provided
+  // image multiple times (different cameras/times) and the gallery is populated
+  // instantly when that plate is searched. All hops use isProvidedPlate → real photo.
+  {
+    plate: 'RJ19CL5074',
+    vehicleClass: 'CAR',
+    colour: 'White',
+    make: 'Hyundai',
+    model: 'i20',
+    owner: 'PROVIDED EVIDENCE — RJ19CL5074 (white Hyundai)',
+    hops: [
+      { cam: 'CAM04', h: 1, m: 12, s: 8, conf: 98.2 },
+      { cam: 'CAM17', h: 2, m: 14, s: 31, conf: 97.6 },
+      { cam: 'CAM08', h: 3, m: 22, s: 12, conf: 98.9 },
+      { cam: 'CAM07', h: 4, m: 18, s: 44, conf: 97.1 },
+    ],
+  },
+  {
+    plate: 'GJ03HK2595',
+    vehicleClass: 'CAR',
+    colour: 'Silver',
+    make: 'Hyundai',
+    model: 'i10 Sportz',
+    owner: 'PROVIDED EVIDENCE — GJ03HK2595 (silver i10, damaged bumper)',
+    hops: [
+      { cam: 'CAM09', h: 0, m: 48, s: 15, conf: 97.4 },
+      { cam: 'CAM17', h: 1, m: 52, s: 9, conf: 96.8 },
+      { cam: 'CAM30', h: 2, m: 44, s: 27, conf: 97.9 },
+    ],
+  },
+  {
+    plate: 'GJ03NB2146',
+    vehicleClass: 'CAR',
+    colour: 'Grey',
+    make: 'Maruti Suzuki',
+    model: 'Alto K10',
+    owner: 'PROVIDED EVIDENCE — GJ03NB2146 (dark grey Alto K10)',
+    hops: [
+      { cam: 'CAM24', h: 0, m: 22, s: 20, conf: 97.2 },
+      { cam: 'CAM21', h: 1, m: 18, s: 11, conf: 96.5 },
+      { cam: 'CAM22', h: 2, m: 8, s: 41, conf: 97.8 },
+      { cam: 'CAM30', h: 3, m: 31, s: 19, conf: 96.9 },
+    ],
+  },
+  {
+    plate: 'GJ03JL5362',
+    vehicleClass: 'CAR',
+    colour: 'Grey',
+    make: 'Maruti Suzuki',
+    model: 'Baleno',
+    owner: 'PROVIDED EVIDENCE — GJ03JL5362 (dark grey Baleno)',
+    hops: [
+      { cam: 'CAM04', h: 0, m: 33, s: 8, conf: 97.5 },
+      { cam: 'CAM17', h: 1, m: 28, s: 31, conf: 96.9 },
+      { cam: 'CAM08', h: 2, m: 41, s: 12, conf: 98.1 },
+    ],
+  },
+  {
+    plate: 'GJ03JL2801',
+    vehicleClass: 'CAR',
+    colour: 'Silver',
+    make: 'Maruti Suzuki',
+    model: 'Dzire',
+    owner: 'PROVIDED EVIDENCE — GJ03JL2801 (grey Suzuki front)',
+    hops: [
+      { cam: 'CAM09', h: 0, m: 58, s: 15, conf: 97.7 },
+      { cam: 'CAM17', h: 1, m: 48, s: 9, conf: 96.7 },
+      { cam: 'CAM24', h: 2, m: 36, s: 27, conf: 97.6 },
+      { cam: 'CAM30', h: 3, m: 48, s: 19, conf: 96.8 },
     ],
   },
 ];

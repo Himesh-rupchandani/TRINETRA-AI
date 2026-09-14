@@ -121,7 +121,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     resolve: {
-      alias: { '@': path.resolve(__dirname, './src') },
+      // Vite 8 native config loader deprecates __dirname and breaks on Windows
+      // paths with spaces (e.g. "hack-main (15)"). Use import.meta.dirname
+      // (or process.cwd() fallback) so "@/app/App" resolves on Windows too.
+      alias: { '@': path.resolve(import.meta.dirname ?? process.cwd(), './src') },
     },
     server: {
       host: '0.0.0.0',

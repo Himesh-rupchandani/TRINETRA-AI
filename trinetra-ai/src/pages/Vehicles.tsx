@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Car, MapPin, Route, Search as SearchIcon, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Car, Images, MapPin, Route, Search as SearchIcon, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { TraceSearchBar } from '@/components/vehicle/TraceSearchBar';
 import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
@@ -12,6 +12,7 @@ import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAsync } from '@/hooks/useAsync';
 import { vehicleService } from '@/services/vehicleService';
 import { formatDateTime, formatTime, formatVideoOffset, isValidPlate, prettyPlate } from '@/lib/utils';
+import { EvidenceThumbs, VehicleLogGallery } from '@/components/vehicle/VehicleLogGallery';
 
 /**
  * VEHICLE SEARCH — the hero screen.
@@ -172,7 +173,10 @@ export default function Vehicles() {
                 </div>
               </section>
 
-              {/* Sightings list */}
+              {/* All provided images visible in Vehicle Log — primary request */}
+              <VehicleLogGallery events={sightings} title={`All provided images — ${prettyPlate(result.plate)} in Vehicle Log`} className="mt-4" />
+
+              {/* Sightings list with inline thumbnails so every row shows its photo without extra clicks */}
               <Panel
                 title={`Sightings — ${sightings.length} records`}
                 icon={MapPin}
@@ -185,7 +189,7 @@ export default function Vehicles() {
               >
                 <ol className="divide-y divide-line/60">
                   {sightings.map((e, i) => (
-                    <li key={e.id} className="flex items-center gap-3.5 px-4 py-2.5 hover:bg-surface-2">
+                    <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2">
                       <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line bg-surface-3 font-mono text-2xs font-bold text-ink-muted">
                         {i + 1}
                       </span>
@@ -201,6 +205,9 @@ export default function Vehicles() {
                         {e.cameraName ?? e.cameraId.toUpperCase()}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{e.location}</span>
+                      <span className="hidden shrink-0 sm:block">
+                        <EvidenceThumbs event={e} onClick={() => navigate(`/vehicles/${result.plate}`)} />
+                      </span>
                       <span className="hidden font-mono text-2xs tabular-nums text-ink-faint sm:block">
                         {e.plateConfidence.toFixed(1)}%
                       </span>
@@ -210,6 +217,13 @@ export default function Vehicles() {
                         onClick={() => navigate(`/cameras/${e.cameraId}`)}
                       >
                         Open camera
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-xs shrink-0 sm:hidden"
+                        onClick={() => navigate(`/vehicles/${result.plate}`)}
+                      >
+                        <Images size={11} aria-hidden /> Photos
                       </button>
                     </li>
                   ))}

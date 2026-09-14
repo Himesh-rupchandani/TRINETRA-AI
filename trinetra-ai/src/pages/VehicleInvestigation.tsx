@@ -8,6 +8,7 @@ import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { VehicleInfoPanel } from '@/components/vehicle/VehicleInfoPanel';
 import { DetectionTable } from '@/components/vehicle/DetectionTable';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
+import { VehicleLogGallery } from '@/components/vehicle/VehicleLogGallery';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { Panel, EmptyState, LoadingState, ErrorState } from '@/components/common/Panel';
 import { InvalidPlateNotice } from '@/components/vehicle/InvalidPlateNotice';
@@ -239,7 +240,7 @@ export default function VehicleInvestigation() {
           </Panel>
         </div>
 
-        {/* BOTTOM — detection history + evidence */}
+        {/* BOTTOM — detection history + evidence — every photo is also visible here without extra clicks */}
         <Panel
           title="Every time it was seen"
           icon={ScanLine}
@@ -266,6 +267,11 @@ export default function VehicleInvestigation() {
         <Panel title="Photo evidence" icon={FileImage} className="xl:col-span-4">
           <EvidencePanel event={activeEvent} />
         </Panel>
+
+        {/* ALL PROVIDED IMAGES — Vehicle Log gallery: when a plate is searched, every captured frame + crop is visible here */}
+        <div className="xl:col-span-12">
+          <VehicleLogGallery events={events} title={`All provided images — ${prettyPlate(plate)} in Vehicle Log`} />
+        </div>
 
         {/* Evidence Vault — Tour: evidence-vault */}
         {activeEvent && (

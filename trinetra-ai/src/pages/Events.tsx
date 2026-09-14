@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { FileImage, ListTree, RefreshCcw, X } from 'lucide-react';
+import { FileImage, Images, ListTree, RefreshCcw, X } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Panel, AsyncBoundary } from '@/components/common/Panel';
 import { Pagination, PlateLink, ConfidenceBar, CameraLink } from '@/components/common/Links';
 import { SeverityChip } from '@/components/common/Chips';
 import { Modal } from '@/components/common/Modal';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
+import { EvidenceThumbs, VehicleLogGallery } from '@/components/vehicle/VehicleLogGallery';
 import { useEventSearch } from '@/hooks/useEvents';
 import { useCameras } from '@/hooks/useCameras';
 import { useDebounced } from '@/hooks/useUi';
@@ -69,6 +70,9 @@ export default function Events() {
 
   const { data, loading, error, refresh } = useEventSearch(filters, page, PAGE_SIZE);
   const items = data?.items ?? [];
+
+  const plateHasValue = Boolean((plate || params.get('plate') || '').trim());
+  const filteredWithEvidence = items.filter((e) => Boolean(e.evidence?.frameUrl || e.evidence?.plateCropUrl));
 
   const clear = () => {
     setPlate('');
@@ -204,75 +208,88 @@ export default function Events() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
-        <Panel bodyClassName="flex flex-col">
-          <AsyncBoundary
-            loading={loading}
-            error={error}
-            onRetry={refresh}
-            isEmpty={!items.length}
-            emptyTitle="No events found"
-            emptyDetail="Try widening the date range or clearing filters."
-            loadingLabel="Querying event index"
-          >
-            <div className="overflow-x-auto">
-              <table className="data-table data-table-page">
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Time</th>
-                    <th scope="col">Camera</th>
-                    <th scope="col">Place</th>
-                    <th scope="col">Plate</th>
-                    <th scope="col">Vehicle type</th>
-                    <th scope="col">Plate match</th>
-                    <th scope="col">What happened</th>
-                    <th scope="col">Priority</th>
-                    <th scope="col" className="text-right">
-                      Photo
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((e) => (
-                    <tr key={e.id}>
-                      <td className="font-mono text-2xs text-ink-faint">{formatDate(e.timestamp)}</td>
-                      <td className="font-mono tabular-nums text-ink">{formatTime(e.timestamp)}</td>
-                      <td>
-                        <CameraLink cameraId={e.cameraId} label={e.cameraName} />
-                      </td>
-                      <td className="max-w-[190px] truncate text-ink-muted">{e.location}</td>
-                      <td>
-                        <PlateLink plate={e.plate} size="xs" />
-                      </td>
-                      <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>
-                      <td>{e.plateConfidence ? <ConfidenceBar value={e.plateConfidence} /> : '—'}</td>
-                      <td className="text-2xs text-ink-muted">{prettyEventType(e.eventType)}</td>
-                      <td>
-                        <SeverityChip severity={e.severity ?? 'INFO'} />
-                      </td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="btn-ghost btn-xs"
-                          onClick={() => setEvidence(e)}
-                          disabled={!e.evidence}
-                        >
-                          <FileImage size={10} aria-hidden /> View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <div className="space-y-4">
+          {plateHasValue && filteredWithEvidence.length > 0 && (
+            <VehicleLogGallery events={filteredWithEvidence} title={`All provided images for ${plate.toUpperCase()}`} />
+          )}
+          {plateHasValue && filteredWithEvidence.length === 0 && items.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <Images size={14} aria-hidden /> No frame retained for this filter — widen the view or clear filters to see thumbnails.
             </div>
-            <Pagination
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={data?.total ?? 0}
-              onPageChange={(p) => setPage(Math.max(1, p))}
-            />
-          </AsyncBoundary>
-        </Panel>
+          )}
+          <Panel bodyClassName="flex flex-col">
+            <AsyncBoundary
+              loading={loading}
+              error={error}
+              onRetry={refresh}
+              isEmpty={!items.length}
+              emptyTitle="No events found"
+              emptyDetail="Try widening the date range or clearing filters."
+              loadingLabel="Querying event index"
+            >
+              <div className="overflow-x-auto">
+                <table className="data-table data-table-page">
+                  <thead>
+                    <tr>
+                      <th scope="col">Date</th>
+                      <th scope="col">Time</th>
+                      <th scope="col">Camera</th>
+                      <th scope="col">Place</th>
+                      <th scope="col">Plate</th>
+                      <th scope="col">Vehicle type</th>
+                      <th scope="col">Plate match</th>
+                      <th scope="col">What happened</th>
+                      <th scope="col">Priority</th>
+                      <th scope="col" className="text-right">
+                        Photo
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((e) => (
+                      <tr key={e.id}>
+                        <td className="font-mono text-2xs text-ink-faint">{formatDate(e.timestamp)}</td>
+                        <td className="font-mono tabular-nums text-ink">{formatTime(e.timestamp)}</td>
+                        <td>
+                          <CameraLink cameraId={e.cameraId} label={e.cameraName} />
+                        </td>
+                        <td className="max-w-[190px] truncate text-ink-muted">{e.location}</td>
+                        <td>
+                          <PlateLink plate={e.plate} size="xs" />
+                        </td>
+                        <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>
+                        <td>{e.plateConfidence ? <ConfidenceBar value={e.plateConfidence} /> : '—'}</td>
+                        <td className="text-2xs text-ink-muted">{prettyEventType(e.eventType)}</td>
+                        <td>
+                          <SeverityChip severity={e.severity ?? 'INFO'} />
+                        </td>
+                        <td className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <EvidenceThumbs event={e} onClick={() => setEvidence(e)} />
+                            <button
+                              type="button"
+                              className="btn-ghost btn-xs shrink-0"
+                              onClick={() => setEvidence(e)}
+                              disabled={!e.evidence}
+                            >
+                              <FileImage size={10} aria-hidden /> View
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={data?.total ?? 0}
+                onPageChange={(p) => setPage(Math.max(1, p))}
+              />
+            </AsyncBoundary>
+          </Panel>
+        </div>
       </div>
 
       <Modal

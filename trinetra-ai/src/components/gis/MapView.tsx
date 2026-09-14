@@ -214,7 +214,18 @@ export function MapView({
   const [fsPortalEl, setFsPortalEl] = useState<HTMLDivElement | null>(null);
   const fullscreen = fsMode != null;
   const rootRef = useRef<HTMLDivElement>(null);
-  const playback = useRoutePlayback(route, onPlaybackStop);
+  // Filter out invalid GPS (0,0 or far outside Gujarat/India) that would
+  // teleport the viewport to Africa/Atlantic — e.g. video VID_20260907...
+  // had a 0,0 point that dragged fitBounds across continents and showed
+  // the "API KEY REQUIRED" world view. Keep only plausible India coords.
+  const isValidCoord = (lat: number, lon: number) =>
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    !(Math.abs(lat) < 0.5 && Math.abs(lon) < 0.5) && // 0,0
+    lat >= 6 && lat <= 38 && lon >= 65 && lon <= 100;
+  // Validated route for playback — prevents teleport to 0,0 / Gabon.
+  const validRoute = useMemo(() => route.filter((p) => isValidCoord(p.latitude, p.longitude)), [route]);
+  const playback = useRoutePlayback(validRoute, onPlaybackStop);
 
   const enterFake = () => {
     const el = document.createElement('div');
@@ -291,14 +302,19 @@ export function MapView({
   const clustered = districtClusters.length > 0 && mapZoom < DETECTION_ZOOM && !selectedDistrict;
 
   const routeLine = useMemo(
-    () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
+    () => route.filter((p) => isValidCoord(p.latitude, p.longitude)).map((p) => [p.latitude, p.longitude] as [number, number]),
     [route],
   );
-
   const fitPoints = useMemo(() => {
     if (routeLine.length) return routeLine;
-    if (cameras.length) return cameras.map((c) => [c.latitude, c.longitude] as [number, number]);
-    return events.map((e) => [e.latitude, e.longitude] as [number, number]);
+    const camPts = cameras
+      .filter((c) => isValidCoord(c.latitude, c.longitude))
+      .map((c) => [c.latitude, c.longitude] as [number, number]);
+    if (camPts.length) return camPts;
+    const evPts = events
+      .filter((e) => isValidCoord(e.latitude, e.longitude))
+      .map((e) => [e.latitude, e.longitude] as [number, number]);
+    return evPts;
   }, [routeLine, cameras, events]);
 
   const mapInner = (
@@ -349,36 +365,40 @@ export function MapView({
         {clustered ? (
           <DistrictClusterLayer clusters={districtClusters} selected={selectedDistrict} onSelect={onSelectDistrict} />
         ) : (
-          cameras.map((c) => (
-            <Marker
-              key={c.id}
-              position={[c.latitude, c.longitude]}
-              icon={cameraIcon(c.status, c.id === selectedCameraId)}
-              eventHandlers={{ click: () => onSelectCamera?.(c) }}
-              keyboard
-              title={`${c.name} — ${c.location}`}
-            >
-              <Popup>
-                <CameraPopup camera={c} onWatch={onWatchCamera} />
-              </Popup>
-            </Marker>
-          ))
+          cameras
+            .filter((c) => isValidCoord(c.latitude, c.longitude))
+            .map((c) => (
+              <Marker
+                key={c.id}
+                position={[c.latitude, c.longitude]}
+                icon={cameraIcon(c.status, c.id === selectedCameraId)}
+                eventHandlers={{ click: () => onSelectCamera?.(c) }}
+                keyboard
+                title={`${c.name} — ${c.location}`}
+              >
+                <Popup>
+                  <CameraPopup camera={c} onWatch={onWatchCamera} />
+                </Popup>
+              </Marker>
+            ))
         )}
 
         {mapZoom >= DETECTION_ZOOM &&
-          events.map((e) => (
-            <Marker
-              key={e.id}
-              position={[e.latitude, e.longitude]}
-              icon={eventIcon(e.watchlistMatch)}
-              eventHandlers={{ click: () => onSelectEvent?.(e) }}
-              title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
-            >
-              <Popup>
-                <EventPopup event={e} />
-              </Popup>
-            </Marker>
-          ))}
+          events
+            .filter((e) => isValidCoord(e.latitude, e.longitude))
+            .map((e) => (
+              <Marker
+                key={e.id}
+                position={[e.latitude, e.longitude]}
+                icon={eventIcon(e.watchlistMatch)}
+                eventHandlers={{ click: () => onSelectEvent?.(e) }}
+                title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
+              >
+                <Popup>
+                  <EventPopup event={e} />
+                </Popup>
+              </Marker>
+            ))}
 
         {routeLine.length > 1 && (
           <>
@@ -391,24 +411,26 @@ export function MapView({
           </>
         )}
 
-        {route.map((p, i) => (
-          <Marker
-            key={`${p.eventId}-${p.sequence}`}
-            position={[p.latitude, p.longitude]}
-            icon={routeIcon(p.sequence, 'HIGH', p.sequence === activeRouteSequence, '#2563eb')}
-            eventHandlers={{ click: () => onSelectRoutePoint?.(p) }}
-            zIndexOffset={500}
-            title={`Sighting ${p.sequence} — ${p.cameraName}`}
-          >
-            <Popup>
-              <RoutePopup point={p} prev={i > 0 ? route[i - 1] : undefined} plate={routePlate} />
-            </Popup>
-          </Marker>
-        ))}
-        {playback.started && route.length > 1 && (
+        {route
+          .filter((p) => isValidCoord(p.latitude, p.longitude))
+          .map((p, i, arr) => (
+            <Marker
+              key={`${p.eventId}-${p.sequence}`}
+              position={[p.latitude, p.longitude]}
+              icon={routeIcon(p.sequence, 'HIGH', p.sequence === activeRouteSequence, '#2563eb')}
+              eventHandlers={{ click: () => onSelectRoutePoint?.(p) }}
+              zIndexOffset={500}
+              title={`Sighting ${p.sequence} — ${p.cameraName}`}
+            >
+              <Popup>
+                <RoutePopup point={p} prev={i > 0 ? arr[i - 1] : undefined} plate={routePlate} />
+              </Popup>
+            </Marker>
+          ))}
+        {playback.started && validRoute.length > 1 && (
           <Marker
             ref={playback.markerRef}
-            position={[route[0].latitude, route[0].longitude]}
+            position={[validRoute[0].latitude, validRoute[0].longitude]}
             icon={playbackIcon()}
             interactive={false}
             keyboard={false}
@@ -459,7 +481,7 @@ export function MapView({
           {fullscreen ? <Minimize size={14} aria-hidden /> : <Maximize size={14} aria-hidden />}
         </button>
       </div>
-      {route.length > 1 && (
+      {validRoute.length > 1 && (
         <div className="absolute bottom-3 left-1/2 z-[1001] -translate-x-1/2">
           <div className="flex items-center gap-2 rounded-full border border-line bg-surface-1/95 py-1.5 pl-1.5 pr-3 shadow-lg backdrop-blur">
             <button
@@ -489,8 +511,8 @@ export function MapView({
             <div className="min-w-[120px]">
               <p className="whitespace-nowrap font-mono text-[10px] font-semibold text-ink">
                 {playback.started
-                  ? `Stop ${playback.stopIndex + 1} of ${route.length} \u00b7 ${route[playback.stopIndex]?.cameraName ?? ''}`
-                  : `Replay ${route.length} stops`}
+                  ? `Stop ${playback.stopIndex + 1} of ${validRoute.length} \u00b7 ${validRoute[playback.stopIndex]?.cameraName ?? ''}`
+                  : `Replay ${validRoute.length} stops`}
               </p>
               <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-500/20">
                 <div ref={playback.barRef} className="h-full w-0 rounded-full bg-brand" />
