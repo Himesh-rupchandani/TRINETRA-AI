@@ -58,6 +58,7 @@ Evidence consistency (verified by re-OCR of the saved crops):
   - `GET /api/analysis/videos/{id}/file` → `200 video/mp4` (65 MB stored clip).
   - `GET /api/vehicles/GJ03AG6167` → `cameras_touched: 2`.
 - **Backend → frontend trace** verified: the `/detections` payload keys (`evidence_url`, `plate_crop_url`) match `VideoDetectionRow` in `videoAnalysisService.ts`, and `DetectionLedger` renders them through `EvidenceThumb` (with an honest "no crop" fallback).
+- **Evidence integrity re-verified** on a fresh full-video re-run after the evidence fixes: every saved vehicle crop's pixel size equals its recorded `bbox` extent (same-frame guarantee), every crop has **zero green annotation pixels** (`green_px == 0`), and the representative frame of each `UNKNOWN` track is a genuinely-detected frame (never a carried-over empty-road box).
 - **CSV columns present:** `detection_id, video_filename, frame_number, timestamp, track_id, plate, plate_confidence, vehicle_confidence, evidence_frame` (+ vehicle class / plate status / raw / bboxes / evidence paths).
 
 ## 4. Root causes found & fixed
@@ -69,6 +70,8 @@ Evidence consistency (verified by re-OCR of the saved crops):
 5. **Non-deterministic output order** — sightings were emitted in track-retirement order; now sorted by `(track_id, frame_number)` so CSV/JSON/detection ids are stable across identical runs.
 6. **Fabricated GPS** — `Camera.latitude/longitude` defaulted to `23.0225 / 72.5714` (Ahmedabad), so every camera — including uploaded videos with no known location — got a fake map pin. Removed the scalar defaults; the upload APIs and the analysis registration now store `NULL` for footage with no real-world position. Real seeded/live cameras keep their real configured coordinates. The frontend `toCamera`/`toVehicleEvent`/`toVehicleRoute` adapters also coerced `null → 0` (plotting the uploaded camera at 0°N 0°E); they now preserve `null`, and the map/registry/popups render only located items.
 7. **Duplicate persistence on re-run** — re-running analysis appended a second copy of each track. `_run_video` now replaces the video's prior sightings before writing (verified: re-run kept the exact row count).
+8. **Annotation bleed into evidence crops** — `_annotate_frame` drew the green track box onto the *same* array the crops are cut from, so vehicle/plate crops could contain a green box border (and OCR frames could be contaminated). It now draws on a `frame.copy()`, so the full-frame evidence is annotated while crops are always cut from raw pixels (verified: `green_px == 0` on every saved crop).
+9. **Empty-road fallback evidence** — the no-plate fallback (`best_vehicle`, the "clearest view") was updated on carried-over boxes too, so an `UNKNOWN` track could end up stored with a crop of empty road (a box kept alive through tracker misses). The fallback is now only taken from genuinely-detected frames (`misses == 0`). **Deliberately, OCR is *not* skipped on carried-over boxes**: a one-step detector flicker must not discard a real plate — the read itself proves a plate is present on that frame. A first attempt that skipped OCR on missed frames dropped the real read `GJ03DE8157` @ frame 295 (3 plates → 2); that was reverted and the honest 3-plate result restored.
 
 ### Deliberately NOT changed
 
@@ -79,7 +82,7 @@ Evidence consistency (verified by re-OCR of the saved crops):
 
 | Suite | Result |
 |---|---|
-| Backend `pytest` | **272 passed, 0 failed, 0 skipped, 2 deselected** |
+| Backend `pytest` | **282 passed, 0 failed, 0 skipped, 2 deselected** (incl. the new 10-test `test_rescue_regressions.py` guard suite) |
 | Frontend `npm test` | **48 / 48 passed** |
 | Frontend `tsc --noEmit` (typecheck) | **clean** |
 | Frontend `oxlint` | **0 errors** (48 pre-existing warnings) |
@@ -90,7 +93,8 @@ Evidence consistency (verified by re-OCR of the saved crops):
 
 | File | Change |
 |---|---|
-| `TRINETRAAI/backend/app/services/video_analysis_core.py` | **new** — shared deterministic `analyze_video` core; `Sighting` (with `full_frame`) as the single source of truth; representative-frame selection; deterministic ordering; label-before-snapshot |
+| `TRINETRAAI/backend/app/services/video_analysis_core.py` | **new** — shared deterministic `analyze_video` core; `Sighting` (with `full_frame`) as the single source of truth; representative-frame selection; deterministic ordering; label-before-snapshot; annotation drawn on a copy (no crop bleed); honest fallback frame (`misses == 0`) |
+| `TRINETRAAI/backend/tests/test_rescue_regressions.py` | **new** — 10 deterministic regression guards (plate tiers, raw-first OCR, joined multi-line reads, NULL camera GPS, same-frame evidence, deterministic ordering, honest fallback frames) |
 | `TRINETRAAI/backend/app/services/video_analysis_service.py` | `_run_video` now uses the shared core; removed per-frame event fan-out and unused imports; idempotent re-runs |
 | `TRINETRAAI/backend/app/services/ocr_service.py` | raw-first `preprocess_variants`; added `joined_plate_candidate()` |
 | `TRINETRAAI/backend/app/services/anpr_pipeline.py` | joined-candidate path; raw crop is authoritative (break after raw read) |
@@ -113,4 +117,4 @@ Evidence consistency (verified by re-OCR of the saved crops):
 | `trinetra-ai/src/hooks/useRoadLegs.ts`, `useRoutePlayback.ts` | legs/replay only between located points |
 | `trinetra-ai/src/services/realtimeService.ts`, `mocks/{events,mockBackend}.ts` | null-coordinate plumbing |
 
-Committed to `arena/01a09e58-hack` (HEAD `422d71c`) and pushed.
+Committed to `arena/01a09e58-hack` and pushed — evidence-integrity fixes landed in `4e6875a`; **PR: [#29](https://github.com/Himesh-rupchandani/hack/pull/29)** tracks the full history.
