@@ -211,7 +211,9 @@ export default function CameraDetail() {
                   <KeyValue label="Zone">{camera.zone}</KeyValue>
                   <KeyValue label="Map position">
                     <span className="font-mono">
-                      {camera.latitude.toFixed(5)}, {camera.longitude.toFixed(5)}
+                      {camera.latitude != null && camera.longitude != null
+                        ? `${camera.latitude.toFixed(5)}, ${camera.longitude.toFixed(5)}`
+                        : 'Not recorded'}
                     </span>
                   </KeyValue>
                   <KeyValue label="Last checked">{formatDateTime(camera.lastSeen)}</KeyValue>
@@ -220,14 +222,20 @@ export default function CameraDetail() {
               </Panel>
 
               <Panel title="Where this camera is" icon={MapPin} className="min-h-[220px]" bodyClassName="relative isolate">
-                <LazyMap
-                  cameras={[camera]}
-                  selectedCameraId={camera.id}
-                  className="absolute inset-0"
-                  zoom={15}
-                  center={[camera.latitude, camera.longitude]}
-                  fit={false}
-                />
+                {camera.latitude != null && camera.longitude != null ? (
+                  <LazyMap
+                    cameras={[camera]}
+                    selectedCameraId={camera.id}
+                    className="absolute inset-0"
+                    zoom={15}
+                    center={[camera.latitude, camera.longitude]}
+                    fit={false}
+                  />
+                ) : (
+                  <div className="grid h-full place-items-center p-4 text-center text-sm text-ink-muted">
+                    This camera has no recorded location, so no map pin is shown.
+                  </div>
+                )}
               </Panel>
 
               <Panel title="Photo evidence" icon={ScanLine}>

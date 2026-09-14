@@ -213,8 +213,8 @@ function mapBackendEventPayload(raw: Record<string, unknown>): VehicleEvent {
         : undefined,
     vehicle_class: raw.vehicle_class as string | undefined,
     event_time: (raw.event_time ?? new Date().toISOString()) as string,
-    latitude: raw.latitude as number | undefined,
-    longitude: raw.longitude as number | undefined,
+    latitude: raw.latitude as number | null | undefined,
+    longitude: raw.longitude as number | null | undefined,
     watchlist_match: Boolean(raw.watchlist_match),
   } satisfies VehicleEventDto;
   return toVehicleEvent(dto, liveCameraDir);

@@ -155,7 +155,9 @@ export function EvidencePanel({
               <dd className="text-right font-mono text-ink-muted">
                 <span className="inline-flex items-center gap-1">
                   <MapPin size={9} aria-hidden />
-                  {event.latitude.toFixed(4)}, {event.longitude.toFixed(4)}
+                  {event.latitude != null && event.longitude != null
+                    ? `${event.latitude.toFixed(4)}, ${event.longitude.toFixed(4)}`
+                    : '—'}
                 </span>
               </dd>
             </>

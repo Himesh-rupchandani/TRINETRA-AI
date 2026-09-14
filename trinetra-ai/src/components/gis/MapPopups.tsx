@@ -35,7 +35,9 @@ export function CameraPopup({
         <dd className="text-right font-mono">{camera.eventCount24h ?? 0}</dd>
         <dt className="text-ink-faint">Coordinates</dt>
         <dd className="text-right font-mono">
-          {camera.latitude.toFixed(4)}, {camera.longitude.toFixed(4)}
+          {camera.latitude != null && camera.longitude != null
+            ? `${camera.latitude.toFixed(4)}, ${camera.longitude.toFixed(4)}`
+            : '—'}
         </dd>
       </dl>
       <div className="mt-2.5 grid grid-cols-2 gap-1.5">

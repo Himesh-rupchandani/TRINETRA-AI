@@ -58,6 +58,13 @@ function PanTo({ target }: { target?: [number, number] | null }) {
 /** Sighting dots appear from this zoom down: statewide views stay clean. */
 const DETECTION_ZOOM = 10;
 
+/** Narrows an item to one whose coordinates are both known (never (0,0)). */
+function hasLocation<T extends { latitude: number | null; longitude: number | null }>(
+  x: T,
+): x is T & { latitude: number; longitude: number } {
+  return x.latitude != null && x.longitude != null;
+}
+
 /** Reports the live zoom so the map can layer markers by it. */
 function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
   const map = useMap();
@@ -214,7 +221,12 @@ export function MapView({
   const [fsPortalEl, setFsPortalEl] = useState<HTMLDivElement | null>(null);
   const fullscreen = fsMode != null;
   const rootRef = useRef<HTMLDivElement>(null);
-  const playback = useRoutePlayback(route, onPlaybackStop);
+  // Only items with a real location are plotted: null coordinates are honest
+  // "no known position" data, never fabricated into a (0,0) pin.
+  const geoCams = useMemo(() => cameras.filter(hasLocation), [cameras]);
+  const geoEvents = useMemo(() => events.filter(hasLocation), [events]);
+  const georoute = useMemo(() => route.filter(hasLocation), [route]);
+  const playback = useRoutePlayback(georoute, onPlaybackStop);
 
   const enterFake = () => {
     const el = document.createElement('div');
@@ -291,15 +303,15 @@ export function MapView({
   const clustered = districtClusters.length > 0 && mapZoom < DETECTION_ZOOM && !selectedDistrict;
 
   const routeLine = useMemo(
-    () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
-    [route],
+    () => georoute.map((p) => [p.latitude, p.longitude] as [number, number]),
+    [georoute],
   );
 
   const fitPoints = useMemo(() => {
     if (routeLine.length) return routeLine;
-    if (cameras.length) return cameras.map((c) => [c.latitude, c.longitude] as [number, number]);
-    return events.map((e) => [e.latitude, e.longitude] as [number, number]);
-  }, [routeLine, cameras, events]);
+    if (geoCams.length) return geoCams.map((c) => [c.latitude, c.longitude] as [number, number]);
+    return geoEvents.map((e) => [e.latitude, e.longitude] as [number, number]);
+  }, [routeLine, geoCams, geoEvents]);
 
   const mapInner = (
     <>
@@ -332,7 +344,7 @@ export function MapView({
         <PanTo target={panTo} />
 
         {showCoverage &&
-          cameras.map((c) => (
+          geoCams.map((c) => (
             <CircleMarker
               key={`cov-${c.id}`}
               center={[c.latitude, c.longitude]}
@@ -349,7 +361,7 @@ export function MapView({
         {clustered ? (
           <DistrictClusterLayer clusters={districtClusters} selected={selectedDistrict} onSelect={onSelectDistrict} />
         ) : (
-          cameras.map((c) => (
+          geoCams.map((c) => (
             <Marker
               key={c.id}
               position={[c.latitude, c.longitude]}
@@ -366,7 +378,7 @@ export function MapView({
         )}
 
         {mapZoom >= DETECTION_ZOOM &&
-          events.map((e) => (
+          geoEvents.map((e) => (
             <Marker
               key={e.id}
               position={[e.latitude, e.longitude]}
@@ -391,7 +403,7 @@ export function MapView({
           </>
         )}
 
-        {route.map((p, i) => (
+        {georoute.map((p, i) => (
           <Marker
             key={`${p.eventId}-${p.sequence}`}
             position={[p.latitude, p.longitude]}
@@ -401,14 +413,14 @@ export function MapView({
             title={`Sighting ${p.sequence} — ${p.cameraName}`}
           >
             <Popup>
-              <RoutePopup point={p} prev={i > 0 ? route[i - 1] : undefined} plate={routePlate} />
+              <RoutePopup point={p} prev={i > 0 ? georoute[i - 1] : undefined} plate={routePlate} />
             </Popup>
           </Marker>
         ))}
-        {playback.started && route.length > 1 && (
+        {playback.started && georoute.length > 1 && (
           <Marker
             ref={playback.markerRef}
-            position={[route[0].latitude, route[0].longitude]}
+            position={[georoute[0].latitude, georoute[0].longitude]}
             icon={playbackIcon()}
             interactive={false}
             keyboard={false}

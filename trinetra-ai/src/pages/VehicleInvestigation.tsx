@@ -57,7 +57,7 @@ export default function VehicleInvestigation() {
 
   const selectPoint = (p: RoutePoint) => {
     setActiveSequence(p.sequence);
-    setPanTo([p.latitude, p.longitude]);
+    if (p.latitude != null && p.longitude != null) setPanTo([p.latitude, p.longitude]);
     const ev = events.find((e) => e.id === p.eventId);
     if (ev) setEvidenceEvent(ev);
   };

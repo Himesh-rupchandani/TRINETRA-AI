@@ -53,8 +53,9 @@ export interface RoutePoint {
   cameraId: string;
   cameraName: string;
   location: string;
-  latitude: number;
-  longitude: number;
+  /** Null for a hop whose camera has no known real-world position. */
+  latitude: number | null;
+  longitude: number | null;
   timestamp: string;
   plateConfidence: number;
   /** Minutes elapsed since the previous point. */

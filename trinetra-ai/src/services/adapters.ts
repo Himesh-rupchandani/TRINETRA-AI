@@ -181,8 +181,8 @@ export interface CameraMeta {
   id: string;
   name: string;
   location: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 let directoryPromise: Promise<Map<string, CameraMeta>> | null = null;
@@ -297,8 +297,10 @@ export function toCamera(dto: CameraItemDto): Camera {
     id: (dto.id ?? dto.camera_id ?? '').toLowerCase(),
     name: dto.name ?? dto.camera_id ?? 'Unknown camera',
     location: dto.location ?? dto.name ?? '—',
-    latitude: dto.latitude ?? 0,
-    longitude: dto.longitude ?? 0,
+    // A missing coordinate stays missing: (0,0) is a real place (Gulf of
+    // Guinea) and would draw a fabricated pin for footage with no GPS.
+    latitude: dto.latitude ?? null,
+    longitude: dto.longitude ?? null,
     department: dto.department ?? undefined,
     zone: dto.zone ?? undefined,
     status: asCameraStatus(dto.status),
@@ -330,8 +332,8 @@ export function toVehicleEvent(
     plate: plate ?? '',
     plateConfidence: pct(dto.plate_confidence),
     timestamp: dto.event_time,
-    latitude: dto.latitude ?? meta?.latitude ?? 0,
-    longitude: dto.longitude ?? meta?.longitude ?? 0,
+    latitude: dto.latitude ?? meta?.latitude ?? null,
+    longitude: dto.longitude ?? meta?.longitude ?? null,
     location: meta?.location ?? '—',
     vehicleClass: asVehicleClass(dto.vehicle_class),
     eventType: matched ? 'WATCHLIST_MATCH' : plate ? 'ANPR_READ' : 'VEHICLE_DETECTION',
@@ -426,20 +428,10 @@ export function toVehicleProfile(dto: ProfileDto): VehicleProfile {
 }
 
 export function toVehicleRoute(dto: RouteDto, dir?: Map<string, CameraMeta> | null): VehicleRoute {
-  const points: RoutePoint[] = dto.route.map((p, i) => {
+  // First pass: effective coordinates (sighting > camera directory > unknown).
+  const points: RoutePoint[] = dto.route.map((p) => {
     const cameraId = p.camera_id.toLowerCase();
     const meta = metaFor(dir, cameraId);
-    const latitude = p.latitude ?? meta?.latitude ?? 0;
-    const longitude = p.longitude ?? meta?.longitude ?? 0;
-    const prev = dto.route[i - 1];
-    const gapMinutes = prev ? minutesBetween(prev.event_time, p.event_time) : undefined;
-    const distanceKm =
-      prev && prev.latitude != null && prev.longitude != null && p.latitude != null && p.longitude != null
-        ? haversineKm(
-            { latitude: prev.latitude, longitude: prev.longitude },
-            { latitude, longitude },
-          )
-        : undefined;
     return {
       sequence: p.sequence,
       // Backend now carries the sighting id; leave correlation to the hook only
@@ -448,19 +440,29 @@ export function toVehicleRoute(dto: RouteDto, dir?: Map<string, CameraMeta> | nu
       cameraId,
       cameraName: meta?.name ?? p.camera_id.toUpperCase(),
       location: meta?.location ?? '—',
-      latitude,
-      longitude,
+      latitude: p.latitude ?? meta?.latitude ?? null,
+      longitude: p.longitude ?? meta?.longitude ?? null,
       timestamp: p.event_time,
       plateConfidence: pct(p.confidence),
       videoFile: p.video_file ?? undefined,
       videoOffsetSec: p.video_offset_sec ?? undefined,
-      gapMinutes,
-      distanceKm,
-      speedKmph:
-        gapMinutes && distanceKm != null && gapMinutes > 0
-          ? Math.round((distanceKm / gapMinutes) * 60)
-          : undefined,
     };
+  });
+
+  // Second pass: legs only between points that actually have coordinates.
+  points.forEach((point, i) => {
+    if (i === 0) return;
+    const prev = points[i - 1];
+    point.gapMinutes = minutesBetween(prev.timestamp, point.timestamp);
+    if (prev.latitude != null && prev.longitude != null && point.latitude != null && point.longitude != null) {
+      point.distanceKm = haversineKm(
+        { latitude: prev.latitude, longitude: prev.longitude },
+        { latitude: point.latitude, longitude: point.longitude },
+      );
+      if (point.gapMinutes != null && point.gapMinutes > 0) {
+        point.speedKmph = Math.round((point.distanceKm / point.gapMinutes) * 60);
+      }
+    }
   });
 
   const distance = points.reduce((sum, p) => sum + (p.distanceKm ?? 0), 0);

@@ -3,9 +3,10 @@ import type { RoutePoint } from '@/types';
 import { estimateRoadLeg, getRoadLeg, type RoadLeg } from '@/services/routeService';
 
 type Pair = Pick<RoutePoint, 'latitude' | 'longitude'>;
+type GeoPair = Pair & { latitude: number; longitude: number };
 
-function hasCoords(p: Pair | undefined): p is Pair {
-  return p != null && !(p.latitude === 0 && p.longitude === 0);
+function hasCoords(p: Pair | undefined): p is GeoPair {
+  return p != null && p.latitude != null && p.longitude != null && !(p.latitude === 0 && p.longitude === 0);
 }
 
 /**
@@ -16,7 +17,14 @@ function hasCoords(p: Pair | undefined): p is Pair {
  */
 export function useRoadLegs(points: RoutePoint[]): Record<number, RoadLeg> {
   const key = useMemo(
-    () => points.map((p) => `${p.sequence}:${p.latitude.toFixed(4)},${p.longitude.toFixed(4)}`).join('|'),
+    () =>
+      points
+        .map((p) => {
+          const lat = p.latitude != null ? p.latitude.toFixed(4) : '-';
+          const lng = p.longitude != null ? p.longitude.toFixed(4) : '-';
+          return `${p.sequence}:${lat},${lng}`;
+        })
+        .join('|'),
     [points],
   );
   const [legs, setLegs] = useState<Record<number, RoadLeg>>({});
@@ -29,8 +37,10 @@ export function useRoadLegs(points: RoutePoint[]): Record<number, RoadLeg> {
     let cancelled = false;
     const initial: Record<number, RoadLeg> = {};
     for (let i = 1; i < points.length; i++) {
-      if (hasCoords(points[i - 1]) && hasCoords(points[i])) {
-        initial[points[i].sequence] = estimateRoadLeg(points[i - 1], points[i]);
+      const prev = points[i - 1];
+      const cur = points[i];
+      if (hasCoords(prev) && hasCoords(cur)) {
+        initial[cur.sequence] = estimateRoadLeg(prev, cur);
       }
     }
     setLegs(initial);

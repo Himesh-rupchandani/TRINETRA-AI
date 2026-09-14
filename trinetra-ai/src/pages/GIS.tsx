@@ -52,7 +52,7 @@ export default function GIS() {
   /** Marker/list click: pan to the camera and dock its live feed on the map. */
   const focusCameraOnMap = (c: Camera) => {
     setLiveCameraId(c.id);
-    setPanTo([c.latitude, c.longitude]);
+    if (c.latitude != null && c.longitude != null) setPanTo([c.latitude, c.longitude]);
   };
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function GIS() {
   useEffect(() => {
     if (!focusCamera) return;
     const cam = cameras.find((c) => c.id === focusCamera);
-    if (cam) setPanTo([cam.latitude, cam.longitude]);
+    if (cam && cam.latitude != null && cam.longitude != null) setPanTo([cam.latitude, cam.longitude]);
   }, [focusCamera, cameras]);
 
   const points = useMemo(() => result?.route?.points ?? [], [result]);
@@ -79,9 +79,11 @@ export default function GIS() {
   // clustering bubbles and the click-to-focus filter — all client-side.
   const { mapCameras, mapDetections, districtCounts, districtClusters } = useMemo(() => {
     const camDistrict = new Map<string, string | null>();
-    for (const c of cameras) camDistrict.set(c.id, districtAt(c.latitude, c.longitude));
+    for (const c of cameras)
+      camDistrict.set(c.id, c.latitude != null && c.longitude != null ? districtAt(c.latitude, c.longitude) : null);
     const detDistrict = new Map<string, string | null>();
-    for (const e of detections) detDistrict.set(e.id, districtAt(e.latitude, e.longitude));
+    for (const e of detections)
+      detDistrict.set(e.id, e.latitude != null && e.longitude != null ? districtAt(e.latitude, e.longitude) : null);
 
     const fCameras = selectedDistrict
       ? cameras.filter((c) => camDistrict.get(c.id) === selectedDistrict)
@@ -109,7 +111,7 @@ export default function GIS() {
 
   const selectPoint = (p: RoutePoint) => {
     setActiveSequence(p.sequence);
-    setPanTo([p.latitude, p.longitude]);
+    if (p.latitude != null && p.longitude != null) setPanTo([p.latitude, p.longitude]);
     // Sighting stop → dock that camera's feed too, when the registry knows it.
     const cam = cameras.find((c) => c.id === p.cameraId.toLowerCase());
     if (cam) setLiveCameraId(cam.id);

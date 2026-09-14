@@ -27,8 +27,9 @@ export interface VehicleEvent {
   plate: string;
   plateConfidence: number;
   timestamp: string;
-  latitude: number;
-  longitude: number;
+  /** Null for sightings whose camera has no known real-world position. */
+  latitude: number | null;
+  longitude: number | null;
   location?: string;
   vehicleClass?: VehicleClass;
   colour?: string;

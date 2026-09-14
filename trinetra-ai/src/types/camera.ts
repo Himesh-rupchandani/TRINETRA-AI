@@ -31,8 +31,9 @@ export interface Camera {
   id: string;
   name: string;
   location: string;
-  latitude: number;
-  longitude: number;
+  /** Null for footage with no known real-world position (e.g. uploaded files). */
+  latitude: number | null;
+  longitude: number | null;
   department?: string;
   status: CameraStatus;
   codec?: string;

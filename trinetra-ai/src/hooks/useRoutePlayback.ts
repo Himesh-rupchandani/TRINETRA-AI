@@ -5,6 +5,9 @@ import type { RoutePoint } from '@/types';
 /** Screen time per route leg — every stop gets its moment. */
 const LEG_MS = 1600;
 
+/** A route hop whose coordinates are known (the map never replays a null pin). */
+type GeoRoutePoint = RoutePoint & { latitude: number; longitude: number };
+
 function lerp(a: number, b: number, t: number): number {
   const s = t * t * (3 - 2 * t); // smoothstep: eases in and out of every stop
   return a + (b - a) * s;
@@ -16,7 +19,7 @@ function lerp(a: number, b: number, t: number): number {
  * can highlight in sync. Position and progress update via refs (no 60fps
  * re-renders); only play state and the current stop flow through React.
  */
-export function useRoutePlayback(points: RoutePoint[], onStop?: (p: RoutePoint) => void) {
+export function useRoutePlayback(points: GeoRoutePoint[], onStop?: (p: RoutePoint) => void) {
   const markerRef = useRef<LeafletMarker | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef(0);

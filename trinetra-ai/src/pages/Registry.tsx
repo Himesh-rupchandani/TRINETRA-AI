@@ -91,8 +91,8 @@ export default function Registry() {
         c.name,
         c.department ?? '',
         `"${c.location}"`,
-        c.latitude,
-        c.longitude,
+        c.latitude ?? '',
+        c.longitude ?? '',
         c.status,
         c.codec ?? '',
         `${c.width}x${c.height}`,
@@ -213,8 +213,8 @@ export default function Registry() {
                       <td className="font-mono font-semibold text-ink">{c.name}</td>
                       <td className="text-ink-muted">{c.department}</td>
                       <td className="text-ink-muted">{c.location}</td>
-                      <td className="font-mono tabular-nums text-ink-muted">{c.latitude.toFixed(5)}</td>
-                      <td className="font-mono tabular-nums text-ink-muted">{c.longitude.toFixed(5)}</td>
+                      <td className="font-mono tabular-nums text-ink-muted">{c.latitude != null ? c.latitude.toFixed(5) : '—'}</td>
+                      <td className="font-mono tabular-nums text-ink-muted">{c.longitude != null ? c.longitude.toFixed(5) : '—'}</td>
                       <td>
                         <StatusChip status={c.status} />
                       </td>

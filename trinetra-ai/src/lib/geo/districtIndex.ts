@@ -65,11 +65,13 @@ export interface DistrictAgg {
  * Camera items need `status` (to count offline); events just need coordinates.
  */
 export function aggregateByDistrict<
-  C extends { latitude: number; longitude: number; status?: string },
-  E extends { latitude: number; longitude: number },
+  C extends { latitude: number | null; longitude: number | null; status?: string },
+  E extends { latitude: number | null; longitude: number | null },
 >(cameras: C[], events: E[]): Map<string, DistrictAgg> {
   const out = new Map<string, DistrictAgg>();
-  const touch = (lat: number, lng: number): DistrictAgg | null => {
+  const touch = (lat: number | null, lng: number | null): DistrictAgg | null => {
+    // No coordinate, no district: never attribute a fake location to a polygon.
+    if (lat == null || lng == null) return null;
     const name = districtAt(lat, lng);
     if (!name) return null;
     let agg = out.get(name);
@@ -82,14 +84,17 @@ export function aggregateByDistrict<
   const sums = new Map<string, { sx: number; sy: number; n: number }>();
 
   for (const c of cameras) {
-    const agg = touch(c.latitude, c.longitude);
+    const lat = c.latitude;
+    const lng = c.longitude;
+    if (lat == null || lng == null) continue;
+    const agg = touch(lat, lng);
     if (!agg) continue;
     agg.cameras += 1;
     if (c.status === 'OFFLINE') agg.offlineCameras += 1;
-    agg.bounds.push([c.latitude, c.longitude]);
+    agg.bounds.push([lat, lng]);
     const s = sums.get(agg.name) ?? { sx: 0, sy: 0, n: 0 };
-    s.sx += c.longitude;
-    s.sy += c.latitude;
+    s.sx += lng;
+    s.sy += lat;
     s.n += 1;
     sums.set(agg.name, s);
   }

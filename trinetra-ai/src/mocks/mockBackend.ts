@@ -187,7 +187,13 @@ export async function getVehicleRoute(plate: string): Promise<VehicleRoute> {
   const points: RoutePoint[] = events.map((e, i) => {
     const prev = events[i - 1];
     const gapMinutes = prev ? minutesBetween(prev.timestamp, e.timestamp) : undefined;
-    const distanceKm = prev ? haversineKm(prev, e) : undefined;
+    const distanceKm =
+      prev && prev.latitude != null && prev.longitude != null && e.latitude != null && e.longitude != null
+        ? haversineKm(
+            { latitude: prev.latitude, longitude: prev.longitude },
+            { latitude: e.latitude, longitude: e.longitude },
+          )
+        : undefined;
     return {
       sequence: i + 1,
       eventId: e.id,

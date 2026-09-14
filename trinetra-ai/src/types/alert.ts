@@ -9,8 +9,9 @@ export interface Alert {
   cameraId: string;
   cameraName?: string;
   location: string;
-  latitude?: number;
-  longitude?: number;
+  /** Null when the camera has no known real-world position. */
+  latitude?: number | null;
+  longitude?: number | null;
   severity: Severity;
   status: AlertStatus;
   category: string;
