@@ -57,18 +57,12 @@ const mapTiles: Record<BasemapId, { base: string; labels?: string; maxZoom?: num
   },
 };
 
-/** Basemaps actually available — Mapbox only shows when a token is configured. */
+/** Basemaps actually available — Mapbox only (owner-provided token above). */
 export const basemaps: { id: BasemapId; label: string }[] = [
-  ...(mapboxEnabled
-    ? ([
-        { id: 'mapbox', label: 'Mapbox' },
-        { id: 'mapbox-night', label: 'Night' },
-        { id: 'mapbox-hybrid', label: 'Hybrid' },
-        { id: 'mapbox-satellite', label: 'Satellite' },
-      ] as { id: BasemapId; label: string }[])
-    : []),
-  { id: 'street', label: 'OSM Map' },
-  { id: 'satellite', label: 'OSM Sat' },
+  { id: 'mapbox', label: 'Mapbox' },
+  { id: 'mapbox-night', label: 'Night' },
+  { id: 'mapbox-hybrid', label: 'Hybrid' },
+  { id: 'mapbox-satellite', label: 'Satellite' },
 ];
 
 export const config = {
