@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { FRONTEND_ROOT, REPO_ROOT, deepEq, excludes, includes, ok, readSource, suite, test } from './harness.mjs';
+import { FRONTEND_ROOT, REPO_ROOT, deepEq, excludes, includes, notOk, ok, readSource, suite, test } from './harness.mjs';
 
 /* ------------------------------- temp fixture ------------------------------ */
 
@@ -65,13 +65,16 @@ function localSecrets() {
 /* --------------------- item 22: never clobber an existing .env ------------- */
 suite('item 22 — env setup creates missing files and never rewrites existing ones');
 
-test('a fresh tree gets .env, .env.local and a backend .env', () => {
+test('a fresh tree gets .env and .env.local; the removed backend is skipped', () => {
   const tree = makeTree();
   try {
     const out = runSetup(tree);
     ok(fs.existsSync(tree.envFile), 'frontend .env was not created');
     ok(fs.existsSync(tree.envLocal), 'frontend .env.local was not created');
-    ok(fs.existsSync(path.join(tree.backendRoot, '.env')), 'backend .env was not created from .env.example');
+    // The FastAPI backend was removed from the repository: with no
+    // backend/.env.example present the setup script must skip, not fail.
+    notOk(fs.existsSync(path.join(tree.backendRoot, '.env')), 'no backend .env should be created any more');
+    includes(out, 'No backend .env and no .env.example to copy — skipping');
     includes(out, 'Created .env');
     const content = fs.readFileSync(tree.envFile, 'utf8');
     includes(content, 'VITE_USE_MOCKS=false');
@@ -193,12 +196,10 @@ test('the setup script, vite config and start scripts carry no secret literals',
     'trinetra-ai/vite.config.ts',
     'start-auto.sh',
     'start-auto.ps1',
-    'TRINETRAAI/backend/app/core/config.py',
     'cv-engine/config/settings.py',
     'AUTO_LIVE_SETUP.md',
     'FOUR_APIS_USAGE.md',
     'trinetra-ai/.env.example',
-    'TRINETRAAI/backend/.env.example',
   ];
   for (const rel of files) {
     const content = readSource(rel);
@@ -230,24 +231,28 @@ test('sentinelBasic() returns null when credentials are absent', () => {
   includes(vite, ': null;', 'missing credentials must yield null, not a malformed header');
 });
 
-test('start scripts delegate to the setup script and blank credentials when copying examples', () => {
+test('start scripts delegate to the setup script and never force-overwrite env files', () => {
+  // The backend is gone, so the launchers are frontend-only: they must hand
+  // env handling to the setup script (create-if-missing, never clobber) and
+  // carry no credential handling of their own.
   const sh = readSource('start-auto.sh');
   includes(sh, 'node scripts/auto-setup-env.mjs');
-  includes(sh, "sed -E 's/^(SENTINEL_EMAIL|SENTINEL_PASSWORD)=.*/\\1=/'");
   excludes(sh, 'cp -f', 'the shell launcher must not force-overwrite env files');
+  excludes(sh, 'uvicorn', 'the shell launcher must not start a removed backend');
 
   const ps1 = readSource('start-auto.ps1');
   includes(ps1, 'node scripts/auto-setup-env.mjs');
   includes(ps1, 'if (-not (Test-Path $frontendEnvPath))');
-  includes(ps1, 'if (-not (Test-Path $backendEnvPath))');
-  includes(ps1, "-replace '^(SENTINEL_EMAIL|SENTINEL_PASSWORD)=.*', '$1='");
+  excludes(ps1, 'uvicorn', 'the PowerShell launcher must not start a removed backend');
+  excludes(ps1, '$Backend', 'no backend path may remain in the launcher');
 });
 
 test('env files are git-ignored and only the examples are tracked', () => {
+  // The backend (and its .gitignore) was removed from the repository; the
+  // root and frontend ignore files must keep protecting .env files.
   const rootIgnore = readSource('.gitignore');
   const feIgnore = readSource('trinetra-ai/.gitignore');
-  const beIgnore = readSource('TRINETRAAI/backend/.gitignore');
-  for (const [name, ignore] of [['root', rootIgnore], ['frontend', feIgnore], ['backend', beIgnore]]) {
+  for (const [name, ignore] of [['root', rootIgnore], ['frontend', feIgnore]]) {
     includes(ignore, '.env', `${name} .gitignore must ignore .env`);
     includes(ignore, '!.env.example', `${name} .gitignore must keep .env.example tracked`);
   }

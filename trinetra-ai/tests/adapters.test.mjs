@@ -210,18 +210,16 @@ test('isValidPlate accepts exactly the canonical grammar', () => {
   }
 });
 
-test('the UI pattern is byte-identical to both Python layers', () => {
+test('the UI pattern is byte-identical to the remaining Python layer', () => {
   eq(INDIAN_PLATE_PATTERN, '^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}$');
 
-  const backend = readSource('TRINETRAAI/backend/app/utils/plate_normalizer.py');
+  // The FastAPI backend (TRINETRAAI/backend) was removed from the repository;
+  // cv-engine is the only Python layer left and must stay in sync with the UI.
   const cv = readSource('cv-engine/anpr/normalizer.py');
   const pattern = /CANONICAL_PLATE_PATTERN\s*=\s*r?["']([^"']+)["']/;
 
-  const backendMatch = pattern.exec(backend);
   const cvMatch = pattern.exec(cv);
-  ok(backendMatch, 'backend CANONICAL_PLATE_PATTERN not found');
   ok(cvMatch, 'cv-engine CANONICAL_PLATE_PATTERN not found');
-  eq(backendMatch[1], INDIAN_PLATE_PATTERN, 'backend pattern drifted from the UI');
   eq(cvMatch[1], INDIAN_PLATE_PATTERN, 'cv-engine pattern drifted from the UI');
 });
 
