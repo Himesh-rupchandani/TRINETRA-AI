@@ -1,4 +1,5 @@
 import { useAsync } from '@/hooks/useAsync';
+import { apiUrl } from '@/services/api';
 import { Brain, AlertTriangle, Activity, Eye } from 'lucide-react';
 
 interface Insights {
@@ -10,23 +11,33 @@ interface Insights {
 
 export function AIInsightsDashboard() {
   const insights = useAsync(async () => {
-    try {
-      const res = await fetch('/api/stats/insights');
-      if (!res.ok) throw new Error('Failed');
-      return (await res.json()) as Insights;
-    } catch {
-      return {
-        threat_level: { level: 'LOW', message: 'System monitoring', counts: { critical: 0, high: 0 } },
-        traffic_analysis: { total_events: 0, peak_hours: [], camera_hotspots: [], insights: [] },
-        crowd_density: { by_camera: [], average_vph: 0 },
-        system_health: { ai_models: {}, processing: {} }
-      } as Insights;
-    }
+    const res = await fetch(apiUrl('/stats/insights'));
+    if (!res.ok) throw new Error(`Intelligence analytics responded ${res.status}`);
+    return (await res.json()) as Insights;
   }, []);
 
   if (insights.loading) return <div className="panel p-6"><div className="skeleton h-32 w-full" /></div>;
   const d = insights.data;
-  if (!d) return null;
+  // No fabricated fallback: when the backend is unreachable the panel says so
+  // instead of inventing a LOW threat level with zeroed traffic figures.
+  if (!d) {
+    return (
+      <div className="panel overflow-hidden">
+        <div className="panel-header">
+          <div className="flex items-center gap-2">
+            <div className="grid h-7 w-7 place-items-center rounded-lg bg-violet-600 text-white"><Brain size={14} /></div>
+            <div>
+              <h3 className="panel-title">Intelligence Analytics</h3>
+              <p className="text-[11px] text-ink-faint">Anomaly detection • Density • Threat assessment</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 text-[11px] text-ink-muted">
+          Intelligence analytics are unavailable{insights.error ? ` (${insights.error})` : ''}. No figures are estimated locally.
+        </div>
+      </div>
+    );
+  }
 
   const threatColors: Record<string, string> = {
     CRITICAL: 'border-red-200 bg-red-50 text-red-700',

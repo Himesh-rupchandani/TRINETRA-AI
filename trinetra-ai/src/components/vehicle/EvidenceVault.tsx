@@ -1,4 +1,5 @@
 import { useAsync } from '@/hooks/useAsync';
+import { apiUrl } from '@/services/api';
 import { Shield, FileCheck, Hash, Lock, Download, Verified } from 'lucide-react';
 
 interface Verification {
@@ -25,20 +26,16 @@ interface Certificate {
 
 export function EvidenceVault({ eventId }: { eventId: string | number }) {
   const cert = useAsync(async () => {
-    try {
-      const res = await fetch(`/api/reports/evidence/${eventId}/certificate`);
-      if (!res.ok) throw new Error('Failed');
-      return (await res.json()) as Certificate;
-    } catch {
-      return null as unknown as Certificate;
-    }
+    const res = await fetch(apiUrl(`/reports/evidence/${eventId}/certificate`));
+    if (!res.ok) throw new Error(`Certificate request responded ${res.status}`);
+    return (await res.json()) as Certificate;
   }, [eventId]);
 
   // No invented verdict: when verification cannot be performed the panel says
   // UNVERIFIED instead of claiming VALID (which is what the old `catch` did —
   // an integrity claim nobody had checked).
   const verify = useAsync(async () => {
-    const res = await fetch(`/api/reports/evidence/${eventId}/verify`);
+    const res = await fetch(apiUrl(`/reports/evidence/${eventId}/verify`));
     if (!res.ok) throw new Error(`verify responded ${res.status}`);
     return (await res.json()) as Verification;
   }, [eventId]);
@@ -49,7 +46,7 @@ export function EvidenceVault({ eventId }: { eventId: string | number }) {
     return (
       <div className="panel p-4 border-amber-200 bg-amber-50">
         <p className="text-xs font-bold text-amber-800">Evidence Certificate</p>
-        <p className="mt-1 text-[11px] text-amber-700">Certificate generation requires GPS-tagged evidence with valid camera record. Demo/synthetic frames are marked as such and use separate evidence path. For production evidence, hash chain verification is available via <span className="font-mono">/api/reports/evidence/{'{id}'}/verify</span>.</p>
+        <p className="mt-1 text-[11px] text-amber-700">Certificate generation requires GPS-tagged evidence with valid camera record. Demo/synthetic frames are marked as such and use separate evidence path. For production evidence, hash chain verification is available via <span className="font-mono">/api/reports/evidence/{'{id}'}/verify</span>{cert.error ? ` — backend error: ${cert.error}` : ''}.</p>
       </div>
     );
   }

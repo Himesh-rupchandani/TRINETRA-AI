@@ -268,6 +268,26 @@ honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
 > compiled into the browser bundle. `VITE_BACKEND_ORIGIN` is not read by
 > anything — setting it silently leaves the proxy at its default target.
 
+## Production deployment (Vercel frontend → deployed FastAPI)
+
+The Vite proxy exists only in local dev — production needs a real backend URL:
+
+```dotenv
+# Vercel → Settings → Environment Variables (Production + Preview), then REDEPLOY
+VITE_USE_MOCKS=false
+VITE_API_BASE_URL=https://your-backend.example.com/api   # must include /api, must be https
+```
+
+- Every API call, realtime channel and evidence image URL is built from that
+  one variable (`apiUrl()` in `trinetra-ai/src/services/api.ts`); production
+  must never point at `localhost`/`127.0.0.1`.
+- The backend must allow the Vercel origin via its server-side `CORS_ORIGINS`
+  (see `TRINETRAAI/backend/.env.example`) — explicit origins, never `["*"]`.
+- Production builds default to the live backend; if it is unreachable the UI
+  shows real connection errors, never mock data.
+- Secrets (Sentinel password, DB credentials, API keys) stay server-side and
+  must never be put in `VITE_*` variables.
+
 ## Tests
 
 ```bash

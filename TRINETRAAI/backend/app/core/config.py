@@ -124,16 +124,24 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        def _clean(origins: List[str]) -> List[str]:
+            # Origins must match exactly: drop whitespace, trailing slashes and
+            # empties so "https://app.vercel.app, https://app.vercel.app/" and
+            # "https://app.vercel.app/" all become one working entry.
+            cleaned = [o.strip().rstrip("/") for o in origins if o and o.strip()]
+            return cleaned or ["*"]
+
         if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
+            return _clean(v.split(","))
         elif isinstance(v, str) and v.startswith("["):
             import json
             try:
-                return json.loads(v)
+                parsed = json.loads(v)
+                return _clean(parsed if isinstance(parsed, list) else [parsed])
             except Exception:
                 return ["*"]
         elif isinstance(v, list):
-            return v
+            return _clean([str(o) for o in v])
         return ["*"]
 
     model_config = SettingsConfigDict(

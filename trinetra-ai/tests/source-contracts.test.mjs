@@ -50,7 +50,7 @@ const player = readSource('trinetra-ai/src/components/camera/CameraPlayer.tsx');
 
 test('isMjpeg is part of the dependency array', () => {
   includes(player, 'const isMjpeg = ticket?.streamType === \'MJPEG\';');
-  includes(player, 'setMjpegSrc(isMjpeg ? `/cvfeed/${camera.id}` : null);');
+  includes(player, 'setMjpegSrc(isMjpeg ? (ticket?.streamUrl || `/cvfeed/${camera.id}`) : null);');
   includes(
     player,
     '}, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id, isMjpeg]);',

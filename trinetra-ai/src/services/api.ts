@@ -61,12 +61,25 @@ export async function post<T>(url: string, body?: unknown, cfg?: AxiosRequestCon
 /** True when the app is running against synthetic data. */
 export const isMockMode = config.useMocks;
 
-/** Absolute URL for a realtime endpoint, honouring the configured base URL. */
-export function realtimeUrl(path: string, protocol: 'http' | 'ws' = 'http'): string {
+/**
+ * Absolute URL for any backend path, honouring the configured base URL.
+ *
+ * Single construction point for every non-axios request (fetch calls, <img>
+ * evidence sources, blob uploads): local dev resolves same-origin `/api/...`
+ * through the Vite proxy, while a production build with
+ * `VITE_API_BASE_URL=https://<backend-host>/api` resolves cross-origin to
+ * the deployed FastAPI backend. No caller may hard-code `/api/...`.
+ */
+export function apiUrl(path: string): string {
   const base = config.apiBaseUrl.startsWith('http')
     ? config.apiBaseUrl
     : `${window.location.origin}${config.apiBaseUrl}`;
-  const url = new URL(base.replace(/\/$/, '') + path);
+  return new URL(base.replace(/\/$/, '') + path).toString();
+}
+
+/** Absolute URL for a realtime endpoint, honouring the configured base URL. */
+export function realtimeUrl(path: string, protocol: 'http' | 'ws' = 'http'): string {
+  const url = new URL(apiUrl(path));
   if (protocol === 'ws') url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { apiUrl } from '@/services/api';
 
 interface Detection {
   x1: number;
@@ -96,7 +97,7 @@ export function DetectionOverlay({
           );
           if (!blob || !running) break;
 
-          const res = await fetch(`/api/cameras/${cameraId}/detect-frame`, {
+          const res = await fetch(apiUrl(`/cameras/${cameraId}/detect-frame`), {
             method: 'POST',
             headers: { 'Content-Type': 'image/jpeg' },
             body: blob,

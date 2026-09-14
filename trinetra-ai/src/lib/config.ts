@@ -71,8 +71,22 @@ export const basemaps: { id: BasemapId; label: string }[] = [
 export const config = {
   appName: 'TRINETRA AI',
   tagline: 'Intelligent Vision. Faster Response.',
-  useMocks: (env.VITE_USE_MOCKS ?? 'true') !== 'false',
-  apiBaseUrl: env.VITE_API_BASE_URL ?? '/api',
+  /**
+   * Mock mode is strictly opt-in. An explicit `VITE_USE_MOCKS=true` runs the
+   * synthetic demo grid; `false` (or unset in a production build) talks to the
+   * real backend and surfaces real connection errors — the app must never
+   * silently show fake plates/detections/alerts in production just because a
+   * variable was missing. Local dev keeps the old default via
+   * scripts/auto-setup-env.mjs, which writes VITE_USE_MOCKS=false.
+   */
+  useMocks: (env.VITE_USE_MOCKS ?? (import.meta.env.PROD ? 'false' : 'true')) === 'true',
+  /**
+   * Backend base URL (must include the `/api` prefix — services call paths
+   * like `/cameras` relative to it).
+   *  - local dev: `/api` (same-origin, proxied to BACKEND_ORIGIN by Vite)
+   *  - production (Vercel): `https://<backend-host>/api` via VITE_API_BASE_URL
+   */
+  apiBaseUrl: (env.VITE_API_BASE_URL ?? '/api').trim().replace(/\/+$/, '') || '/api',
   // The backend serves both SSE (/api/stream) and WebSocket (/api/ws/events).
   // SSE is the default: it traverses reverse proxies cleanly and reconnects
   // natively in the browser.

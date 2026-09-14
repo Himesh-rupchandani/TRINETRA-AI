@@ -36,6 +36,17 @@ async function runProbe(): Promise<{
       signal: controller.signal,
     });
     const latencyMs = Math.round(performance.now() - started);
+    // Static hosts (Vercel) have no /sentinel proxy: the SPA fallback answers
+    // with index.html (200 + text/html). That is "no media gateway", not a
+    // healthy one — report it honestly instead of a false HEALTHY.
+    const contentType = res.headers.get('content-type') ?? '';
+    if (contentType.includes('text/html')) {
+      return {
+        status: 'OFFLINE',
+        latencyMs: null,
+        error: 'Media gateway proxy not configured on this host',
+      };
+    }
     if (res.ok || res.status === 204) {
       return {
         status: latencyMs > 1_500 ? 'DEGRADED' : 'HEALTHY',

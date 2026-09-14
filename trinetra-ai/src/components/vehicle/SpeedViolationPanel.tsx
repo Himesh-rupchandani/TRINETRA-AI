@@ -1,4 +1,5 @@
 import { useAsync } from '@/hooks/useAsync';
+import { apiUrl } from '@/services/api';
 import { Gauge, MapPin, Clock, Shield, FileCheck } from 'lucide-react';
 
 interface SpeedSegment {
@@ -34,13 +35,9 @@ interface SpeedAnalysis {
 
 export function SpeedViolationPanel({ plate }: { plate: string }) {
   const analysis = useAsync(async () => {
-    try {
-      const res = await fetch(`/api/vehicles/${plate}/speed-analysis`);
-      if (!res.ok) throw new Error('No data');
-      return (await res.json()) as SpeedAnalysis;
-    } catch {
-      return null as unknown as SpeedAnalysis;
-    }
+    const res = await fetch(apiUrl(`/vehicles/${plate}/speed-analysis`));
+    if (!res.ok) throw new Error(`Speed analysis responded ${res.status}`);
+    return (await res.json()) as SpeedAnalysis;
   }, [plate]);
 
   if (analysis.loading) return <div className="panel p-4"><div className="skeleton h-32 w-full" /></div>;
@@ -50,7 +47,7 @@ export function SpeedViolationPanel({ plate }: { plate: string }) {
       <div className="panel p-4">
         <div className="flex items-center gap-2 text-ink-faint">
           <Gauge size={16} />
-          <p className="text-xs">Speed analysis requires 2+ GPS-tagged sightings — try demo plate GJ01AB1234</p>
+          <p className="text-xs">Speed analysis requires 2+ GPS-tagged sightings — try demo plate GJ01AB1234{analysis.error ? ` (backend error: ${analysis.error})` : ''}</p>
         </div>
       </div>
     );

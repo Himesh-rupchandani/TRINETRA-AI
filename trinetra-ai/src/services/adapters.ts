@@ -24,7 +24,7 @@ import type {
   VehicleRoute,
   WatchlistRecord,
 } from '@/types';
-import { get } from './api';
+import { apiUrl, get } from './api';
 import { haversineKm, minutesBetween } from '@/lib/utils';
 
 /* ------------------------------ raw DTO types ------------------------------ */
@@ -342,8 +342,8 @@ export function toVehicleEvent(
       const isUpload = safeRef.startsWith('uploads/') || safeRef.startsWith('analysis/');
       evidence = {
         ref: safeRef,
-        frameUrl: `/api/evidence/${encoded}`,
-        plateCropUrl: !isUpload && plate ? `/api/evidence/${encoded.replace(/\.jpg$/i, '_plate.jpg')}` : undefined,
+        frameUrl: apiUrl(`/evidence/${encoded}`),
+        plateCropUrl: !isUpload && plate ? apiUrl(`/evidence/${encoded.replace(/\.jpg$/i, '_plate.jpg')}`) : undefined,
         capturedAt: dto.event_time,
       };
     }

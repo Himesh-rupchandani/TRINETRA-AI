@@ -158,6 +158,33 @@ VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev
 never compiled into the bundle) is dev-only and configures the Vite proxy for `/api`, so the browser
 always talks to the same origin (no CORS, no hard-coded hosts in client code).
 
+### Production deployment (Vercel → deployed FastAPI)
+
+Local `BACKEND_ORIGIN` / the Vite proxy do **not** exist on Vercel. Production
+uses one browser-safe variable, read by `src/lib/config.ts` and applied to
+every API call, realtime channel (`/stream`, `/ws/events`) and evidence image
+URL through the single `apiUrl()` helper in `src/services/api.ts` — no
+component hard-codes `/api/...` or `localhost`:
+
+```dotenv
+# Vercel → Settings → Environment Variables (Production + Preview), then REDEPLOY
+VITE_USE_MOCKS=false
+VITE_API_BASE_URL=https://your-backend.example.com/api
+VITE_REALTIME_TRANSPORT=sse
+```
+
+Rules:
+
+- The value **must include the `/api` suffix** and **must be `https://`** —
+  `http://localhost:8000` / `127.0.0.1` in production means every request fails
+  (and `http://` on an `https://` page is blocked as mixed content).
+- The backend must list the Vercel origin in its server-side `CORS_ORIGINS`
+  (see `TRINETRAAI/backend/.env.example`) — never `["*"]` with credentials.
+- `VITE_USE_MOCKS` defaults to **live** in production builds: if the backend
+  is unreachable the UI shows real connection errors, never fake data.
+- Secrets (Sentinel password, DB credentials, API keys) stay server-side and
+  must never be put in `VITE_*` variables.
+
 ---
 
 ## 7. Sentinel integration & security
