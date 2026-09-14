@@ -14,6 +14,30 @@ export type VideoStatus =
 export type PlateStatus = 'HIGH' | 'LOW_CONFIDENCE' | 'UNKNOWN';
 
 /** One video registered for multi-video analysis (upload or Google Drive). */
+export interface VideoDetectionRow {
+  event_id: number;
+  frame_number: number;
+  video_offset_sec: number | null;
+  timestamp: string | null;
+  track_id: number | null;
+  vehicle_class: string | null;
+  detection_confidence: number | null;
+  bbox: [number, number, number, number] | null;
+  plate: string | null;
+  raw_ocr: string | null;
+  ocr_confidence: number | null;
+  plate_status: PlateStatus | null;
+  evidence_ref: string | null;
+  /** Cropped imagery retained for this sighting, served by /api/evidence. */
+  evidence_url: string | null;
+  plate_crop_url: string | null;
+}
+
+export interface VideoDetectionPage {
+  video: Record<string, unknown>;
+  detections: VideoDetectionRow[];
+}
+
 export interface AnalysisVideo {
   videoId: string;
   batchId?: string | null;
@@ -380,6 +404,21 @@ export const videoAnalysisService = {
     if (isMockMode) throw new Error(MOCK_GUARD);
     return get<PlateSearchResult>('/analysis/search', {
       params: { plate, ...(batchId ? { batch_id: batchId } : {}) },
+    });
+  },
+
+  /**
+   * Every vehicle detection stored for one analysed video, frame by frame.
+   *
+   * This is the ledger behind the per-vehicle table: the model's own box, its
+   * class, its confidence, the tracker id and whatever the plate stage made of
+   * that detection (`plate_status: 'UNKNOWN'` when nothing was legible). Nothing
+   * here is generated - a frame with no detection simply is not in the list.
+   */
+  async detections(videoId: string, limit = 600): Promise<VideoDetectionPage> {
+    if (isMockMode) throw new Error(MOCK_GUARD);
+    return get<VideoDetectionPage>(`/analysis/videos/${encodeURIComponent(videoId)}/detections`, {
+      params: { limit },
     });
   },
 

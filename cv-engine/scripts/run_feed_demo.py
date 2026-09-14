@@ -164,15 +164,26 @@ _ONDEMAND_DETECTOR_LOCK = threading.Lock()
 
 
 def _ondemand_detector(settings):
-    """One shared cheap-settings detector for all on-demand views."""
+    """One shared detector for all on-demand views.
+
+    It used to be built with a hard-coded ``conf_threshold=0.35, imgsz=416`` so
+    "the viewer stays cheap" - at that resolution a person is easy to find and
+    a car is not, so live boxes were coarser and rarer than in the recorded
+    analysis of the same clip. It now follows the settings like every other
+    path, at the resolution chosen for live viewing (LIVE_IMGSZ).
+    """
     global _ONDEMAND_DETECTOR
     with _ONDEMAND_DETECTOR_LOCK:
         if _ONDEMAND_DETECTOR is None:
             _ONDEMAND_DETECTOR = VehicleDetector(
                 model_path=settings.model_path,
-                conf_threshold=0.35,
-                imgsz=416,
+                conf_threshold=float(getattr(settings, "conf_threshold", 0.35)),
+                imgsz=int(getattr(settings, "live_imgsz", 960)),
                 device="cpu",
+                nms_iou=getattr(settings, "nms_iou", 0.45),
+                # This is the box a viewer sees, so it gets the deeper look.
+                multiscale=bool(getattr(settings, "live_multiscale", False)),
+                strips=int(getattr(settings, "live_strips", 2)),
             )
         return _ONDEMAND_DETECTOR
 
@@ -441,11 +452,19 @@ def run_feed(camera_id: str, cfg: dict, settings: Settings, annotate_feed: bool)
         longitude=cfg["longitude"],
         location=cfg["location"],
     )
+    # Annotating a feed somebody is watching => the live resolution; a pure
+    # ingest run (no --annotate-feed) keeps the cheaper pipeline setting.
     detector = VehicleDetector(
         model_path=settings.model_path,
         conf_threshold=settings.conf_threshold,
-        imgsz=settings.inference_imgsz,
+        imgsz=int(getattr(settings, "live_imgsz", 960)) if annotate_feed
+        else settings.inference_imgsz,
         device=settings.device,
+        nms_iou=settings.nms_iou,
+        # Only the feed somebody is watching gets the extra pass; a pure ingest
+        # run keeps its historical single pass at inference_imgsz.
+        multiscale=bool(annotate_feed and getattr(settings, "live_multiscale", False)),
+        strips=int(getattr(settings, "live_strips", 2)),
     )
     backend = BackendClient(
         base_url=settings.backend_base_url,

@@ -61,6 +61,29 @@ class Settings:
     model_path: str = "yolo11s.pt"
     conf_threshold: float = 0.35
     inference_imgsz: int = 640
+    # Resolution for the frames a HUMAN IS WATCHING (the annotated live view and
+    # the on-demand viewer in run_feed_demo). It is deliberately higher than
+    # inference_imgsz, which serves the 24/7 ingest pipeline where CPU is the
+    # scarce resource: at 640 a distant car is a handful of pixels, so live
+    # viewers saw fewer vehicles and coarser boxes than an offline analysis of
+    # the same recording. The on-demand view used to be pinned at 416, below
+    # even that, which is why boxes looked bloated there. Env: LIVE_IMGSZ.
+    live_imgsz: int = 960
+    # NMS IoU for the detector (see detection/vehicle_detector.py). Kept well
+    # under Ultralytics' 0.7 default so one vehicle is not boxed repeatedly.
+    nms_iou: float = 0.45
+    # Look at the frame twice for the boxes a HUMAN is reading: once whole, once
+    # as native-resolution vertical strips, then merge (the standalone module's
+    # multiscale geometry). A 1280-wide frame squeezed into 960 renders every
+    # vehicle at 75%, which is where neighbouring parked vehicles merge into one
+    # box and a 20 px car disappears - the extra pass fixes both and, unlike any
+    # post-processing, also makes the boxes *tighter* (measured on this repo's
+    # footage: 11.8 -> 21.8 vehicles/frame at 2.51% -> 1.40% mean frame area).
+    # Cost is ~2x inference, so it is never applied to the 24/7 ingest detector:
+    # this switch governs only the annotated live view and the on-demand viewer.
+    # Env: LIVE_MULTISCALE, LIVE_STRIPS.
+    live_multiscale: bool = True
+    live_strips: int = 2
     device: str = "cpu"  # "cpu" | "cuda" | "0" ...
 
     # --- Capture / pacing -------------------------------------------------
@@ -128,6 +151,10 @@ class Settings:
             model_path=_env_str("MODEL_PATH", "yolo11s.pt"),
             conf_threshold=_env_float("CONF_THRESHOLD", 0.35),
             inference_imgsz=_env_int("INFERENCE_IMGSZ", 640),
+            live_imgsz=_env_int("LIVE_IMGSZ", 960),
+            nms_iou=_env_float("NMS_IOU_THRESHOLD", 0.45),
+            live_multiscale=_env_bool("LIVE_MULTISCALE", True),
+            live_strips=_env_int("LIVE_STRIPS", 2),
             device=_env_str("CV_DEVICE", "cpu"),
             frame_skip=_env_int("FRAME_SKIP", 1),
             process_interval_ms=_env_float("PROCESS_INTERVAL_MS", 0.0),

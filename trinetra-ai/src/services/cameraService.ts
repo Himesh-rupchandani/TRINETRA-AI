@@ -11,6 +11,7 @@ interface CameraListDto {
 interface StreamTicketDto {
   camera_id: string;
   stream_type: string;
+  source_kind?: string | null;
   stream_url: string;
   expires_at: string;
   playable?: boolean;

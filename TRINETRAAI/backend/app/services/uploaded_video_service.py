@@ -479,7 +479,11 @@ def _process_video(camera_id: str) -> None:
             if frame_idx % every_n == 0:
                 det_step += 1
                 dets = (
-                    vehicle_detection_service.detect(frame)
+                    vehicle_detection_service.detect(
+                        frame,
+                        conf=float(getattr(settings, "ANALYSIS_CONFIDENCE_THRESHOLD", 0.35)),
+                        imgsz=int(getattr(settings, "ANALYSIS_DETECTION_IMGSZ", 960)),
+                    )
                     if detector_ok and vehicle_detection_service._model is not None
                     else []
                 )

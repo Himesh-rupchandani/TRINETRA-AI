@@ -12,6 +12,7 @@ import os
 import sys
 import argparse
 from pathlib import Path
+from typing import Optional
 import cv2
 from tqdm import tqdm
 
@@ -25,9 +26,13 @@ def run_video_detection(
     output_video: str,
     plates_dir: str,
     frames_dir: str,
-    conf: float = 0.25,
+    conf: float = 0.35,
     stride: int = 2,
     max_frames: int = None,
+    iou: float = 0.45,
+    imgsz: int = 960,
+    vehicle_model: Optional[str] = None,
+    multiscale: bool = True,
 ):
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
@@ -42,10 +47,22 @@ def run_video_detection(
     print(f"  Input Video  : {video_path}")
     print(f"  Model Weights: {model_path}")
     print(f"  Confidence   : {conf}")
+    print(f"  NMS IoU      : {iou}")
+    print(f"  Inference size: {imgsz}")
     print(f"  Frame Stride : {stride}")
+    print(f"  Multi-scale  : {'on (native-res second look at vehicles)' if multiscale else 'off'}")
     print("=" * 70)
 
-    detector = VehiclePlateDetector(model_path=model_path, conf_threshold=conf)
+    detector = VehiclePlateDetector(
+        model_path=model_path,
+        conf_threshold=conf,
+        iou_threshold=iou,
+        imgsz=imgsz,
+        vehicle_model_path=vehicle_model,
+        multiscale=multiscale,
+    )
+    print(f"  Vehicle Weights: {detector.vehicle_model_path or model_path} "
+          f"(classes: {list(detector.vehicle_model.names.values()) if detector.vehicle_class_ids is None else ['car', 'motorcycle', 'bus', 'truck']})")
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -80,7 +97,7 @@ def run_video_detection(
 
         if frame_idx % stride == 0:
             timestamp_sec = frame_idx / fps
-            detections = detector.detect(frame, conf=conf)
+            detections = detector.detect(frame, conf=conf, imgsz=imgsz)
 
             vehicles = detector.filter_by_class(detections, "vehicle")
             plates = detector.filter_by_class(detections, "number_plate")
@@ -155,7 +172,23 @@ def main():
     parser.add_argument("--output-video", default="outputs/annotated_video.mp4", help="Output annotated video path")
     parser.add_argument("--plates-dir", default="outputs/detected_plates", help="Directory to save cropped plates")
     parser.add_argument("--frames-dir", default="outputs/annotated_frames", help="Directory to save sample frames")
-    parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold")
+    parser.add_argument("--conf", type=float, default=0.35,
+                        help="Confidence threshold (default 0.35: below this the "
+                             "model's boxes are mostly background guesses)")
+    parser.add_argument("--iou", type=float, default=0.45,
+                        help="NMS IoU threshold (default 0.45: suppresses double boxes "
+                             "on one vehicle while keeping neighbouring vehicles separate)")
+    parser.add_argument("--imgsz", type=int, default=960,
+                        help="Inference resolution (default 960; 640 merges parked "
+                             "vehicles into one box and misses distant ones)")
+    parser.add_argument("--vehicle-model", default=None,
+                        help="Per-class weight used for VEHICLE boxes (default: auto — "
+                             "the repo's yolo11s/yolo11n COCO weight). Pass 'none' to "
+                             "keep vehicle boxes from --model.")
+    parser.add_argument("--no-multiscale", dest="multiscale", action="store_false",
+                        help="Skip the native-resolution second pass over vertical "
+                             "strips. Faster, but distant/parked vehicles merge into "
+                             "fewer, looser boxes (default: multiscale on).")
     parser.add_argument("--stride", type=int, default=2, help="Frame stride (default 2)")
     parser.add_argument("--max-frames", type=int, default=None, help="Max frames to process (optional)")
     args = parser.parse_args()
@@ -176,6 +209,10 @@ def main():
         conf=args.conf,
         stride=args.stride,
         max_frames=args.max_frames,
+        iou=args.iou,
+        imgsz=args.imgsz,
+        vehicle_model=args.vehicle_model,
+        multiscale=args.multiscale,
     )
 
 

@@ -13,7 +13,7 @@ if __name__ == "__main__" and not __package__:
     __package__ = "backend.app.api"
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
@@ -46,6 +46,24 @@ _LIVE_TO_API_STATUS = {
     "OFFLINE": "OFFLINE",
     "STOPPED": "OFFLINE",
 }
+
+
+def _source_kind(cam) -> str:
+    """Whether the frames this camera serves are genuinely live.
+
+    Single authority for the honest label, deliberately stricter than
+    ``stream_type`` alone: a file-backed source is RECORDED even though it
+    streams perfectly well in real time, because a looping clip is not a live
+    feed and must never be presented as one. A configured-but-missing file is
+    UNPROVISIONED rather than pretending to be either.
+    """
+    url = (getattr(cam, "stream_url", "") or "").strip()
+    stype = (getattr(cam, "stream_type", "") or "").lower()
+    if not url:
+        return "UNPROVISIONED"
+    if stype == "file" or url.lower().endswith((".mp4", ".avi", ".mkv", ".mov")):
+        return "RECORDED" if os.path.exists(url) else "UNPROVISIONED"
+    return "LIVE"
 
 
 def _resolve_camera_status(cam: "Camera") -> tuple:
@@ -96,6 +114,7 @@ def list_cameras(db: Session = Depends(get_db)):
                 stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
                 stream_url=cam.stream_url,
                 last_seen=last_seen,
+                source_kind=_source_kind(cam),
             )
         )
     return CameraListResponse(data=items)
@@ -151,6 +170,36 @@ def create_camera(payload: CameraCreate, db: Session = Depends(get_db)):
     return new_cam
 
 
+@router.get(
+    "/{camera_id}/snapshot",
+    summary="Latest single frame as a JPEG (grid thumbnail)",
+    description=(
+        "One frame for a camera tile: whatever a live worker already delivered, "
+        "or one frame decoded from a recording. Never opens a network stream, "
+        "and answers 204 when there is genuinely no picture - the UI then shows "
+        "its placeholder instead of an invented image."
+    ),
+)
+def camera_snapshot(camera_id: str, db: Session = Depends(get_db)):
+    cam = (
+        db.query(Camera)
+        .filter(func.upper(Camera.camera_id) == camera_id.strip().upper())
+        .first()
+    )
+    if cam is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Camera '{camera_id}' not found.")
+    jpg = camera_manager.snapshot_jpeg(cam.camera_id)
+    if not jpg:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    # no-store: a thumbnail that a browser caches forever is a still photo of a
+    # live scene, which is the exact confusion this screen must avoid.
+    return Response(
+        content=jpg,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
 @router.get("/{camera_id}", response_model=CameraItem, summary="Get camera by ID")
 def get_camera(camera_id: str, db: Session = Depends(get_db)):
     """Get details of a specific camera (by camera_id like 'CAM04' / 'cam04' or integer id)."""
@@ -179,6 +228,7 @@ def get_camera(camera_id: str, db: Session = Depends(get_db)):
         height=cam.height or 1080,
         fps=cam.fps,
         stream_type=cam.stream_type.upper() if cam.stream_type else "HLS",
+        source_kind=_source_kind(cam),
         stream_url=cam.stream_url,
         last_seen=last_seen,
     )
@@ -217,6 +267,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         return CameraStreamTicket(
             camera_id=cam.camera_id.lower(),
             stream_type=(cam.stream_type or "rtsp").upper(),
+            source_kind=_source_kind(cam),
             stream_url="",
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
             playable=False,
@@ -255,6 +306,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
             playable=True,
             reason=None,
             detection_url=detection_url,
+            source_kind=_source_kind(cam),
         )
 
     # Sentinel WHEP endpoint is /stream/<id>/whep on the gateway (integrator
@@ -271,6 +323,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         playable=playable,
         reason=None if playable else f"Camera is {status_value}",
         detection_url=detection_url,
+        source_kind=_source_kind(cam),
     )
 
 

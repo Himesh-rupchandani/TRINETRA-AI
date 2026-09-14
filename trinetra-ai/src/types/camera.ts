@@ -11,6 +11,18 @@ export type CameraStatus = 'ONLINE' | 'OFFLINE' | 'DEGRADED' | 'NOT_CONFIGURED';
 export type StreamType = 'HLS' | 'RTSP' | 'WEBRTC' | 'MJPEG' | 'FILE';
 
 /**
+ * What the pixels actually are — reported by the backend, never inferred from
+ * playback state. A file-backed feed streams just as smoothly as a camera, so
+ * "is it live" cannot be answered by the player; without this a recorded clip
+ * would be shown under a LIVE badge.
+ *
+ * `RECORDED`   source is a video file (playable, loopable, not live)
+ * `LIVE`       an authorized network source (RTSP / HLS / WebRTC)
+ * `UNPROVISIONED` no source configured at all
+ */
+export type CameraSourceKind = 'LIVE' | 'RECORDED' | 'UNPROVISIONED';
+
+/**
  * Camera as returned by Model 1 (CCTV Registry & GIS Foundation).
  * `streamUrl` is resolved server-side — the frontend never holds
  * Sentinel credentials and never builds an authenticated stream URL itself.
@@ -28,6 +40,8 @@ export interface Camera {
   height?: number;
   fps?: number;
   streamType?: StreamType;
+  /** Source truth from the backend; absent only for mock/legacy payloads. */
+  sourceKind?: CameraSourceKind;
   /** Short-lived, backend-signed playback URL. Absent until requested. */
   streamUrl?: string;
   lastSeen?: string;
@@ -51,6 +65,8 @@ export interface CameraFilters {
 export interface CameraStreamTicket {
   cameraId: string;
   streamType: StreamType;
+  /** Source truth for the badge: a FILE ticket must never read as LIVE. */
+  sourceKind?: CameraSourceKind;
   /**
    * Playback URL issued by the backend. For WEBRTC this is the same-origin
    * WHEP signalling endpoint; empty when no source is published.

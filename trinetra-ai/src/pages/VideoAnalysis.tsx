@@ -5,6 +5,7 @@ import { Panel, EmptyState, ErrorState } from '@/components/common/Panel';
 import { AddVideosPanel } from '@/components/analysis/AddVideosPanel';
 import { VideoSourceList } from '@/components/analysis/VideoSourceList';
 import { PlateSearchPanel } from '@/components/analysis/PlateSearchPanel';
+import { DetectionLedger } from '@/components/analysis/DetectionLedger';
 import { CameraSequence, VehicleJourneyCard } from '@/components/analysis/VehicleJourneyCard';
 import {
   videoAnalysisService,
@@ -158,6 +159,8 @@ export default function VideoAnalysis() {
           />
 
           <VideoSourceList videos={videos} onRemove={(id) => void remove(id)} removing={removing} />
+
+          <DetectionLedger videos={videos} />
 
           {busy && (
             <div className="panel flex items-center gap-3 px-4 py-3">

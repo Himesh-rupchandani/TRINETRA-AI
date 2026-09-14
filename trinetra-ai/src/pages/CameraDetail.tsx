@@ -7,7 +7,7 @@ import { UploadedVideoPanel } from '@/components/camera/UploadedVideoPanel';
 import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { Panel, AsyncBoundary, KeyValue, ErrorState } from '@/components/common/Panel';
-import { StatusChip } from '@/components/common/Chips';
+import { SourceKindBadge, StatusChip } from '@/components/common/Chips';
 import { PlateLink, ConfidenceBar } from '@/components/common/Links';
 import { useCamera } from '@/hooks/useCameras';
 import { useAsync } from '@/hooks/useAsync';
@@ -191,7 +191,10 @@ export default function CameraDetail() {
                     <StatusChip status={camera.status} />
                   </KeyValue>
                   <KeyValue label="Connection">
-                    <span className="font-mono">{camera.streamType}</span>
+                    <span className="flex items-center gap-1.5 font-mono">
+                      {camera.streamType}
+                      <SourceKindBadge kind={camera.sourceKind} />
+                    </span>
                   </KeyValue>
                   <KeyValue label="Video format">
                     <span className="font-mono">{camera.codec}</span>

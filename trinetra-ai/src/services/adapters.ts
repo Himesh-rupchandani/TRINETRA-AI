@@ -46,6 +46,8 @@ export interface CameraItemDto {
   height?: number | null;
   fps?: number | null;
   stream_type?: string;
+  /** 'LIVE' | 'RECORDED' | 'UNPROVISIONED' — see Camera.sourceKind. */
+  source_kind?: string | null;
   stream_url?: string;
   last_seen?: string | null;
 }
@@ -161,6 +163,7 @@ export interface KpiDto {
 export interface StreamTicketDto {
   camera_id: string;
   stream_type: string;
+  source_kind?: string | null;
   stream_url: string;
   expires_at: string;
   playable?: boolean;
@@ -304,6 +307,7 @@ export function toCamera(dto: CameraItemDto): Camera {
     height: dto.height ?? undefined,
     fps: dto.fps ?? undefined,
     streamType: (dto.stream_type?.toUpperCase() as Camera['streamType']) ?? undefined,
+    sourceKind: asSourceKind(dto.source_kind),
     streamUrl: dto.stream_url,
     lastSeen: dto.last_seen ?? undefined,
   };
@@ -483,10 +487,17 @@ export function toKpis(dto: KpiDto): DashboardKpis {
   };
 }
 
+/** Unknown/absent is treated as LIVE so an old backend keeps rendering as before. */
+function asSourceKind(value?: string | null): Camera['sourceKind'] {
+  const v = (value ?? '').toUpperCase();
+  return v === 'RECORDED' || v === 'UNPROVISIONED' || v === 'LIVE' ? v : 'LIVE';
+}
+
 export function toStreamTicket(dto: StreamTicketDto): CameraStreamTicket {
   return {
     cameraId: dto.camera_id.toLowerCase(),
     streamType: dto.stream_type as CameraStreamTicket['streamType'],
+    sourceKind: asSourceKind(dto.source_kind),
     streamUrl: dto.stream_url,
     expiresAt: dto.expires_at,
     poster: undefined, // resolved by the player (synthetic/registry still)

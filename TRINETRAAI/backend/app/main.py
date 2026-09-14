@@ -107,6 +107,14 @@ async def lifespan(app: FastAPI):
     active_cams = camera_manager.list_cameras()
     for cam in active_cams:
         camera_manager.stop_camera(cam["camera_id"])
+    # Live detection runs one worker per camera; stop them explicitly so no thread
+    # outlives the app (and no worker is mid-inference during interpreter teardown).
+    try:
+        from app.services.vehicle_detection_service import vehicle_detection_service
+
+        vehicle_detection_service.stop_all()
+    except Exception as exc:  # pragma: no cover - shutdown must never raise
+        logger.warning(f"Live detection workers not stopped cleanly: {exc}")
     logger.info("All camera streams and resources cleanly released.")
 
 

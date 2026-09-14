@@ -90,6 +90,10 @@ export const mockCameras: Camera[] = SEEDS.map((s, i) => ({
   height: s.h,
   fps: s.fps,
   streamType: s.stream,
+  // Mock feeds are generated stills, not a camera. Labelling them LIVE in a
+  // demo is exactly the confusion this project must not ship, so the mock data
+  // is honest even when the real backend is not in play.
+  sourceKind: 'RECORDED',
   installedAt: new Date(2023, i % 12, ((i * 3) % 27) + 1).toISOString(),
 }));
 
