@@ -144,6 +144,9 @@ class Settings(BaseSettings):
     ANALYSIS_OCR_COOLDOWN_STEPS: int = 3        # detection steps between OCR attempts per track
     ANALYSIS_MIN_TRACK_HITS: int = 2            # ignore single-frame detector flicker
     ANALYSIS_MIN_VEHICLE_AREA: int = 1200       # px^2; smaller boxes are not OCR-able
+    # Seconds allowed to re-encode a clip OpenCV cannot decode (.dav/.wmv/odd
+    # profiles) into H.264 MP4 before the file is rejected with the reason.
+    ANALYSIS_CONVERT_TIMEOUT_SEC: int = 1800
     # Cross-video fuzzy matching: only plates of equal length differing by at
     # most this many *visually confusable* characters may be flagged as a
     # possible match (never merged automatically).

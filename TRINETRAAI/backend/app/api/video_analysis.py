@@ -19,6 +19,7 @@ No existing endpoint is modified.
 """
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 import os
 import uuid
@@ -70,6 +71,13 @@ async def upload_videos(
     Store each uploaded video and register it as its own camera/video id.
     The filename is used as the camera identifier (``CAM1.mp4`` → ``CAM1``)
     unless an explicit id is supplied.
+
+    Every container the decoder can read is accepted — .mp4/.avi/.mov/.mkv/
+    .webm plus the CCTV/DVR/phone formats (.3gp, .ts, .wmv, .dav, .264, ...).
+    A clip OpenCV cannot decode is converted with ffmpeg before it is
+    registered, so uploading five clips registers five videos. Each file is
+    handled off the event loop: probing/converting is blocking work and must
+    not stall the rest of the API while a batch uploads.
     """
     if not files:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No files were uploaded.")
@@ -82,9 +90,10 @@ async def upload_videos(
         name = upload.filename or f"video_{idx + 1}.mp4"
         try:
             data = await upload.read()
-            video = vas.register_upload(
+            video = await asyncio.to_thread(
+                vas.register_upload,
                 db, name, data, batch,
-                camera_id=explicit[idx] if idx < len(explicit) else None,
+                explicit[idx] if idx < len(explicit) else None,
             )
             added.append(vas.video_to_dict(video))
         except vas.AnalysisError as exc:

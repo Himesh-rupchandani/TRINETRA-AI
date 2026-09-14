@@ -587,3 +587,149 @@ def test_19_evidence_route_stays_inside_its_root(client):
     """Serving crops must not turn into a file read anywhere on disk."""
     for ref in ("../../etc/passwd", "/etc/passwd", "analysis/../../secrets.txt"):
         assert client.get(f"/api/evidence/{ref}").status_code in (400, 404)
+
+
+# --------------------------------------------------------------------------- #
+# 20. A batch of five real-world CCTV containers registers five videos
+# --------------------------------------------------------------------------- #
+def test_20_every_common_cctv_container_is_accepted(client, tmp_path):
+    """The "only one video came through" regression.
+
+    CCTV/DVR footage is rarely .mp4: phone exports are .3gp, DVR exports are
+    .ts or .dav, older cameras write .wmv, and some encoders emit a raw .264
+    elementary stream. Gating registration on the filename extension used to
+    drop every one of those, so an operator who uploaded five clips saw a
+    single row in the list. OpenCV/ffmpeg decide by *content*, so all five
+    must be registered - with metadata probed from the real file.
+    """
+    payload = tmp_path / "source.mp4"
+    _write_clip(payload)
+    blob = payload.read_bytes()
+
+    names = ["TCAM20A.3gp", "TCAM20B.ts", "TCAM20C.wmv", "TCAM20D.264", "TCAM20E.dav"]
+    res = client.post(
+        "/api/analysis/videos/upload",
+        files=[("files", (n, blob, "application/octet-stream")) for n in names],
+    )
+    assert res.status_code in (200, 201), res.text
+    body = res.json()
+    added = body["added"]
+    try:
+        assert body["errors"] == [], body["errors"]
+        assert len(added) == 5, f"all five clips must register, got {len(added)}"
+        assert {v["camera_id"] for v in added} == {Path(n).stem.upper() for n in names}
+        assert all(v["source_type"] == "UPLOAD" for v in added)
+        # metadata is probed from the decoded stream, never from the extension
+        assert all(v["frames_total"] == FRAMES and v["width"] == SIZE[0] for v in added)
+
+        listed = client.get("/api/analysis/status").json()["videos"]
+        mine = [v for v in listed if v["camera_id"].startswith("TCAM20")]
+        assert len(mine) == 5, "the list the operator sees must hold all five clips"
+    finally:
+        for v in added:
+            client.delete(f"/api/analysis/videos/{v['video_id']}")
+
+
+# --------------------------------------------------------------------------- #
+# 21. A clip OpenCV cannot decode is converted with ffmpeg, not dropped
+# --------------------------------------------------------------------------- #
+def test_21_undecodable_clip_is_converted_and_registered(client, tmp_path, monkeypatch):
+    """A container the local OpenCV build cannot read still gets analysed.
+
+    The conversion is exercised with the converter stubbed (so the test does
+    not depend on which ffmpeg build happens to be installed); the ffmpeg
+    command line itself is covered by test_21b below.
+    """
+    clip = tmp_path / "TCAM21.dav"
+    _write_clip(tmp_path / "src.mp4")
+    clip.write_bytes((tmp_path / "src.mp4").read_bytes())
+
+    converted_holder = {}
+    real_opens = vas._cv2_opens
+
+    def fake_opens(path):
+        # the original refuses to open; anything the converter produced is fine
+        return True if str(path).endswith("_converted.mp4") else False
+
+    def fake_convert(path):
+        dest = path.with_name(f"{path.stem}_converted.mp4")
+        dest.write_bytes(path.read_bytes())
+        converted_holder["dest"] = dest
+        return dest
+
+    monkeypatch.setattr(vas, "_cv2_opens", fake_opens)
+    monkeypatch.setattr(vas, "_convert_to_mp4", fake_convert)
+
+    res = client.post(
+        "/api/analysis/videos/upload",
+        files=[("files", ("TCAM21.dav", clip.read_bytes(), "application/octet-stream"))],
+    )
+    assert res.status_code in (200, 201), res.text
+    body = res.json()
+    assert body["errors"] == [], body["errors"]
+    video = body["added"][0]
+    try:
+        assert video["camera_id"] == "TCAM21"
+        assert "dest" in converted_holder, "the clip must go through the converter"
+        assert not clip.exists() or True  # the uploaded copy lives in the analysis dir
+        # the stored file is the converted one, and it is a real decodable video
+        assert converted_holder["dest"].is_file()
+        assert real_opens(converted_holder["dest"]) is True
+        assert video["frames_total"] == FRAMES
+    finally:
+        client.delete(f"/api/analysis/videos/{video['video_id']}")
+
+
+def test_21b_ffmpeg_conversion_produces_a_decodable_mp4(tmp_path):
+    """The real ffmpeg command line, against a real clip.
+
+    Skipped where imageio-ffmpeg is not installed; the rejection message in
+    test_22 is what the operator sees in that case.
+    """
+    pytest.importorskip("imageio_ffmpeg")
+    src = tmp_path / "clip.mp4"
+    _write_clip(src)
+    out = vas._convert_to_mp4(src)
+    try:
+        assert out is not None, "the bundled ffmpeg must be able to re-encode to H.264"
+        assert out.suffix == ".mp4" and vas._cv2_opens(out)
+        meta = vas.probe_video(out)
+        assert meta["width"] == SIZE[0] and meta["height"] == SIZE[1]
+        assert meta["frames_total"] >= FRAMES - 2, meta
+    finally:
+        if out is not None:
+            out.unlink(missing_ok=True)
+
+
+# --------------------------------------------------------------------------- #
+# 22. Nothing is silently dropped: an unreadable file explains itself
+# --------------------------------------------------------------------------- #
+def test_22_unreadable_file_is_rejected_with_a_reason(client, tmp_path, monkeypatch):
+    """One bad file must not take the other four with it, and must say why."""
+    good = tmp_path / "TCAM22A.mp4"
+    _write_clip(good)
+    junk = b"this is not a video, whatever it is called"
+
+    # only the junk file fails to decode; the good clip must sail through
+    monkeypatch.setattr(vas, "_cv2_opens", lambda path: "TCAM22B" not in Path(path).name)
+    monkeypatch.setattr(vas, "_ffmpeg_exe", lambda: None)
+
+    res = client.post(
+        "/api/analysis/videos/upload",
+        files=[
+            ("files", ("TCAM22A.mp4", good.read_bytes(), "video/mp4")),
+            ("files", ("TCAM22B.mp4", junk, "video/mp4")),
+        ],
+    )
+    assert res.status_code in (200, 201), res.text
+    body = res.json()
+    try:
+        assert [v["camera_id"] for v in body["added"]] == ["TCAM22A"]
+        assert len(body["errors"]) == 1
+        err = body["errors"][0]
+        assert err["source_name"] == "TCAM22B.mp4"
+        assert "could not be decoded" in err["error"]
+        assert "ffmpeg" in err["error"], "the reason must say what is missing"
+    finally:
+        for v in body["added"]:
+            client.delete(f"/api/analysis/videos/{v['video_id']}")

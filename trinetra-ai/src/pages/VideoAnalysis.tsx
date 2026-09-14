@@ -29,6 +29,9 @@ export default function VideoAnalysis() {
   const [starting, setStarting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [onlyMulti, setOnlyMulti] = useState(false);
+  // Files from the last upload the backend could not register, with the reason.
+  // Kept visible so "I picked five clips" always accounts for five rows.
+  const [rejected, setRejected] = useState<Array<{ source_name: string; error: string }>>([]);
   const pollRef = useRef<number | null>(null);
 
   const refreshStatus = useCallback(async () => {
@@ -153,12 +156,21 @@ export default function VideoAnalysis() {
           )}
 
           <AddVideosPanel
-            onAdded={() => void refreshAll()}
+            onAdded={(_added, _batchId, errors) => {
+              setRejected(errors ?? []);
+              void refreshAll();
+            }}
             busy={busy}
             batchId={undefined}
+            rejected={rejected}
           />
 
-          <VideoSourceList videos={videos} onRemove={(id) => void remove(id)} removing={removing} />
+          <VideoSourceList
+            videos={videos}
+            onRemove={(id) => void remove(id)}
+            removing={removing}
+            rejected={rejected}
+          />
 
           <DetectionLedger videos={videos} />
 

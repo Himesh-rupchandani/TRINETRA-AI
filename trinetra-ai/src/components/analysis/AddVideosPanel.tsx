@@ -11,16 +11,23 @@ export function AddVideosPanel({
   batchId,
   onAdded,
   busy,
+  rejected = [],
 }: {
   batchId?: string;
-  onAdded: (videos: AnalysisVideo[], batchId: string) => void;
+  /** `errors` carries the files that could NOT be added, with the reason. */
+  onAdded: (
+    videos: AnalysisVideo[],
+    batchId: string,
+    errors: Array<{ source_name: string; error: string }>,
+  ) => void;
   busy: boolean;
+  /** Files from the last batch that could not be registered, with the reason. */
+  rejected?: Array<{ source_name: string; error: string }>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [fileErrors, setFileErrors] = useState<Array<{ source_name: string; error: string }>>([]);
 
   const [driveUrl, setDriveUrl] = useState('');
   const [driveCameraId, setDriveCameraId] = useState('');
@@ -44,12 +51,10 @@ export function AddVideosPanel({
     if (!files.length || uploading) return;
     setUploading(true);
     setUploadError(null);
-    setFileErrors([]);
     try {
       const res = await videoAnalysisService.uploadFiles(files, { batchId });
       setFiles([]);
-      setFileErrors(res.errors);
-      onAdded(res.added, res.batchId);
+      onAdded(res.added, res.batchId, res.errors);
     } catch (e: unknown) {
       setUploadError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
@@ -93,7 +98,7 @@ export function AddVideosPanel({
       setDriveUrl('');
       setDriveCameraId('');
       setDriveMsg({ tone: 'ok', text: `Added ${video.sourceName} as ${video.cameraId}.` });
-      onAdded([video], video.batchId ?? batchId ?? '');
+      onAdded([video], video.batchId ?? batchId ?? '', []);
     } catch (e: unknown) {
       setDriveMsg({ tone: 'err', text: e instanceof Error ? e.message : 'Could not add the link' });
     } finally {
@@ -108,6 +113,19 @@ export function AddVideosPanel({
         ? 'border-degraded/40 bg-degraded/10 text-degraded'
         : 'border-critical/30 bg-critical/10 text-critical';
 
+  // A file the backend could not use is listed below with its reason, so the
+  // operator is never left wondering where four of five clips went.
+  const rejectedNote = rejected.length > 0 ? (
+    <p
+      className="mt-2 rounded-lg border border-degraded/40 bg-degraded/10 px-3 py-2 text-2xs text-degraded"
+      role="status"
+    >
+      {rejected.length} of the files you picked could not be added — they are
+      listed under <span className="font-semibold">Videos in this analysis</span>{' '}
+      with the exact reason for each.
+    </p>
+  ) : null;
+
   return (
     <Panel title="Add videos" icon={FileVideo}>
       <div className="grid gap-5 p-4 lg:grid-cols-2">
@@ -118,7 +136,7 @@ export function AddVideosPanel({
             ref={inputRef}
             type="file"
             multiple
-            accept="video/*,.mkv,.avi,.mov,.mp4,.webm"
+            accept="video/*,.mp4,.avi,.mov,.mkv,.webm,.m4v,.3gp,.3g2,.wmv,.asf,.flv,.f4v,.ts,.m2ts,.mts,.mpg,.mpeg,.mpe,.vob,.ogv,.mxf,.dav,.h264,.h265,.hevc,.264,.265,.avc"
             className="sr-only"
             onChange={(e) => pickFiles(e.target.files)}
           />
@@ -136,7 +154,8 @@ export function AddVideosPanel({
                 Choose one or more video files
               </span>
               <span className="block text-2xs text-ink-faint">
-                MP4 · AVI · MOV · MKV · WEBM — the filename becomes the camera id (CAM1.mp4 → CAM1)
+                MP4 · AVI · MOV · MKV · WEBM · 3GP · TS · WMV · DAV · raw H.264 — anything the
+                decoder can read is accepted, and the filename becomes the camera id (CAM1.mp4 → CAM1)
               </span>
             </span>
           </button>
@@ -189,11 +208,7 @@ export function AddVideosPanel({
               {uploadError}
             </p>
           )}
-          {fileErrors.map((e) => (
-            <p key={e.source_name} className="mt-2 rounded-lg border border-degraded/30 bg-degraded/10 px-3 py-2 text-2xs text-degraded">
-              {e.source_name}: {e.error}
-            </p>
-          ))}
+          {rejectedNote}
         </div>
 
         {/* --- Google Drive --- */}
