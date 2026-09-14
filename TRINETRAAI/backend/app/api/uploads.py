@@ -125,8 +125,10 @@ async def upload_video(
             location=place,
             stream_url=str(path),
             stream_type="file",
-            latitude=23.0225,
-            longitude=72.5714,
+            # An uploaded file has no known real-world position: leave the GPS
+            # NULL rather than pinning it to a made-up coordinate.
+            latitude=None,
+            longitude=None,
             department="Traffic Police",
             zone=uvs.UPLOADED_ZONE,
             codec="H264",

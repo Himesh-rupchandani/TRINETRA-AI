@@ -61,8 +61,8 @@ class CameraBase(TRINETRASchema):
     name: str = Field(..., example="North Gate Junction", min_length=2, max_length=100)
     stream_url: str = Field(..., example="rtsp://103.250.160.189:8554/stream/cam04")
     stream_type: str = Field("rtsp", example="rtsp")  # rtsp, hls, file
-    latitude: Optional[float] = Field(23.0225, example=23.0225)
-    longitude: Optional[float] = Field(72.5714, example=72.5714)
+    latitude: Optional[float] = Field(None, example=23.0126)
+    longitude: Optional[float] = Field(None, example=72.5647)
     location: Optional[str] = Field(None, example="Paldi Circle")
     codec: Optional[str] = Field("H264", example="H264")
     width: Optional[int] = Field(1920, example=1920)

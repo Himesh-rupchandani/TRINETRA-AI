@@ -24,7 +24,7 @@ import numpy as np
 
 from ..core.config import settings
 from ..utils.plate_normalizer import INDIAN_PLATE_RE, LOOSE_PLATE_RE
-from .ocr_service import candidate_from_text, ocr_service, preprocess_variants
+from .ocr_service import candidate_from_text, joined_plate_candidate, ocr_service, preprocess_variants
 from .plate_detector_service import PlateBox, plate_detector_service
 
 # Plate patterns are defined once, in app/utils/plate_normalizer.py, and shared
@@ -95,8 +95,10 @@ def read_plate_for_vehicle(
             continue
         if crop.shape[1] < 24 or crop.shape[0] < 8:
             continue
-        for variant in preprocess_variants(crop):
-            for text, ocr_conf in ocr_service.read_lines(variant):
+        variants = preprocess_variants(crop)
+        for idx, variant in enumerate(variants):
+            lines = ocr_service.read_lines(variant)
+            for text, ocr_conf in lines:
                 norm = candidate_from_text(text)
                 if norm is None:
                     continue
@@ -116,6 +118,30 @@ def read_plate_for_vehicle(
                 )
                 if best is None or read.confidence > best.confidence:
                     best = read
+            # A plate OCR split across two text regions is one plate, not two
+            # lines that each fail validation: try the joined reading too.
+            joined = joined_plate_candidate(lines)
+            if joined is not None:
+                raw, norm, conf_avg = joined
+                fscore = format_score(norm)
+                if fscore > 0.0:
+                    conf = float(conf_avg) * fscore
+                    if conf >= reject:
+                        read = PlateRead(
+                            raw=raw,
+                            normalized=norm,
+                            confidence=round(min(conf, 1.0), 4),
+                            ocr_confidence=round(float(conf_avg), 4),
+                            indian_format=bool(INDIAN_PLATE_RE.match(norm)),
+                            plate_box=region,
+                        )
+                        if best is None or read.confidence > best.confidence:
+                            best = read
+            # The raw crop is the source of truth: once it reads a plate, the
+            # enhancement variants (CLAHE / Otsu) are fallbacks only and must
+            # not override a faithful read with a different string.
+            if idx == 0 and best is not None:
+                break
             # A confident canonical plate is good enough — stop burning CPU.
             if best is not None and best.indian_format and best.confidence >= 0.92:
                 return best

@@ -40,11 +40,8 @@ from ..database.models import Camera, VehicleEvent, VideoSource
 from ..utils.timestamps import iso_utc
 from .anpr_pipeline import (
     PLATE_STATUS_HIGH,
-    PLATE_STATUS_UNKNOWN,
-    TrackPlateAccumulator,
     read_plate_for_vehicle,
 )
-from .simple_tracker import SimpleTracker
 
 # Containers this feature is known to handle. Kept for the user-facing message
 # only — it is NOT a gate. Real CCTV/DVR exports arrive as .3gp, .ts, .wmv,
@@ -533,6 +530,7 @@ def _run_video(video_id: str) -> None:
         from .event_service import create_watchlist_alert, match_watchlist
         from .ocr_service import ocr_service
         from .vehicle_detection_service import vehicle_detection_service
+        from .video_analysis_core import analyze_video
 
         video = db.query(VideoSource).filter(VideoSource.video_id == video_id).first()
         if video is None:
@@ -565,116 +563,83 @@ def _run_video(video_id: str) -> None:
             db.commit()
             return
 
-        cap = cv2.VideoCapture(video.file_path)
-        if not cap.isOpened():
+        if not video.file_path or not os.path.isfile(video.file_path):
             video.status = FAILED
-            video.error = "Could not decode this video file."
+            video.error = "The video file is missing from disk. Re-add it."
             video.completed_at = datetime.now(timezone.utc)
             db.commit()
             return
 
-        fps = float(video.fps or cap.get(cv2.CAP_PROP_FPS) or 25.0)
-        if fps <= 0:
-            fps = 25.0
-        total = int(video.frames_total or cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        every_n = max(1, int(getattr(settings, "ANALYSIS_EVERY_N_FRAMES", 5)))
-        cooldown_steps = max(1, int(getattr(settings, "ANALYSIS_OCR_COOLDOWN_STEPS", 3)))
-        min_hits = max(1, int(getattr(settings, "ANALYSIS_MIN_TRACK_HITS", 2)))
-        min_area = int(getattr(settings, "ANALYSIS_MIN_VEHICLE_AREA", 1200))
-
-        tracker = SimpleTracker(iou_threshold=0.25, max_misses=8)
-        accum: Dict[int, TrackPlateAccumulator] = {}
-        # track_id -> dict of the best frame seen for this vehicle
-        track_meta: Dict[int, dict] = {}
-        cooldown: Dict[int, int] = {}
-        best_crop: Dict[int, bytes] = {}
-        # ...and the plate crop of that same best read, plus a vehicle crop kept
-        # even for vehicles whose plate was never legible: an unreadable plate is
-        # a reason to show the vehicle without a plate image, never a reason to
-        # drop the vehicle from the results.
-        best_plate_crop: Dict[int, bytes] = {}
-        fallback_crop: Dict[int, bytes] = {}
-
-        counters = {"vehicles": 0, "plates": 0, "unknown": 0}
-        seen_tracks: set = set()
-        frame_idx = 0
-        analyzed = 0
+        fps = float(video.fps or 0.0) or 25.0
+        total = int(video.frames_total or 0)
         video_filename = os.path.basename(video.file_path or "")
 
-        def _encode(box) -> Optional[bytes]:
-            """Cut one crop out of the current frame as JPEG, or None.
+        def _detect(frame):
+            return vehicle_detection_service.detect(
+                frame,
+                conf=float(getattr(settings, "ANALYSIS_CONFIDENCE_THRESHOLD", 0.35)),
+                imgsz=int(getattr(settings, "ANALYSIS_DETECTION_IMGSZ", 960)),
+            )
 
-            The box is used exactly as the detector reported it, clipped to the
-            frame - a crop is not a place to restyle anything.
-            """
-            x1, y1, x2, y2 = box
-            fh, fw = frame.shape[:2] if frame is not None else (0, 0)
-            ix1 = max(0, min(fw - 1, int(x1)))
-            iy1 = max(0, min(fh - 1, int(y1)))
-            ix2 = max(ix1 + 1, min(fw, int(x2)))
-            iy2 = max(iy1 + 1, min(fh, int(y2)))
-            crop = frame[iy1:iy2, ix1:ix2]
-            if crop is None or crop.size == 0:
-                return None
+        def _on_progress(current_frame: int, total_frames: int) -> None:
+            video.frames_read = current_frame
+            video.progress_pct = (
+                round(current_frame / total_frames * 100, 1) if total_frames else 0.0
+            )
             try:
-                ok_enc, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+                db.commit()
             except Exception:
-                return None
-            return buf.tobytes() if ok_enc else None
+                pass
 
-        def finalize(track_id: int) -> None:
-            meta = track_meta.pop(track_id, None)
-            acc = accum.pop(track_id, None)
-            cooldown.pop(track_id, None)
-            crop_bytes = best_crop.pop(track_id, None) or fallback_crop.pop(track_id, None)
-            plate_crop_bytes = best_plate_crop.pop(track_id, None)
-            if meta is None or meta["hits"] < min_hits:
-                return  # detector flicker, not a real vehicle sighting
+        report = analyze_video(
+            video.file_path,
+            detect=_detect,
+            read_plate=read_plate_for_vehicle,
+            config={
+                "EVERY_N_FRAMES": int(getattr(settings, "ANALYSIS_EVERY_N_FRAMES", 5)),
+                "MIN_TRACK_HITS": int(getattr(settings, "ANALYSIS_MIN_TRACK_HITS", 2)),
+                "OCR_COOLDOWN_STEPS": int(getattr(settings, "ANALYSIS_OCR_COOLDOWN_STEPS", 3)),
+                "MIN_VEHICLE_AREA": int(getattr(settings, "ANALYSIS_MIN_VEHICLE_AREA", 1200)),
+            },
+            progress_cb=_on_progress,
+        )
 
-            vote = acc.best() if acc else None
-            if vote is not None:
-                plate_norm = vote.normalized
-                plate_raw = vote.best_raw
-                plate_conf = acc.aggregate_confidence()
-                plate_status = acc.status()
-            else:
-                plate_norm, plate_raw, plate_conf = None, None, None
-                plate_status = PLATE_STATUS_UNKNOWN
+        for sight in report.sightings:
+            offset = float(sight.video_offset_sec)
+            tag = (sight.plate_text or "unknown").lower()
+            cam_lower = video.camera_id.lower()
 
-            offset = float(meta["offset_sec"])
             evidence_ref = None
-            if crop_bytes:
+            if sight.vehicle_crop:
                 try:
-                    ev_dir = _evidence_root() / "analysis" / video.camera_id.lower()
+                    ev_dir = evidence_root() / "analysis" / cam_lower
                     ev_dir.mkdir(parents=True, exist_ok=True)
-                    tag = (plate_norm or "unknown").lower()
-                    fname = f"{video.camera_id.lower()}_{track_id}_{int(offset * 1000)}ms_{tag}.jpg"
-                    (ev_dir / fname).write_bytes(crop_bytes)
-                    evidence_ref = f"analysis/{video.camera_id.lower()}/{fname}"
+                    fname = f"{cam_lower}_{sight.track_id}_{int(offset * 1000)}ms_{tag}.jpg"
+                    (ev_dir / fname).write_bytes(sight.vehicle_crop)
+                    evidence_ref = f"analysis/{cam_lower}/{fname}"
                 except Exception as exc:
                     logger.warning(f"[ANALYSIS:{video.camera_id}] evidence write failed: {exc}")
 
             plate_evidence_ref = None
-            if plate_crop_bytes:
+            if sight.plate_crop:
                 try:
-                    ev_dir = _evidence_root() / "analysis" / video.camera_id.lower()
+                    ev_dir = evidence_root() / "analysis" / cam_lower
                     ev_dir.mkdir(parents=True, exist_ok=True)
-                    tag = (plate_norm or "unknown").lower()
-                    pfname = f"{video.camera_id.lower()}_{track_id}_{int(offset * 1000)}ms_{tag}_plate.jpg"
-                    (ev_dir / pfname).write_bytes(plate_crop_bytes)
-                    plate_evidence_ref = f"analysis/{video.camera_id.lower()}/{pfname}"
+                    pfname = f"{cam_lower}_{sight.track_id}_{int(offset * 1000)}ms_{tag}_plate.jpg"
+                    (ev_dir / pfname).write_bytes(sight.plate_crop)
+                    plate_evidence_ref = f"analysis/{cam_lower}/{pfname}"
                 except Exception as exc:
                     logger.warning(f"[ANALYSIS:{video.camera_id}] plate crop write failed: {exc}")
 
             event = VehicleEvent(
                 camera_id=video.camera_id,
-                vehicle_track_id=track_id,
-                plate_raw=plate_raw,
-                plate_number=plate_norm,
-                plate_confidence=plate_conf,
-                plate_status=plate_status,
-                vehicle_class=meta["class_name"],
-                vehicle_confidence=round(float(meta["confidence"]), 4),
+                vehicle_track_id=sight.track_id,
+                plate_raw=sight.plate_raw,
+                plate_number=sight.plate_text,
+                plate_confidence=sight.plate_confidence,
+                plate_status=sight.plate_status,
+                vehicle_class=sight.vehicle_class,
+                vehicle_confidence=sight.vehicle_confidence,
                 event_time=anchor + timedelta(seconds=offset),
                 latitude=cam.latitude if cam else None,
                 longitude=cam.longitude if cam else None,
@@ -683,26 +648,23 @@ def _run_video(video_id: str) -> None:
                 video_file=video_filename,
                 video_offset_sec=offset,
                 video_id=video.video_id,
-                frame_number=int(meta["frame_number"]),
+                frame_number=sight.frame_number,
                 watchlist_match=False,
             )
-            event.bbox = meta["bbox"]
+            event.bbox = sight.vehicle_bbox
             db.add(event)
             db.commit()
             db.refresh(event)
 
             alert_extra: dict = {}
-            if plate_norm:
-                counters["plates"] += 1
-                entry = match_watchlist(db, plate_norm)
-                if entry and plate_status == PLATE_STATUS_HIGH:
+            if sight.plate_text:
+                entry = match_watchlist(db, sight.plate_text)
+                if entry and sight.plate_status == PLATE_STATUS_HIGH:
                     event.watchlist_match = True
                     db.commit()
                     alert = create_watchlist_alert(db, event, entry)
                     kind = "ALERT_CREATED" if alert else "WATCHLIST_MATCH"
                     if alert:
-                        # Mirror the live pipeline's alert keys so the UI gets a
-                        # real alert id (and severity/message) to act on.
                         alert_extra = {
                             "alert_id": alert.id,
                             "alert_ref": f"AL-{alert.id}",
@@ -716,7 +678,6 @@ def _run_video(video_id: str) -> None:
                 else:
                     kind = "VEHICLE_DETECTED"
             else:
-                counters["unknown"] += 1
                 kind = "VEHICLE_DETECTED"
 
             _broadcast(kind, {
@@ -725,7 +686,7 @@ def _run_video(video_id: str) -> None:
                 "video_id": video.video_id,
                 "plate": event.plate_number,
                 "plate_number": event.plate_number,
-                "plate_status": plate_status,
+                "plate_status": event.plate_status,
                 "vehicle_class": event.vehicle_class,
                 "confidence": event.plate_confidence,
                 "event_time": iso_utc(event.event_time) if event.event_time else None,
@@ -735,118 +696,36 @@ def _run_video(video_id: str) -> None:
                 **alert_extra,
             })
 
-        while True:
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                break
-            offset_sec = frame_idx / fps
-            if frame_idx % every_n == 0:
-                analyzed += 1
-                # Offline pass: stricter box geometry (bigger inference size)
-                # than the live view, which is latency bound. See ANALYSIS_*
-                # settings — this is what keeps the green boxes on the vehicle
-                # instead of on the vehicle plus its neighbours.
-                detections = vehicle_detection_service.detect(
-                    frame,
-                    conf=float(getattr(settings, "ANALYSIS_CONFIDENCE_THRESHOLD", 0.35)),
-                    imgsz=int(getattr(settings, "ANALYSIS_DETECTION_IMGSZ", 960)),
-                )
-                live, retired = tracker.update(
-                    [(d.x1, d.y1, d.x2, d.y2, d.class_name, d.confidence) for d in detections]
-                )
-                for track in retired:
-                    finalize(track.track_id)
-
-                for track in live:
-                    if track.track_id not in seen_tracks:
-                        seen_tracks.add(track.track_id)
-                        counters["vehicles"] += 1
-                    area = max(track.x2 - track.x1, 0) * max(track.y2 - track.y1, 0)
-                    prev = track_meta.get(track.track_id)
-                    # Keep the *largest* (closest / sharpest) view of the vehicle
-                    # as its representative record.
-                    if prev is None or area >= prev["area"]:
-                        fallback_crop[track.track_id] = _encode(
-                            (track.x1, track.y1, track.x2, track.y2)
-                        )
-                        track_meta[track.track_id] = {
-                            "class_name": track.class_name,
-                            "confidence": track.confidence,
-                            "hits": track.hits,
-                            "area": area,
-                            "bbox": [track.x1, track.y1, track.x2, track.y2],
-                            "frame_number": frame_idx,
-                            "offset_sec": offset_sec,
-                        }
-                    else:
-                        prev["hits"] = track.hits
-
-                    if not ocr_ok or track.hits < min_hits or area < min_area:
-                        continue
-                    left = cooldown.get(track.track_id, 0)
-                    if left > 0:
-                        cooldown[track.track_id] = left - 1
-                        continue
-                    cooldown[track.track_id] = cooldown_steps
-
-                    read = read_plate_for_vehicle(
-                        frame, (track.x1, track.y1, track.x2, track.y2), track.class_name
-                    )
-                    if read is None:
-                        continue
-                    accum.setdefault(track.track_id, TrackPlateAccumulator()).add(read)
-                    # Snapshot the vehicle at the best read for evidence, and the
-                    # plate itself when the plate stage reported where it was.
-                    snap = _encode((track.x1, track.y1, track.x2, track.y2))
-                    if snap:
-                        best_crop[track.track_id] = snap
-                    pbox = getattr(read, "plate_box", None)
-                    if pbox is not None:
-                        pcrop = _encode((pbox.x1, pbox.y1, pbox.x2, pbox.y2))
-                        if pcrop:
-                            best_plate_crop[track.track_id] = pcrop
-
-                if analyzed % 10 == 0:
-                    video.frames_read = frame_idx + 1
-                    video.frames_analyzed = analyzed
-                    video.progress_pct = round((frame_idx + 1) / total * 100, 1) if total else 0.0
-                    video.vehicles_detected = counters["vehicles"]
-                    video.plates_read = counters["plates"]
-                    video.unknown_plates = counters["unknown"]
-                    db.commit()
-            frame_idx += 1
-
-        for track in tracker.flush():
-            finalize(track.track_id)
-
-        video.frames_read = frame_idx
-        video.frames_analyzed = analyzed
-        video.vehicles_detected = counters["vehicles"]
-        video.plates_read = counters["plates"]
-        video.unknown_plates = counters["unknown"]
+        video.frames_read = report.stats.frames_read
+        video.frames_analyzed = report.stats.frames_analyzed
+        video.vehicles_detected = report.stats.vehicles_detected
+        video.plates_read = report.stats.plates_read
+        video.unknown_plates = report.stats.unknown_plates
         video.progress_pct = 100.0
         video.status = DONE
         video.completed_at = datetime.now(timezone.utc)
-        if counters["vehicles"] == 0:
+        if report.stats.vehicles_detected == 0:
             video.error = "No vehicles were detected in this video."
-        elif counters["plates"] == 0:
+        elif report.stats.plates_read == 0:
             video.error = ("Vehicles were detected but no number plate could be read "
                            "with sufficient confidence.")
+        else:
+            video.error = None
         db.commit()
         if cam is not None:
             cam.last_seen = datetime.now(timezone.utc)
             db.commit()
 
         logger.info(
-            f"[ANALYSIS:{video.camera_id}] Done — {frame_idx} frames read, {analyzed} analysed, "
-            f"{counters['vehicles']} vehicles, {counters['plates']} plates, "
-            f"{counters['unknown']} unknown."
+            f"[ANALYSIS:{video.camera_id}] Done — {report.stats.frames_read} frames read, "
+            f"{report.stats.frames_analyzed} analysed, {report.stats.vehicles_detected} vehicles, "
+            f"{report.stats.plates_read} plates, {report.stats.unknown_plates} unknown."
         )
         _broadcast("ANALYSIS_VIDEO_DONE", {
             "video_id": video.video_id,
             "camera_id": video.camera_id,
-            "vehicles_detected": counters["vehicles"],
-            "plates_read": counters["plates"],
+            "vehicles_detected": report.stats.vehicles_detected,
+            "plates_read": report.stats.plates_read,
         })
     except Exception as exc:
         logger.exception(f"[ANALYSIS:{video_id}] failed: {exc}")
@@ -872,7 +751,6 @@ def _run_video(video_id: str) -> None:
         slots.release()
         with _worker_lock:
             _active_workers.pop(video_id, None)
-
 
 # ---------------------------------------------------------------------------
 # Serialisation

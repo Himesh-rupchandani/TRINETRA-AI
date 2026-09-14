@@ -131,9 +131,11 @@ class Settings(BaseSettings):
 
     # ---- Number-plate detection (new pipeline stage) ----
     # A fine-tuned plate detector produced by training/train_plate_detector.py.
-    # When the file is absent the pipeline falls back to a classical OpenCV
-    # plate proposer, so ANPR works out of the box either way.
-    PLATE_MODEL_PATH: str = "models/plate_detector.pt"
+    # The tracked weight ships under models/license-plate-finetune-v1n.pt
+    # (single "License_Plate" class). When the file is absent the pipeline
+    # falls back to a classical OpenCV plate proposer, so ANPR works out of the
+    # box either way.
+    PLATE_MODEL_PATH: str = "models/license-plate-finetune-v1n.pt"
     PLATE_DETECTION_IMGSZ: int = 320
     PLATE_CONF_THRESHOLD: float = 0.25
 

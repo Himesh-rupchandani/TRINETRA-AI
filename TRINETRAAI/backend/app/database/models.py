@@ -64,8 +64,11 @@ class Camera(Base):
     name = Column(String(100), nullable=False)
     stream_url = Column(String(500), nullable=False)
     stream_type = Column(String(20), default="rtsp", nullable=False)  # rtsp, hls, file
-    latitude = Column(Float, nullable=True, default=23.0225)
-    longitude = Column(Float, nullable=True, default=72.5714)
+    # No scalar default: a camera without a real-world location stores NULL,
+    # never a fabricated coordinate (uploaded/Drive videos have no GPS and must
+    # not place a fake pin on the operational map).
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     location = Column(String(200), nullable=True)
     # Owning agency + operational zone: the CCTV Registry (Model 1) must expose
     # these so the UI never has to guess or hard-code them per component.

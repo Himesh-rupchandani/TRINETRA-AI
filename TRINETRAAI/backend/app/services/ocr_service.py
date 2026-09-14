@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -123,20 +123,23 @@ def preprocess_variants(crop: np.ndarray) -> List[np.ndarray]:
     except Exception:
         return [base]
 
-    # 1. CLAHE-equalised grayscale — the existing behaviour, kept first.
+    # 1. Raw colour crop — the most faithful input. Enhancement is a fallback
+    #    for plates the raw pixels cannot resolve, never an override: CLAHE/Otsu
+    #    on a small plate measurably flipped digits (0<->9, 6<->8) that the raw
+    #    crop read correctly.
+    variants.append(base)
+
+    # 2. CLAHE-equalised grayscale — lifts low-contrast / night plates.
     clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
     variants.append(cv2.cvtColor(clahe, cv2.COLOR_GRAY2BGR))
 
-    # 2. Denoised + Otsu binarisation — strongest for clean, well-lit plates.
+    # 3. Denoised + Otsu binarisation — strongest for clean, well-lit plates.
     den = cv2.bilateralFilter(clahe, 5, 40, 40)
     _, otsu = cv2.threshold(den, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     # White characters on dark plates: invert when the frame is mostly dark.
     if float(otsu.mean()) < 110:
         otsu = cv2.bitwise_not(otsu)
     variants.append(cv2.cvtColor(otsu, cv2.COLOR_GRAY2BGR))
-
-    # 3. Raw colour crop — RapidOCR's detector sometimes prefers it.
-    variants.append(base)
     return variants
 
 
@@ -152,6 +155,31 @@ def candidate_from_text(text: str) -> Optional[str]:
     if not any(ch.isalpha() for ch in norm):
         return None
     return norm
+
+
+def joined_plate_candidate(lines) -> Optional[Tuple[str, str, float]]:
+    """Reconstruct a plate that OCR split into several text regions of ONE crop.
+
+    RapidOCR returns its text regions in reading order (top-to-bottom), which
+    for a single Indian plate is also left-to-right. When no individual line is
+    a valid plate by itself, the whole line set is joined and re-validated, so
+    ``"GJ03P" + "08696"`` becomes ``"GJ03P08696"`` instead of being discarded
+    line by line. Only genuine OCR output is combined - nothing is invented.
+
+    Returns ``(raw_joined, normalized, mean_confidence)`` or ``None``.
+    """
+    if not lines or len(lines) < 2:
+        return None
+    texts = [str(t).strip() for t, _c in lines if str(t).strip()]
+    if len(texts) < 2:
+        return None
+    joined = "".join(texts)
+    norm = candidate_from_text(joined)
+    if norm is None:
+        return None
+    confs = [float(c) for t, c in lines if str(t).strip() and c is not None]
+    conf = sum(confs) / len(confs) if confs else 0.0
+    return " ".join(texts), norm, conf
 
 
 class OcrService:
@@ -269,7 +297,8 @@ class OcrService:
             if crop.shape[1] < 40 or crop.shape[0] < 12:
                 continue
             prepped = preprocess_for_ocr(crop)
-            for text, conf in self._read_lines(prepped):
+            lines = self._read_lines(prepped)
+            for text, conf in lines:
                 norm = candidate_from_text(text)
                 if norm is None:
                     continue
@@ -281,6 +310,17 @@ class OcrService:
                 reading = PlateReading(raw=text, normalized=norm, confidence=float(conf), indian_format=indian)
                 if best is None or reading.confidence > best.confidence:
                     best = reading
+            # A plate OCR split into two regions is one plate, not two lines:
+            # try the joined reading before giving up on this crop.
+            joined = joined_plate_candidate(lines)
+            if joined is not None:
+                raw, norm, conf = joined
+                indian = bool(_INDIAN_PLATE.match(norm))
+                adj = float(conf) * (1.0 if indian else 0.7)
+                if adj >= min_conf:
+                    reading = PlateReading(raw=raw, normalized=norm, confidence=conf, indian_format=indian)
+                    if best is None or reading.confidence > best.confidence:
+                        best = reading
             if best is not None and best.confidence >= 0.9 and best.indian_format:
                 break
         return best
