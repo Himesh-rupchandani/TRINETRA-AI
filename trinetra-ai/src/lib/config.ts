@@ -9,11 +9,15 @@ export type BasemapId = 'street' | 'satellite' | 'mapbox' | 'mapbox-night' | 'ma
 
 /**
  * Mapbox access token (public/scope-restricted token is fine — tile requests
- * are browser-side). Set VITE_MAPBOX_TOKEN in trinetra-ai/.env.local to fetch
- * the Mapbox basemaps; without it the Mapbox entries are hidden and the
- * keyless OSM/Esri pair is used as before.
+ * are browser-side). Set VITE_MAPBOX_TOKEN in trinetra-ai/.env.local to
+ * override; the fallback below is the project owner's demo token so the
+ * keyed Mapbox basemaps (no watermarks) work out of the box. With a token
+ * present the Mapbox styles are shown and become the default basemap.
  */
-export const mapboxToken = (env.VITE_MAPBOX_TOKEN ?? '').trim();
+export const mapboxToken = (
+  env.VITE_MAPBOX_TOKEN ??
+  'pk.eyJ1IjoiaGltZXNoLXJ1cGNoYW5kYW5pIiwiYSI6ImNtdHVtMG54MjAyMGIyd3B0eWE0eGppZmgifQ.JyS4aYdbiopdM2FMPUdpYA'
+).trim();
 export const mapboxEnabled = mapboxToken.length > 0;
 
 const MAPBOX_ATTRIBUTION =
