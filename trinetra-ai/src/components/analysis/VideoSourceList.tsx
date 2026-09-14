@@ -67,7 +67,11 @@ export function VideoSourceList({
         />
       ) : (
         <div className="overflow-x-auto">
-          <table className="data-table data-table-page">
+          {/* No `data-table-page` here: that variant pins the header for
+              window-scrolled pages, but Video Analysis scrolls inside its own
+              container, where the pinned header landed *below* the rows. The
+              plain table keeps Camera/Source/... directly above the data. */}
+          <table className="data-table">
             <thead>
               <tr>
                 <th scope="col">Camera</th>

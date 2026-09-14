@@ -203,7 +203,9 @@ class Settings(BaseSettings):
     ]
 
     # File uploads
-    MAX_UPLOAD_SIZE_MB: int = 250
+    # CCTV/DVR clips are big; 250 MB silently refused common exports, which is
+    # part of why batches arrived incomplete. Per-file, not per-request.
+    MAX_UPLOAD_SIZE_MB: int = 1024
     UPLOAD_DIR: str = "uploads"
 
     @field_validator("CORS_ORIGINS", mode="before")
