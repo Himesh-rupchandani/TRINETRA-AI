@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trinetra-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PROJECT_NAME=TRINETRA AI
+      - APP_ENV=production
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=8000
+      # Absolute, volume-backed locations. The defaults are relative to the
+      # backend root (/app in the image) and would be lost on container restart.
+      - DATABASE_URL=sqlite:////app/data/trinetra.db
+      - EVIDENCE_ROOT=/app/data/evidence
+      - UPLOAD_DIR=/app/data/uploads
+      - ANALYSIS_DIR=/app/data/uploads/analysis
+      - DEMO_MODE=true
+      - SENTINEL_CATALOGUE_URL=https://cctv.corp8.cloud/cameras.json
+      - CORS_ORIGINS=["*"]
+    volumes:
+      # One named volume for every writable data directory.
+      #
+      # It must NOT be mounted over /app: that is where the image's application
+      # code lives, and an empty named volume on top of it hides the whole app
+      # (uvicorn fails with "No module named app.main"). Persist data only.
+      - trinetra-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  trinetra-data:
