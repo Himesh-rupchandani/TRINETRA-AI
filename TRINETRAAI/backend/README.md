@@ -199,3 +199,32 @@ Test Results Summary:
 > The frontend contract suite (48 tests, `cd trinetra-ai && npm test`) runs from pytest as well
 > and is skipped automatically when `node` or the frontend `node_modules` are unavailable.
 - **Errors**: 0
+
+## Detection Jobs API (unified from `detection_backend`)
+
+The standalone detection backend (port 8010) now lives **inside this app** — one
+backend, one port (8000), every feature of both services:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/v1/detect/video` | Upload (or point at) a video → async detection job |
+| `GET /api/v1/detect/jobs/{id}` | Live progress (stage, frames, vehicles, plates) |
+| `GET /api/v1/detect/jobs/{id}/results` | Sightings + plate reads + evidence links |
+| `GET /api/v1/detect/jobs/{id}/csv` | CSV report download |
+| `GET /api/v1/detect/jobs/{id}/annotated` | Annotated MP4 download |
+| `GET /api/v1/detect/evidence/{id}/{file}` | Evidence crop (vehicle / plate / frame) |
+| `POST /api/v1/detect/frame` | Instant detection on a single image |
+| `GET /api/v1/videos` | Footages available under `footages_and_videos/` |
+
+Layout after the merge:
+
+* `engine/` — the CV pipeline package (YOLO11 detection, ByteTrack tracking, RapidOCR ANPR)
+* `app/services/detection_job_service.py` — job registry + background workers (2 concurrent)
+* `app/api/detection_jobs.py` — the HTTP surface above
+* `scripts/detect_cli.py` — terminal runner (old `cli.py`): `python -m scripts.detect_cli --video <file>`
+* `sample_client/` — HTML + Python test clients, pointed at port 8000
+* `models/license-plate-finetune-v1n.pt` — tracked plate weight; `best.pt` resolves from `trinetra_detection/models/`
+
+Job outputs land in `detection_jobs/` (gitignored); sample footages go in
+`footages_and_videos/` (gitignored). Run everything with the normal backend
+commands (`uvicorn app.main:app --host 0.0.0.0 --port 8000` or `start-backend.ps1`).

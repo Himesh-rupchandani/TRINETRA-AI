@@ -20,7 +20,10 @@ _NON_ALNUM = re.compile(r"[^A-Z0-9]")
 
 # Indian plate pattern: 2 letters (state) + 2 digits + 1-4 letters + 3-4 digits
 # e.g. GJ01AB1234, MH02CD5678, KA05XY9999
-_INDIAN_PLATE = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z]{1,4}[0-9]{3,4}$")
+# Canonical Indian plate pattern — MUST stay identical to
+# cv-engine/anpr/normalizer.py and app/utils/plate_normalizer.py
+# (guarded by tests/test_plate_format_consistency.py).
+_INDIAN_PLATE = re.compile(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}$")
 # Generic fallback: mostly alnum, 6..12 chars
 _GENERIC_PLATE = re.compile(r"^[A-Z0-9]{6,12}$")
 
