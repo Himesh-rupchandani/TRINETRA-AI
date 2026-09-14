@@ -64,7 +64,7 @@ class VehicleDetectionService:
     # ------------------------------------------------------------------ model
     @property
     def enabled(self) -> bool:
-        return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", True)) and self._disabled_reason is None
+        return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", False)) and self._disabled_reason is None
 
     def _resolve_model_path(self) -> str:
         """Find the weights: configured path (relative to backend root), the

@@ -1,4 +1,5 @@
 import { useAsync } from '@/hooks/useAsync';
+import { apiUrl } from '@/lib/config';
 import { Gauge, MapPin, Clock, Shield, FileCheck } from 'lucide-react';
 
 interface SpeedSegment {
@@ -35,7 +36,7 @@ interface SpeedAnalysis {
 export function SpeedViolationPanel({ plate }: { plate: string }) {
   const analysis = useAsync(async () => {
     try {
-      const res = await fetch(`/api/vehicles/${plate}/speed-analysis`);
+      const res = await fetch(apiUrl(`/api/vehicles/${plate}/speed-analysis`));
       if (!res.ok) throw new Error('No data');
       return (await res.json()) as SpeedAnalysis;
     } catch {

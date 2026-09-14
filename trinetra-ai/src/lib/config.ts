@@ -66,7 +66,7 @@ export const basemaps: { id: BasemapId; label: string }[] = [
 export const config = {
   appName: 'TRINETRA AI',
   tagline: 'Intelligent Vision. Faster Response.',
-  useMocks: (env.VITE_USE_MOCKS ?? 'true') !== 'false',
+  useMocks: (env.VITE_USE_MOCKS ?? 'false') !== 'false',
   apiBaseUrl: env.VITE_API_BASE_URL ?? '/api',
   // The backend serves both SSE (/api/stream) and WebSocket (/api/ws/events).
   // SSE is the default: it traverses reverse proxies cleanly and reconnects
@@ -113,5 +113,26 @@ export const config = {
     primaryPlate: 'GJ01AB1234',
   },
 } as const;
+
+/**
+ * Absolute URL for a full backend path (e.g. `/api/evidence/x.jpg`).
+ *
+ * The axios client already applies `apiBaseUrl` to its own (prefix-less)
+ * paths, but a few browser-side consumers — <img> evidence sources, MJPEG
+ * stream tickets, raw fetch() calls — build full `/api/...` paths directly.
+ * With a same-origin base ("/api" in dev, Vite proxy) the path is returned
+ * unchanged; with a cross-origin production base ("https://host/api") the
+ * path is resolved against that backend origin so nothing ever points at
+ * the frontend origin (or localhost) in production.
+ *
+ * `path` must be the COMPLETE backend path including its /api prefix.
+ */
+export function apiUrl(path: string): string {
+  const base = config.apiBaseUrl;
+  if (!/^https?:\/\//i.test(base)) return path; // same-origin (dev proxy / reverse proxy)
+  const u = new URL(base, window.location.origin);
+  return `${u.origin}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 
 export type AppConfig = typeof config;

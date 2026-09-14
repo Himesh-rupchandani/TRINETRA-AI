@@ -51,7 +51,13 @@ export function VideoSourceList({
         />
       ) : (
         <div className="overflow-x-auto">
-          <table className="data-table data-table-page">
+          {/* Header is STATIC (data-table-static), never sticky: this list is
+              short and lives inside a panel, so a sticky header — which is
+              only useful for long, page-spanning tables — would slide down
+              into the middle/bottom of the table as the page scrolls. A
+              static header always stays in its proper place, between the
+              panel title and the first row. */}
+          <table className="data-table data-table-static">
             <thead>
               <tr>
                 <th scope="col">Camera</th>

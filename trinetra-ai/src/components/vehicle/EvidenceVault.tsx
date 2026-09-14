@@ -1,4 +1,5 @@
 import { useAsync } from '@/hooks/useAsync';
+import { apiUrl } from '@/lib/config';
 import { Shield, FileCheck, Hash, Lock, Download, Verified } from 'lucide-react';
 
 interface Verification {
@@ -26,7 +27,7 @@ interface Certificate {
 export function EvidenceVault({ eventId }: { eventId: string | number }) {
   const cert = useAsync(async () => {
     try {
-      const res = await fetch(`/api/reports/evidence/${eventId}/certificate`);
+      const res = await fetch(apiUrl(`/api/reports/evidence/${eventId}/certificate`));
       if (!res.ok) throw new Error('Failed');
       return (await res.json()) as Certificate;
     } catch {
@@ -38,7 +39,7 @@ export function EvidenceVault({ eventId }: { eventId: string | number }) {
   // UNVERIFIED instead of claiming VALID (which is what the old `catch` did —
   // an integrity claim nobody had checked).
   const verify = useAsync(async () => {
-    const res = await fetch(`/api/reports/evidence/${eventId}/verify`);
+    const res = await fetch(apiUrl(`/api/reports/evidence/${eventId}/verify`));
     if (!res.ok) throw new Error(`verify responded ${res.status}`);
     return (await res.json()) as Verification;
   }, [eventId]);

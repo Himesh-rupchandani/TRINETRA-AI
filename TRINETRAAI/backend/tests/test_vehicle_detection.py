@@ -107,6 +107,7 @@ class TestAnnotate:
             return _dets()
 
         monkeypatch.setattr(svc, "detect", fake_detect)
+        monkeypatch.setattr(settings, "VEHICLE_DETECTION_ENABLED", True)  # off by default
         monkeypatch.setattr(settings, "DETECTION_EVERY_N_FRAMES", 2)
 
         for _ in range(4):
@@ -249,7 +250,8 @@ def _make_tmp_video(path: Path, frames: int = 12) -> Path:
 
 
 class TestStreamTicketDetectionUrl:
-    def test_ticket_offers_detection_view_for_playable_file_camera(self, client, tmp_path):
+    def test_ticket_offers_detection_view_for_playable_file_camera(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr(settings, "VEHICLE_DETECTION_ENABLED", True)  # off by default
         video = _make_tmp_video(tmp_path / "feed.mp4")
         db = client.session_factory()  # type: ignore[attr-defined]
         try:

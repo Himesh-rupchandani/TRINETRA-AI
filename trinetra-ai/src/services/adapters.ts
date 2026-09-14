@@ -7,6 +7,7 @@
  * shapes into components — everything flows through here so every screen
  * shows the same canonical Camera / VehicleEvent / Alert objects.
  */
+import { apiUrl } from '@/lib/config';
 import type {
   Alert,
   ServiceHealth,
@@ -332,15 +333,17 @@ export function toVehicleEvent(
     vehicleClass: asVehicleClass(dto.vehicle_class),
     eventType: matched ? 'WATCHLIST_MATCH' : plate ? 'ANPR_READ' : 'VEHICLE_DETECTION',
     severity: matched ? 'CRITICAL' : 'INFO',
-    evidenceRef,
-    evidence: evidenceRef
+        evidenceRef,
+        evidence: evidenceRef
       ? {
           ref: evidenceRef,
           // Real crops captured by the CV engine's evidence writer.
-          frameUrl: `/api/evidence/${evidenceRef}`,
+          // apiUrl() keeps these same-origin in dev and points them at the
+          // deployed backend origin in production (never the frontend host).
+          frameUrl: apiUrl(`/api/evidence/${evidenceRef}`),
           plateCropUrl:
             plate && !evidenceRef.startsWith('uploads/')
-              ? `/api/evidence/${evidenceRef.replace(/\.jpg$/, '_plate.jpg')}`
+              ? apiUrl(`/api/evidence/${evidenceRef.replace(/\.jpg$/, '_plate.jpg')}`)
               : undefined,
           capturedAt: dto.event_time,
         }
@@ -483,14 +486,28 @@ export function toKpis(dto: KpiDto): DashboardKpis {
   };
 }
 
+/**
+ * Stream-ticket URLs arrive as paths, not full URLs:
+ *  - `/api/...`      → served by the backend: prefix with the API origin in
+ *                      cross-origin production (apiUrl is a no-op when the
+ *                      base is same-origin, e.g. "/api" behind the dev proxy)
+ *  - `/sentinel/...` → same-origin media proxy (Vite dev proxy locally,
+ *                      Vercel function in production) — must stay relative
+ *  - `https://...`   → absolute gateway URL — pass through untouched
+ */
+function resolveTicketUrl(url: string | null | undefined): string | null | undefined {
+  if (!url) return url;
+  return url.startsWith('/api/') ? apiUrl(url) : url;
+}
+
 export function toStreamTicket(dto: StreamTicketDto): CameraStreamTicket {
   return {
     cameraId: dto.camera_id.toLowerCase(),
     streamType: dto.stream_type as CameraStreamTicket['streamType'],
-    streamUrl: dto.stream_url,
+    streamUrl: resolveTicketUrl(dto.stream_url) ?? '',
     expiresAt: dto.expires_at,
     poster: undefined, // resolved by the player (synthetic/registry still)
-    detectionUrl: dto.detection_url ?? undefined,
+    detectionUrl: resolveTicketUrl(dto.detection_url) ?? undefined,
   };
 }
 

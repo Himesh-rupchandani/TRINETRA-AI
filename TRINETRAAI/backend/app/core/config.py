@@ -35,7 +35,9 @@ class Settings(BaseSettings):
     TRACK_BUFFER: int = 30
     # Real-time vehicle detection on the live view (green boxes). Model is
     # YOLO_MODEL_PATH, detections below CONFIDENCE_THRESHOLD are dropped.
-    VEHICLE_DETECTION_ENABLED: bool = True
+    # OFF by default for all cameras — set VEHICLE_DETECTION_ENABLED=true to
+    # re-enable the annotated live view.
+    VEHICLE_DETECTION_ENABLED: bool = False
     DETECTION_IMGSZ: int = 640            # inference resolution (speed vs accuracy)
     DETECTION_EVERY_N_FRAMES: int = 2     # run the model every Nth live frame
     # NMS IoU used by the detector. Ultralytics' default is 0.7; 0.55 separates
@@ -125,7 +127,18 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
+            origins = [i.strip() for i in v.split(",")]
+            # Empty/unset env value must fall back to the dev defaults, not
+            # become a single empty-string origin (which matches nothing).
+            origins = [o for o in origins if o]
+            if origins:
+                return origins
+            return [
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000",
+            ]
         elif isinstance(v, str) and v.startswith("["):
             import json
             try:

@@ -64,12 +64,17 @@ export function loadTs(relOrAbs, stubs = {}) {
   if (moduleCache.has(file)) return moduleCache.get(file);
 
   const source = fs.readFileSync(file, 'utf8');
-  const { code } = transform(source, {
+  const { code: rawCode } = transform(source, {
     transforms: ['typescript', 'imports'],
     filePath: file,
     production: true,
     disableESTransforms: true,
   });
+  // The harness executes modules as CJS-style scripts in a vm context, where
+  // `import.meta` is a syntax error. Vite modules read import.meta.env for
+  // build-time variables — shim it as an empty object so every config default
+  // applies (same as an unset production env) and the REAL module code runs.
+  const code = rawCode.replace(/\bimport\.meta\.env\b/g, '__env');
 
   const module = { exports: {} };
   moduleCache.set(file, module.exports);
@@ -86,10 +91,10 @@ export function loadTs(relOrAbs, stubs = {}) {
   };
 
   const wrapper = vm.runInThisContext(
-    `(function (exports, require, module, __filename, __dirname) {\n${code}\n})`,
+    `(function (exports, require, module, __filename, __dirname, __env) {\n${code}\n})`,
     { filename: file },
   );
-  wrapper(module.exports, localRequire, module, file, path.dirname(file));
+  wrapper(module.exports, localRequire, module, file, path.dirname(file), {});
   return module.exports;
 }
 

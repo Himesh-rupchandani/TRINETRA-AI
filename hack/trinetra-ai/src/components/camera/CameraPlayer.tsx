@@ -64,9 +64,10 @@ export function CameraPlayer({
 
   // Real-time vehicle detection: when the backend offers an annotated view of
   // this camera (OpenCV + YOLO, green boxes) it is shown instead of the raw
-  // feed. The operator can switch back to the raw stream at any time, and any
-  // failure of the detection view silently falls back to the raw feed.
-  const [aiBoxes, setAiBoxes] = useState(true);
+  // feed. OFF by default — the operator opens the site on the raw feed and
+  // can switch to the detection view at any time; any failure of the
+  // detection view silently falls back to the raw feed.
+  const [aiBoxes, setAiBoxes] = useState(false);
   const [detectionFailed, setDetectionFailed] = useState(false);
   const detectionActive = aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
   const useImg = isMjpeg || detectionActive;

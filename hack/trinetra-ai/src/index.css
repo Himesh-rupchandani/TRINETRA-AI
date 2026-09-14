@@ -150,6 +150,15 @@
   .data-table tbody tr:hover {
     @apply bg-surface-2;
   }
+  /* Short in-panel tables: keep the header row in its normal-flow position
+     (directly under the panel title, above the first row) and never let page
+     scrolling dislodge it — sticky offsets slide a short table's header down
+     into its own rows. Must come after the .data-table rules to win. */
+  .data-table-static thead th {
+    position: static;
+    top: auto;
+    z-index: auto;
+  }
 
   .plate {
     @apply font-mono font-bold tracking-wider;
