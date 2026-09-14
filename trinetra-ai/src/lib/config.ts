@@ -21,7 +21,11 @@ const MAPBOX_ATTRIBUTION =
 
 const mapTiles: Record<BasemapId, { base: string; labels?: string; maxZoom?: number }> = {
   street: {
-    base: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    // Standard OpenStreetMap raster tiles — no API key required
+    // (the previous CARTO rastertiles endpoint watermarks every tile
+    // with "API KEY REQUIRED" unless a paid key is configured).
+    base: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    maxZoom: 19,
   },
   satellite: {
     base: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -89,8 +93,8 @@ export const config = {
     ] as [number, number],
     zoom: Number(env.VITE_MAP_DEFAULT_ZOOM ?? 7),
     /**
-     * Switchable basemaps, tracking-console style. Street is the standard
-     * OpenStreetMap carto layer (labels baked in); satellite pairs Esri
+     * Switchable basemaps, tracking-console style. Street is the keyless
+     * OpenStreetMap standard tile layer (labels baked in); satellite pairs Esri
      * imagery with its boundaries-and-places reference overlay. Both are
      * keyless; attribution is rendered by Leaflet's attribution control.
      * When a Mapbox token is configured (VITE_MAPBOX_TOKEN) the Mapbox
@@ -100,7 +104,7 @@ export const config = {
     basemaps,
     defaultBasemap: (mapboxEnabled ? 'mapbox' : 'street') as BasemapId,
     attribution: {
-      street: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      street: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       satellite:
         'Imagery &copy; Esri, Maxar, Earthstar Geographics &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',
       mapbox: MAPBOX_ATTRIBUTION,
