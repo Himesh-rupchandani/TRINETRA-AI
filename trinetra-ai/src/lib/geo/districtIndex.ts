@@ -37,14 +37,30 @@ function inRing(lng: number, lat: number, ring: Ring): boolean {
   return inside;
 }
 
+/** Validate coordinates before spatial queries */
+function isValidCoord(lat: number, lng: number): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (lat === 0 && lng === 0) return false;
+  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return false;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+  return true;
+}
+
 /** District name containing the point, or null (outside Gujarat / enclaves). */
 export function districtAt(lat: number, lng: number): string | null {
-  for (const d of DISTRICTS) {
-    for (const p of d.polys) {
-      if (!inRing(lng, lat, p.outer)) continue;
-      if (p.holes.some((h) => inRing(lng, lat, h))) continue;
-      return d.name;
+  if (!isValidCoord(lat, lng)) return null;
+  try {
+    for (const d of DISTRICTS) {
+      for (const p of d.polys) {
+        if (!p.outer || p.outer.length === 0) continue;
+        if (!inRing(lng, lat, p.outer)) continue;
+        if (p.holes.some((h) => h && h.length > 0 && inRing(lng, lat, h))) continue;
+        return d.name;
+      }
     }
+  } catch {
+    // Never crash on invalid geometry
+    return null;
   }
   return null;
 }
@@ -70,6 +86,7 @@ export function aggregateByDistrict<
 >(cameras: C[], events: E[]): Map<string, DistrictAgg> {
   const out = new Map<string, DistrictAgg>();
   const touch = (lat: number, lng: number): DistrictAgg | null => {
+    if (!isValidCoord(lat, lng)) return null;
     const name = districtAt(lat, lng);
     if (!name) return null;
     let agg = out.get(name);
@@ -82,6 +99,7 @@ export function aggregateByDistrict<
   const sums = new Map<string, { sx: number; sy: number; n: number }>();
 
   for (const c of cameras) {
+    if (!isValidCoord(c.latitude, c.longitude)) continue;
     const agg = touch(c.latitude, c.longitude);
     if (!agg) continue;
     agg.cameras += 1;
@@ -94,6 +112,7 @@ export function aggregateByDistrict<
     sums.set(agg.name, s);
   }
   for (const e of events) {
+    if (!isValidCoord(e.latitude, e.longitude)) continue;
     const agg = touch(e.latitude, e.longitude);
     if (agg) agg.events += 1;
   }

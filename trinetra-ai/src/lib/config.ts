@@ -19,18 +19,23 @@ export const mapboxEnabled = mapboxToken.length > 0;
 const MAPBOX_ATTRIBUTION =
   '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> <strong><a href="https://www.mapbox.com/map-feedback/">Improve this map</a></strong>';
 
+/**
+ * Reliable tile providers with fallbacks.
+ * Carto voyager can occasionally be rate-limited; we keep OSM as ultimate fallback via config logic in MapView.
+ */
 const mapTiles: Record<BasemapId, { base: string; labels?: string; maxZoom?: number }> = {
   street: {
+    // Carto Voyager — clean control-room style; uses {s} subdomains for parallel loading
     base: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    maxZoom: 19,
   },
   satellite: {
     base: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     labels:
       'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    maxZoom: 19,
   },
-  // Mapbox raster tiles (styles rendered server-side): streets keeps labels
-  // baked in, satellite is pure imagery, hybrid is imagery + Mapbox labels,
-  // night is the dark control-room style.
+  // Mapbox raster tiles — only used when token is present; MapView auto-falls back to street on errors
   mapbox: {
     base: `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}@2x?access_token=${mapboxToken}`,
     maxZoom: 20,

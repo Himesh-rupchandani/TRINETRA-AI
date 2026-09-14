@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   CircleMarker,
@@ -12,7 +12,7 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Maximize, Minimize, Pause, Play, RotateCcw, X, ZoomIn } from 'lucide-react';
+import { Maximize, Minimize, Pause, Play, RotateCcw, X, ZoomIn, AlertTriangle } from 'lucide-react';
 import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
@@ -21,76 +21,131 @@ import { cameraIcon, districtBubbleIcon, eventIcon, playbackIcon, routeIcon } fr
 import { GujaratFocus, type GujaratFocusProps } from './GujaratFocus';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
-/** Transparent placeholder so a blocked tile server degrades gracefully. */
+/** Light gray placeholder so a blocked tile server degrades gracefully instead of blank. */
 const ERROR_TILE =
-  "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3C/svg%3E";
+  "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' fill='%23f1f5f9'/%3E%3C/svg%3E";
 
-/**
- * Re-fits the viewport whenever the plotted geometry changes.
- * Size is invalidated first: panels mount before layout settles, and a
- * fitBounds against a zero-height container would leave the map blank.
- */
+/** Validate lat/lng — filters out 0,0 fallbacks, NaN, and obviously invalid coords. */
+function isValidLatLng(lat: number, lng: number): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (lat === 0 && lng === 0) return false;
+  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return false;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+  return true;
+}
+
+function pointsKey(points: [number, number][]): string {
+  if (points.length === 0) return 'empty';
+  if (points.length === 1) return `${points[0][0].toFixed(4)},${points[0][1].toFixed(4)}`;
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${points.length}:${first[0].toFixed(3)},${first[1].toFixed(3)}-${last[0].toFixed(3)},${last[1].toFixed(3)}`;
+}
+
 function FitBounds({ points, enabled }: { points: [number, number][]; enabled: boolean }) {
   const map = useMap();
+  const key = useMemo(() => pointsKey(points), [points]);
   useEffect(() => {
     if (!enabled || points.length === 0) return;
     const apply = () => {
-      map.invalidateSize({ animate: false });
-      if (points.length === 1) map.setView(points[0], Math.max(map.getZoom(), 15));
-      else map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 16 });
+      try {
+        map.invalidateSize({ animate: false });
+        const valid = points.filter(([lat, lng]) => isValidLatLng(lat, lng));
+        if (valid.length === 0) return;
+        if (valid.length === 1) map.setView(valid[0], Math.max(map.getZoom(), 15));
+        else map.fitBounds(L.latLngBounds(valid), { padding: [48, 48], maxZoom: 16 });
+      } catch {
+        // Never crash map on fitBounds
+      }
     };
     apply();
     const t = setTimeout(apply, 260);
-    return () => clearTimeout(t);
-  }, [map, enabled, JSON.stringify(points)]); // eslint-disable-line react-hooks/exhaustive-deps
+    const t2 = setTimeout(apply, 800);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(t2);
+    };
+  }, [map, enabled, key]);
   return null;
 }
 
-/** Imperatively pans to the externally-selected feature. */
 function PanTo({ target }: { target?: [number, number] | null }) {
   const map = useMap();
+  const targetKey = target ? `${target[0].toFixed(5)},${target[1].toFixed(5)}` : 'none';
   useEffect(() => {
-    if (target) map.flyTo(target, Math.max(map.getZoom(), 15), { duration: 0.6 });
-  }, [map, target?.[0], target?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!target) return;
+    if (!isValidLatLng(target[0], target[1])) return;
+    try {
+      map.flyTo(target, Math.max(map.getZoom(), 15), { duration: 0.6 });
+    } catch {
+      // ignore
+    }
+  }, [map, targetKey]);
   return null;
 }
 
-/** Sighting dots appear from this zoom down: statewide views stay clean. */
 const DETECTION_ZOOM = 10;
 
-/** Reports the live zoom so the map can layer markers by it. */
 function ZoomTracker({ onZoom }: { onZoom: (z: number) => void }) {
   const map = useMap();
+  const onZoomRef = useRef(onZoom);
+  onZoomRef.current = onZoom;
   useEffect(() => {
-    const report = () => onZoom(map.getZoom());
+    const report = () => {
+      try {
+        onZoomRef.current(map.getZoom());
+      } catch {
+        // ignore
+      }
+    };
     report();
     map.on('zoomend', report);
     return () => {
       map.off('zoomend', report);
     };
-  }, [map, onZoom]);
+  }, [map]);
   return null;
 }
 
-/** Invalidates size after layout changes so tiles never render half-drawn. */
 function ResizeGuard() {
   const map = useMap();
   useEffect(() => {
-    const fix = () => map.invalidateSize({ animate: false });
+    let mounted = true;
+    const fix = () => {
+      if (!mounted) return;
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // ignore
+      }
+    };
     const raf = requestAnimationFrame(fix);
     const t = setTimeout(fix, 240);
-    const ro = new ResizeObserver(fix);
-    ro.observe(map.getContainer());
+    const t2 = setTimeout(fix, 1000);
+    let ro: ResizeObserver | null = null;
+    try {
+      ro = new ResizeObserver(fix);
+      ro.observe(map.getContainer());
+    } catch {
+      // ResizeObserver not available
+    }
+    window.addEventListener('resize', fix);
     return () => {
+      mounted = false;
       cancelAnimationFrame(raf);
       clearTimeout(t);
-      ro.disconnect();
+      clearTimeout(t2);
+      window.removeEventListener('resize', fix);
+      try {
+        ro?.disconnect();
+      } catch {
+        // ignore
+      }
     };
   }, [map]);
   return null;
 }
 
-/** One district bubble at state-level zoom (overview clustering). */
 export interface DistrictCluster {
   name: string;
   centroid: [number, number];
@@ -100,11 +155,6 @@ export interface DistrictCluster {
   bounds: [number, number][];
 }
 
-/**
- * District bubbles shown instead of 30+ pins at statewide zoom.
- * Click: select the district (GIS filters cameras/lists) and fly to its
- * member cameras; clicking the selected bubble again clears the focus.
- */
 function DistrictClusterLayer({
   clusters,
   selected,
@@ -117,27 +167,35 @@ function DistrictClusterLayer({
   const map = useMap();
   return (
     <>
-      {clusters.map((c) => (
-        <Marker
-          key={c.name}
-          position={c.centroid}
-          zIndexOffset={400}
-          icon={districtBubbleIcon(c.cameras, c.offline, c.events, selected === c.name)}
-          title={`${c.name} — ${c.cameras} camera${c.cameras === 1 ? '' : 's'} · ${c.events} sighting${c.events === 1 ? '' : 's'}`}
-          eventHandlers={{
-            click: () => {
-              if (selected === c.name) {
-                onSelect?.(null);
-                return;
-              }
-              onSelect?.(c.name);
-              if (c.bounds.length > 1)
-                map.flyToBounds(L.latLngBounds(c.bounds), { padding: [56, 56], maxZoom: 12, duration: 0.7 });
-              else if (c.bounds[0]) map.flyTo(c.bounds[0], Math.max(map.getZoom(), 12), { duration: 0.7 });
-            },
-          }}
-        />
-      ))}
+      {clusters.map((c) => {
+        if (!c.centroid || !isValidLatLng(c.centroid[0], c.centroid[1])) return null;
+        const validBounds = (c.bounds || []).filter(([lat, lng]) => isValidLatLng(lat, lng));
+        return (
+          <Marker
+            key={c.name}
+            position={c.centroid}
+            zIndexOffset={400}
+            icon={districtBubbleIcon(c.cameras, c.offline, c.events, selected === c.name)}
+            title={`${c.name} — ${c.cameras} camera${c.cameras === 1 ? '' : 's'} · ${c.events} sighting${c.events === 1 ? '' : 's'}`}
+            eventHandlers={{
+              click: () => {
+                try {
+                  if (selected === c.name) {
+                    onSelect?.(null);
+                    return;
+                  }
+                  onSelect?.(c.name);
+                  if (validBounds.length > 1)
+                    map.flyToBounds(L.latLngBounds(validBounds), { padding: [56, 56], maxZoom: 12, duration: 0.7 });
+                  else if (validBounds[0]) map.flyTo(validBounds[0], Math.max(map.getZoom(), 12), { duration: 0.7 });
+                } catch {
+                  // ignore map errors
+                }
+              },
+            }}
+          />
+        );
+      })}
     </>
   );
 }
@@ -146,7 +204,6 @@ export interface MapViewProps {
   cameras?: Camera[];
   events?: VehicleEvent[];
   route?: RoutePoint[];
-  /** The plate the plotted route belongs to — powers popup deep-links. */
   routePlate?: string;
   selectedCameraId?: string | null;
   activeRouteSequence?: number | null;
@@ -158,24 +215,15 @@ export interface MapViewProps {
   zoom?: number;
   center?: [number, number];
   className?: string;
-  /** Draw a coverage halo around each camera. */
   showCoverage?: boolean;
-  /** Fired as the replay dot reaches each stop (timeline sync). */
   onPlaybackStop?: (point: RoutePoint) => void;
-  /** Open this camera's live feed on the map (floating player). */
   onWatchCamera?: (camera: Camera) => void;
-  /** Gujarat state outline / focus mask / district overlay. */
   gujarat?: GujaratFocusProps;
-  /** District bubbles that replace camera pins at statewide zoom. */
   districtClusters?: DistrictCluster[];
   selectedDistrict?: string | null;
   onSelectDistrict?: (name: string | null) => void;
 }
 
-/**
- * Functional Leaflet map — camera network, detection points and
- * chronological vehicle routes. No faked map imagery anywhere.
- */
 export function MapView({
   cameras = [],
   events = [],
@@ -202,35 +250,44 @@ export function MapView({
   const [basemap, setBasemap] = useState<BasemapId>(config.map.defaultBasemap);
   const [mapZoom, setMapZoom] = useState(zoom);
   const tiles = config.map.tiles[basemap];
-  /**
-   * Fullscreen in two flavours. Native is preferred (the browser's top
-   * layer hides everything else). Inside an iframe without fullscreen
-   * permission — or an old browser — the request is denied, so a denied
-   * request portals the whole map to <body>: that escapes every ancestor
-   * stacking context (sticky header, later panels), so again NOTHING else
-   * shows. Either way there is always a visible way out (pill + Esc).
-   */
   const [fsMode, setFsMode] = useState<'native' | 'fake' | null>(null);
   const [fsPortalEl, setFsPortalEl] = useState<HTMLDivElement | null>(null);
   const fullscreen = fsMode != null;
   const rootRef = useRef<HTMLDivElement>(null);
   const playback = useRoutePlayback(route, onPlaybackStop);
 
-  const enterFake = () => {
-    const el = document.createElement('div');
-    el.className = 'fixed inset-0 z-[9999] bg-white';
-    el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-label', 'Fullscreen map');
-    document.body.appendChild(el);
-    setFsPortalEl(el);
-    setFsMode('fake');
-  };
+  const enterFake = useCallback(() => {
+    try {
+      const el = document.createElement('div');
+      el.className = 'fixed inset-0 z-[9999] bg-white';
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-label', 'Fullscreen map');
+      document.body.appendChild(el);
+      setFsPortalEl(el);
+      setFsMode('fake');
+      // Invalidate after portal mount
+      setTimeout(() => {
+        try {
+          const mapEl = el.querySelector('.leaflet-container') as any;
+          if (mapEl && mapEl._leaflet_map) mapEl._leaflet_map.invalidateSize({ animate: false });
+        } catch {
+          // ignore
+        }
+      }, 100);
+    } catch {
+      // ignore
+    }
+  }, []);
 
-  const exitFake = () => {
-    fsPortalEl?.remove();
+  const exitFake = useCallback(() => {
+    try {
+      fsPortalEl?.remove();
+    } catch {
+      // ignore
+    }
     setFsPortalEl(null);
     setFsMode(null);
-  };
+  }, [fsPortalEl]);
 
   useEffect(() => {
     const onFs = () => {
@@ -241,20 +298,26 @@ export function MapView({
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
 
-  // The portal node is owned by this component: never leak it.
   useEffect(
     () => () => {
-      fsPortalEl?.remove();
+      try {
+        fsPortalEl?.remove();
+      } catch {
+        // ignore
+      }
     },
     [fsPortalEl],
   );
 
-  // Fake fullscreen: Escape exits it, and the page behind stops scrolling.
   useEffect(() => {
     if (fsMode !== 'fake') return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        fsPortalEl?.remove();
+        try {
+          fsPortalEl?.remove();
+        } catch {
+          // ignore
+        }
         setFsPortalEl(null);
         setFsMode(null);
       }
@@ -268,7 +331,7 @@ export function MapView({
     };
   }, [fsMode, fsPortalEl]);
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (fsMode === 'fake') {
       exitFake();
       return;
@@ -286,28 +349,60 @@ export function MapView({
     } else {
       enterFake();
     }
-  };
-  // Below this zoom the 30+ pins collapse into per-district bubbles.
-  const clustered = districtClusters.length > 0 && mapZoom < DETECTION_ZOOM && !selectedDistrict;
+  }, [fsMode, exitFake, enterFake]);
+
+  const [tileErrors, setTileErrors] = useState(0);
+  const handleTileError = useCallback(() => {
+    setTileErrors((c) => c + 1);
+  }, []);
+  useEffect(() => {
+    if (tileErrors > 12 && basemap !== 'street') {
+      setBasemap('street');
+      setTileErrors(0);
+    }
+  }, [tileErrors, basemap]);
+
+  const clustered = useMemo(
+    () => districtClusters.length > 0 && mapZoom < DETECTION_ZOOM && !selectedDistrict,
+    [districtClusters.length, mapZoom, selectedDistrict],
+  );
+
+  const validCameras = useMemo(
+    () => cameras.filter((c) => isValidLatLng(c.latitude, c.longitude)),
+    [cameras],
+  );
+  const validEvents = useMemo(
+    () => events.filter((e) => isValidLatLng(e.latitude, e.longitude)),
+    [events],
+  );
+  const validRoute = useMemo(
+    () => route.filter((p) => isValidLatLng(p.latitude, p.longitude)),
+    [route],
+  );
+
+  const validClusters = useMemo(
+    () => districtClusters.filter((c) => c.centroid && isValidLatLng(c.centroid[0], c.centroid[1])),
+    [districtClusters],
+  );
 
   const routeLine = useMemo(
-    () => route.map((p) => [p.latitude, p.longitude] as [number, number]),
-    [route],
+    () => validRoute.map((p) => [p.latitude, p.longitude] as [number, number]),
+    [validRoute],
   );
 
   const fitPoints = useMemo(() => {
     if (routeLine.length) return routeLine;
-    if (cameras.length) return cameras.map((c) => [c.latitude, c.longitude] as [number, number]);
-    return events.map((e) => [e.latitude, e.longitude] as [number, number]);
-  }, [routeLine, cameras, events]);
+    if (validCameras.length) return validCameras.map((c) => [c.latitude, c.longitude] as [number, number]);
+    return validEvents.map((e) => [e.latitude, e.longitude] as [number, number]);
+  }, [routeLine, validCameras, validEvents]);
 
   const mapInner = (
     <>
-
       <MapContainer
         center={center}
         zoom={zoom}
         maxZoom={20}
+        minZoom={5}
         scrollWheelZoom
         preferCanvas
         zoomControl
@@ -319,10 +414,18 @@ export function MapView({
           url={tiles.base}
           attribution={config.map.attribution[basemap]}
           maxZoom={tiles.maxZoom ?? 19}
+          minZoom={5}
           errorTileUrl={ERROR_TILE}
+          eventHandlers={{ tileerror: handleTileError }}
         />
         {tiles.labels && (
-          <TileLayer url={tiles.labels} maxZoom={tiles.maxZoom ?? 19} errorTileUrl={ERROR_TILE} />
+          <TileLayer
+            url={tiles.labels}
+            maxZoom={tiles.maxZoom ?? 19}
+            minZoom={5}
+            errorTileUrl={ERROR_TILE}
+            eventHandlers={{ tileerror: handleTileError }}
+          />
         )}
         <GujaratFocus {...(gujarat ?? { boundary: true })} />
         <ScaleControl position="bottomright" imperial={false} />
@@ -332,7 +435,7 @@ export function MapView({
         <PanTo target={panTo} />
 
         {showCoverage &&
-          cameras.map((c) => (
+          validCameras.map((c) => (
             <CircleMarker
               key={`cov-${c.id}`}
               center={[c.latitude, c.longitude]}
@@ -347,9 +450,9 @@ export function MapView({
           ))}
 
         {clustered ? (
-          <DistrictClusterLayer clusters={districtClusters} selected={selectedDistrict} onSelect={onSelectDistrict} />
+          <DistrictClusterLayer clusters={validClusters} selected={selectedDistrict} onSelect={onSelectDistrict} />
         ) : (
-          cameras.map((c) => (
+          validCameras.map((c) => (
             <Marker
               key={c.id}
               position={[c.latitude, c.longitude]}
@@ -358,7 +461,7 @@ export function MapView({
               keyboard
               title={`${c.name} — ${c.location}`}
             >
-              <Popup>
+              <Popup maxWidth={320} minWidth={240}>
                 <CameraPopup camera={c} onWatch={onWatchCamera} />
               </Popup>
             </Marker>
@@ -366,7 +469,7 @@ export function MapView({
         )}
 
         {mapZoom >= DETECTION_ZOOM &&
-          events.map((e) => (
+          validEvents.map((e) => (
             <Marker
               key={e.id}
               position={[e.latitude, e.longitude]}
@@ -374,7 +477,7 @@ export function MapView({
               eventHandlers={{ click: () => onSelectEvent?.(e) }}
               title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
             >
-              <Popup>
+              <Popup maxWidth={320} minWidth={240}>
                 <EventPopup event={e} />
               </Popup>
             </Marker>
@@ -382,7 +485,6 @@ export function MapView({
 
         {routeLine.length > 1 && (
           <>
-            {/* Casing for contrast over any basemap */}
             <Polyline positions={routeLine} pathOptions={{ color: '#000000', weight: 7, opacity: 0.35 }} />
             <Polyline
               positions={routeLine}
@@ -391,7 +493,7 @@ export function MapView({
           </>
         )}
 
-        {route.map((p, i) => (
+        {validRoute.map((p, i) => (
           <Marker
             key={`${p.eventId}-${p.sequence}`}
             position={[p.latitude, p.longitude]}
@@ -400,15 +502,15 @@ export function MapView({
             zIndexOffset={500}
             title={`Sighting ${p.sequence} — ${p.cameraName}`}
           >
-            <Popup>
-              <RoutePopup point={p} prev={i > 0 ? route[i - 1] : undefined} plate={routePlate} />
+            <Popup maxWidth={340} minWidth={260}>
+              <RoutePopup point={p} prev={i > 0 ? validRoute[i - 1] : undefined} plate={routePlate} />
             </Popup>
           </Marker>
         ))}
-        {playback.started && route.length > 1 && (
+        {playback.started && validRoute.length > 1 && (
           <Marker
             ref={playback.markerRef}
-            position={[route[0].latitude, route[0].longitude]}
+            position={[validRoute[0].latitude, validRoute[0].longitude]}
             icon={playbackIcon()}
             interactive={false}
             keyboard={false}
@@ -416,15 +518,33 @@ export function MapView({
           />
         )}
       </MapContainer>
-      {events.length > 0 && mapZoom < DETECTION_ZOOM && (
+      {validEvents.length > 0 && mapZoom < DETECTION_ZOOM && (
         <div className="absolute left-3 top-[76px] z-[1001] flex items-center gap-1.5 rounded-full border border-line bg-surface-1/95 px-3 py-1.5 text-2xs font-semibold text-ink-muted shadow-md backdrop-blur">
           <ZoomIn size={12} aria-hidden />
-          Zoom in to see {events.length} sighting{events.length === 1 ? '' : 's'}
+          Zoom in to see {validEvents.length} sighting{validEvents.length === 1 ? '' : 's'}
         </div>
       )}
-      {clustered && (
+      {clustered && validClusters.length > 0 && (
         <div className="absolute bottom-3 right-3 z-[1001] rounded-full border border-brand/40 bg-brand/10 px-3 py-1.5 text-2xs font-semibold text-brand shadow-md backdrop-blur">
           Grouped by district — click a bubble to focus
+        </div>
+      )}
+      {tileErrors > 8 && (
+        <div className="absolute left-1/2 top-12 z-[1002] flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-2xs font-semibold text-amber-800 shadow-md">
+          <AlertTriangle size={12} aria-hidden />
+          Map tiles loading slowly — switching to fallback
+        </div>
+      )}
+      {validCameras.length === 0 && validEvents.length === 0 && validRoute.length === 0 && (
+        <div className="absolute inset-0 z-[500] grid place-items-center bg-surface-0/80 p-6 text-center backdrop-blur-sm">
+          <div className="max-w-sm rounded-xl border border-line bg-surface-1 p-5 shadow-lg">
+            <p className="text-sm font-semibold text-ink">No map data to show</p>
+            <p className="mt-1 text-2xs leading-relaxed text-ink-muted">
+              {cameras.length === 0 && events.length === 0 && route.length === 0
+                ? 'No cameras or sightings available. Check backend connection.'
+                : 'All cameras have invalid coordinates (0,0). They were filtered to keep the map usable.'}
+            </p>
+          </div>
         </div>
       )}
       <div className="absolute right-3 top-3 z-[1001] flex flex-col items-end gap-2">
@@ -437,7 +557,10 @@ export function MapView({
             <button
               key={b.id}
               type="button"
-              onClick={() => setBasemap(b.id)}
+              onClick={() => {
+                setBasemap(b.id);
+                setTileErrors(0);
+              }}
               aria-pressed={basemap === b.id}
               className={cn(
                 'px-2.5 py-1.5 text-2xs font-semibold transition-colors',
@@ -459,7 +582,7 @@ export function MapView({
           {fullscreen ? <Minimize size={14} aria-hidden /> : <Maximize size={14} aria-hidden />}
         </button>
       </div>
-      {route.length > 1 && (
+      {validRoute.length > 1 && (
         <div className="absolute bottom-3 left-1/2 z-[1001] -translate-x-1/2">
           <div className="flex items-center gap-2 rounded-full border border-line bg-surface-1/95 py-1.5 pl-1.5 pr-3 shadow-lg backdrop-blur">
             <button
@@ -469,11 +592,7 @@ export function MapView({
               title={playback.playing ? 'Pause' : 'Replay route'}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand text-white shadow transition-transform hover:scale-105"
             >
-              {playback.playing ? (
-                <Pause size={14} aria-hidden />
-              ) : (
-                <Play size={14} className="ml-0.5" aria-hidden />
-              )}
+              {playback.playing ? <Pause size={14} aria-hidden /> : <Play size={14} className="ml-0.5" aria-hidden />}
             </button>
             {playback.started && (
               <button
@@ -489,8 +608,8 @@ export function MapView({
             <div className="min-w-[120px]">
               <p className="whitespace-nowrap font-mono text-[10px] font-semibold text-ink">
                 {playback.started
-                  ? `Stop ${playback.stopIndex + 1} of ${route.length} \u00b7 ${route[playback.stopIndex]?.cameraName ?? ''}`
-                  : `Replay ${route.length} stops`}
+                  ? `Stop ${playback.stopIndex + 1} of ${validRoute.length} \\u00b7 ${validRoute[playback.stopIndex]?.cameraName ?? ''}`
+                  : `Replay ${validRoute.length} stops`}
               </p>
               <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-500/20">
                 <div ref={playback.barRef} className="h-full w-0 rounded-full bg-brand" />
@@ -512,17 +631,11 @@ export function MapView({
     </>
   );
 
-  // Fake fullscreen portals the whole map to <body>, escaping every ancestor
-  // stacking context, so the header, nav and page content all disappear.
   if (fsMode === 'fake' && fsPortalEl) {
     return createPortal(<div className="h-full w-full">{mapInner}</div>, fsPortalEl);
   }
 
   return (
-    // `isolate` creates a fresh stacking context so Leaflet's high z-index panes
-    // (tiles/markers/controls, z-index up to 1000) are confined to the map and
-    // never paint over the panel content above or below it. `overflow-hidden`
-    // additionally guarantees the map stays boxed inside its container.
     <div ref={rootRef} data-tour="gis-map" className={cn('isolate overflow-hidden', className ?? 'relative h-full w-full')}>
       {mapInner}
     </div>

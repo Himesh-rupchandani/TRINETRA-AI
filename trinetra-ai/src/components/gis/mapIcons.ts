@@ -5,22 +5,32 @@ import type { CameraStatus, Severity } from '@/types';
 /**
  * Marker factories. Uses Leaflet divIcons (inline SVG) so no external
  * image assets are required and colours follow the app's semantic tokens.
+ * All factories are wrapped in try/catch so a single bad icon never crashes the map.
  */
 
 export function cameraIcon(status: CameraStatus, selected = false): L.DivIcon {
-  const color = cameraStatusHex[status];
+  const color = (cameraStatusHex as any)[status] || cameraStatusHex.OFFLINE || '#dc2626';
   const size = selected ? 18 : 14;
-  return L.divIcon({
-    className: 'trinetra-marker',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2],
-    html: `<div style="position:relative;width:${size}px;height:${size}px;">
+  try {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      popupAnchor: [0, -size / 2],
+      html: `<div style="position:relative;width:${size}px;height:${size}px;">
       <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};
         border:2px solid #ffffff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>
       ${selected ? `<div style="position:absolute;inset:-6px;border-radius:50%;border:2px solid ${color}"></div>` : ''}
     </div>`,
-  });
+    });
+  } catch {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+      html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff"></div>`,
+    });
+  }
 }
 
 export function routeIcon(
@@ -29,45 +39,68 @@ export function routeIcon(
   active = false,
   color?: string,
 ): L.DivIcon {
-  const fill = color ?? severityHex[severity];
+  const fill = color ?? (severityHex as any)[severity] ?? '#2563eb';
   const size = active ? 30 : 25;
-  return L.divIcon({
-    className: 'trinetra-marker',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2],
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${fill};
+  try {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      popupAnchor: [0, -size / 2],
+      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${fill};
       border:2px solid ${active ? '#ffffff' : 'rgba(255,255,255,.75)'};display:grid;place-items:center;
       box-shadow:0 2px 6px rgba(0,0,0,.55);font:700 ${size * 0.46}px/1 ui-monospace,monospace;color:#0b0f14;">
       ${sequence}</div>`,
-  });
+    });
+  } catch {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+      html: `<div style="width:20px;height:20px;border-radius:50%;background:${fill};display:grid;place-items:center;color:#000;font-weight:700">${sequence}</div>`,
+    });
+  }
 }
 
 export function playbackIcon(): L.DivIcon {
-  return L.divIcon({
-    className: 'trinetra-marker',
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-    html: '<div class="trinetra-playback-dot"></div>',
-  });
+  try {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+      html: '<div class="trinetra-playback-dot"></div>',
+    });
+  } catch {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+      html: '<div style="width:12px;height:12px;border-radius:50%;background:#2563eb;border:2px solid #fff"></div>',
+    });
+  }
 }
 
 export function eventIcon(watchlist = false): L.DivIcon {
   const color = watchlist ? severityHex.CRITICAL : '#38bdf8';
-  return L.divIcon({
-    className: 'trinetra-marker',
-    iconSize: [12, 12],
-    iconAnchor: [6, 6],
-    popupAnchor: [0, -6],
-    html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};
+  try {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+      popupAnchor: [0, -6],
+      html: `<div style="width:12px;height:12px;border-radius:50%;background:${color};
       border:1.5px solid rgba(255,255,255,.8);box-shadow:0 1px 3px rgba(0,0,0,.5)"></div>`,
-  });
+    });
+  } catch {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+      html: `<div style="width:10px;height:10px;border-radius:50%;background:${color}"></div>`,
+    });
+  }
 }
 
-/**
- * District clustering bubble (state-level overview): camera count in a
- * translucent brand disc, tiny status pip, event count underneath.
- */
 export function districtBubbleIcon(
   cameras: number,
   offline: number,
@@ -76,12 +109,13 @@ export function districtBubbleIcon(
 ): L.DivIcon {
   const size = Math.max(34, Math.min(52, 28 + cameras * 2.5));
   const pip = offline > 0 ? '#f59e0b' : cameras > 0 ? '#22c55e' : '#64748b';
-  return L.divIcon({
-    className: 'trinetra-marker',
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2],
-    html: `<div style="position:relative;width:${size}px;height:${size}px;cursor:pointer;">
+  try {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+      popupAnchor: [0, -size / 2],
+      html: `<div style="position:relative;width:${size}px;height:${size}px;cursor:pointer;">
       <div style="width:100%;height:100%;border-radius:50%;background:rgba(249,115,22,.20);
         border:2px solid ${selected ? '#f97316' : 'rgba(249,115,22,.85)'};display:grid;place-items:center;
         box-shadow:0 2px 10px rgba(0,0,0,.45);backdrop-filter:blur(1px);">
@@ -99,5 +133,13 @@ export function districtBubbleIcon(
           : ''
       }
     </div>`,
-  });
+    });
+  } catch {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+      html: `<div style="width:34px;height:34px;border-radius:50%;background:rgba(249,115,22,.3);border:2px solid #f97316;display:grid;place-items:center;color:#ea580c;font-weight:700">${cameras}</div>`,
+    });
+  }
 }
