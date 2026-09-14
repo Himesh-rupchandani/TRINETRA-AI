@@ -16,11 +16,10 @@ import sys
 import time
 from pathlib import Path
 
-_here = Path(__file__).resolve().parent
-if str(_here) not in sys.path:
-    sys.path.insert(0, str(_here))
-if str(_here / "engine") not in sys.path:
-    sys.path.insert(0, str(_here / "engine"))
+_here = Path(__file__).resolve().parent          # .../TRINETRAAI/backend/scripts
+_backend_root = _here.parent                      # .../TRINETRAAI/backend
+if str(_backend_root) not in sys.path:
+    sys.path.insert(0, str(_backend_root))
 
 from engine.pipeline.video_pipeline import VideoAnalysisPipeline, find_model, probe_video
 
@@ -38,8 +37,8 @@ def main():
     parser.add_argument(
         "--output",
         "-o",
-        default="results",
-        help="Directory to save results, CSV, JSON, and crops (default: results)",
+        default=str(_backend_root / "detection_jobs" / "cli_run"),
+        help="Directory to save results, CSV, JSON, and crops (default: detection_jobs/cli_run)",
     )
     parser.add_argument(
         "--sample",
@@ -70,7 +69,7 @@ def main():
 
     video_path = Path(args.video)
     if not video_path.exists():
-        cand = _here / "footages_and_videos" / video_path.name
+        cand = _backend_root / "footages_and_videos" / video_path.name
         if cand.exists():
             video_path = cand
         else:
@@ -80,7 +79,7 @@ def main():
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    model_path = args.model or find_model(_here)
+    model_path = args.model or find_model()
     print(f"\n=======================================================")
     print(f"  TRINETRA AI — STANDALONE DETECTION PIPELINE")
     print(f"=======================================================")

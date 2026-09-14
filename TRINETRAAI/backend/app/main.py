@@ -37,6 +37,8 @@ from .api.internal import router as internal_router
 from .api.officers import router as officers_router
 from .api.uploads import router as uploads_router
 from .api.video_analysis import router as video_analysis_router
+from .api.detection_jobs import router as detection_jobs_router
+from .api.detection_jobs import footage_router as detection_footage_router
 from .api.evidence import router as evidence_router
 from .api.stats import router as stats_router
 from .api.stream import router as sse_router
@@ -208,6 +210,8 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(officers_router)
     r.include_router(uploads_router)
     r.include_router(video_analysis_router)
+    r.include_router(detection_jobs_router)
+    r.include_router(detection_footage_router)
     r.include_router(evidence_router)
     r.include_router(sse_router)
     r.include_router(ingest_router)

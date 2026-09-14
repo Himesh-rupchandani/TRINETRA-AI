@@ -16,13 +16,13 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from anpr.confidence import PlateReading, classify_confidence, is_usable, ConfidenceTier
-from anpr.normalizer import candidate_from_ocr_text, plate_format_score
-from anpr.plate_detector import extract_plate_candidates, preprocess_for_ocr
-from anpr.plate_memory import PlateMemory
+from engine.anpr.confidence import PlateReading, classify_confidence, is_usable, ConfidenceTier
+from engine.anpr.normalizer import candidate_from_ocr_text, plate_format_score
+from engine.anpr.plate_detector import extract_plate_candidates, preprocess_for_ocr
+from engine.anpr.plate_memory import PlateMemory
 from events.dedup import SightingDeduplicator
 from events.event_builder import build_event
-from tracking.vehicle_tracker import Track, VehicleTracker
+from engine.tracking.vehicle_tracker import Track, VehicleTracker
 
 logger = logging.getLogger("cv_engine.pipeline")
 

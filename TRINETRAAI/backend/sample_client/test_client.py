@@ -10,7 +10,7 @@ Shows how to:
 import time
 import requests
 
-SERVER_URL = "http://localhost:8010"
+SERVER_URL = "http://localhost:8000"
 
 
 def main():

@@ -29,13 +29,13 @@ _cv_engine_dir = Path(__file__).resolve().parents[1]
 if str(_cv_engine_dir) not in sys.path:
     sys.path.insert(0, str(_cv_engine_dir))
 
-from detection.vehicle_detector import VehicleDetector, Detection
-from tracking.vehicle_tracker import VehicleTracker, Track
-from anpr.ocr import OcrEngine
-from anpr.plate_detector import extract_plate_candidates, preprocess_for_ocr, vehicle_crop
-from anpr.normalizer import candidate_from_ocr_text, normalize_plate, plate_format_score
-from anpr.confidence import PlateReading, aggregate_readings
-from pipeline.sighting_segmenter import SightingSegmenter, Sighting, _safe_crop
+from engine.detection.vehicle_detector import VehicleDetector, Detection
+from engine.tracking.vehicle_tracker import VehicleTracker, Track
+from engine.anpr.ocr import OcrEngine
+from engine.anpr.plate_detector import extract_plate_candidates, preprocess_for_ocr, vehicle_crop
+from engine.anpr.normalizer import candidate_from_ocr_text, normalize_plate, plate_format_score
+from engine.anpr.confidence import PlateReading, aggregate_readings
+from engine.pipeline.sighting_segmenter import SightingSegmenter, Sighting, _safe_crop
 
 logger = logging.getLogger("cv_engine.video_pipeline")
 
@@ -60,31 +60,38 @@ DEFAULT_CONFIG = {
 
 
 def find_model(repo_root: Optional[Path] = None) -> str:
-    """Find the best available model in detection_backend or the repository."""
-    here = Path(__file__).resolve()
-    backend_root = here.parents[2]
+    """Find the best available detection model for the unified backend.
 
-    # Priority 0: local models directory inside detection_backend
+    Resolution order (first hit wins):
+      1. ``TRINETRAAI/backend/models/best.pt``            — local custom weights
+      2. ``trinetra_detection/models/best.pt``            — repo-tracked custom weights
+      3. ``TRINETRAAI/backend/models/license-plate-*.pt`` — repo-tracked plate finetune
+      4. ``TRINETRAAI/backend/yolo11s.pt``                — repo-tracked COCO fallback
+      5. legacy ``yolo26_training`` / ``cv-engine`` locations
+    """
+    here = Path(__file__).resolve()
+    backend_root = here.parents[2]  # engine/pipeline/video_pipeline.py -> backend root
+    if repo_root is None:
+        repo_root = backend_root.parent.parent  # repository root
+
     for m_cand in [
         backend_root / "models" / "best.pt",
+        repo_root / "trinetra_detection" / "models" / "best.pt",
         backend_root / "models" / "license-plate-finetune-v1n.pt",
-        backend_root / "models" / "yolo11s.pt",
+        backend_root / "yolo11s.pt",
+        repo_root / "trinetra_detection" / "models" / "yolo11s.pt",
+        repo_root / "trinetra_detection" / "models" / "yolo11n.pt",
     ]:
         if m_cand.exists():
             return str(m_cand)
 
-    if repo_root is None:
-        repo_root = backend_root
-
-    # Priority 1: Custom trained model (vehicle + number_plate)
+    # Legacy locations kept for older checkouts
     custom = repo_root / "yolo26_training" / "runs" / "train" / "vehicle_plate_yolo11" / "weights" / "best.pt"
     if custom.exists():
         return str(custom)
-    # Priority 2: Fine-tuned plate model
     finetune = repo_root / "yolo26_training" / "license-plate-finetune-v1n.pt"
     if finetune.exists():
         return str(finetune)
-    # Priority 3: Pre-trained YOLO11s
     yolo11s = repo_root / "cv-engine" / "yolo11s.pt"
     if yolo11s.exists():
         return str(yolo11s)

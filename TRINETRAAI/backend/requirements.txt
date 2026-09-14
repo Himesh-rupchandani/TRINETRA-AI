@@ -23,3 +23,8 @@ pytest>=8.1.0
 pytest-asyncio>=0.23.0
 # Server-safe cv2 provider; run the helper above after pip resolves all deps.
 opencv-python-headless>=4.9.0
+# Detection engine (merged from detection_backend)
+scipy>=1.10.0
+imageio-ffmpeg>=0.4.8
+onnxruntime>=1.16.0
+torchvision>=0.15.0

@@ -16,10 +16,6 @@ trinetra_detection.zip
 !.env.example
 !**/.env.example
 
-# detection_backend: runtime outputs & heavy weights (license-plate weight excepted)
-detection_backend/results/
-detection_backend/evidence_frames/
-detection_backend/footages_and_videos/
-detection_backend/jobs/
-detection_backend/models/*.pt
-!detection_backend/models/license-plate-finetune-v1n.pt
+# Unified detection backend: runtime outputs & sample footages
+TRINETRAAI/backend/detection_jobs/
+TRINETRAAI/backend/footages_and_videos/
