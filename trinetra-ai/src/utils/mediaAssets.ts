@@ -18,6 +18,25 @@ export function hideBrokenImage(e: SyntheticEvent<HTMLImageElement>): void {
   e.currentTarget.style.display = 'none';
 }
 
+/** Generic image error handler that shows fallback content instead of broken icon */
+export function handleImageError(
+  e: SyntheticEvent<HTMLImageElement>,
+  fallbackSrc?: string,
+): void {
+  const img = e.currentTarget;
+  if (fallbackSrc && img.src !== fallbackSrc) {
+    img.src = fallbackSrc;
+    return;
+  }
+  img.style.display = 'none';
+  // Show parent placeholder if exists
+  const parent = img.parentElement;
+  if (parent) {
+    const placeholder = parent.querySelector('[data-fallback]') as HTMLElement | null;
+    if (placeholder) placeholder.style.display = 'grid';
+  }
+}
+
 const SCENES = [
   '/cctv/cctv-01.jpg',
   '/cctv/cctv-02.jpg',

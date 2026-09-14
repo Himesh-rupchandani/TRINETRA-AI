@@ -68,43 +68,74 @@ export default function GIS() {
   }, [focusCamera, cameras]);
 
   const points = useMemo(() => result?.route?.points ?? [], [result]);
+
+  const isValidCoord = (lat: number, lng: number) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    if (lat === 0 && lng === 0) return false;
+    if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return false;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+    return true;
+  };
+
   const detections = useMemo(() => {
-    const list = [...liveEvents, ...(recent.data ?? [])]
-      .filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    return showDetections ? list.filter((e) => e.plate !== '—').slice(0, 60) : [];
+    try {
+      const list = [...liveEvents, ...(recent.data ?? [])]
+        .filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)
+        .filter((e) => isValidCoord(e.latitude, e.longitude))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      return showDetections ? list.filter((e) => e.plate !== '—').slice(0, 60) : [];
+    } catch {
+      return [];
+    }
   }, [recent.data, liveEvents, showDetections]);
 
   // District membership for cameras + sightings: powers density shading,
   // clustering bubbles and the click-to-focus filter — all client-side.
   const { mapCameras, mapDetections, districtCounts, districtClusters } = useMemo(() => {
-    const camDistrict = new Map<string, string | null>();
-    for (const c of cameras) camDistrict.set(c.id, districtAt(c.latitude, c.longitude));
-    const detDistrict = new Map<string, string | null>();
-    for (const e of detections) detDistrict.set(e.id, districtAt(e.latitude, e.longitude));
+    try {
+      const validCamerasList = cameras.filter((c) => isValidCoord(c.latitude, c.longitude));
+      const camDistrict = new Map<string, string | null>();
+      for (const c of validCamerasList) {
+        try {
+          camDistrict.set(c.id, districtAt(c.latitude, c.longitude));
+        } catch {
+          camDistrict.set(c.id, null);
+        }
+      }
+      const detDistrict = new Map<string, string | null>();
+      for (const e of detections) {
+        try {
+          detDistrict.set(e.id, districtAt(e.latitude, e.longitude));
+        } catch {
+          detDistrict.set(e.id, null);
+        }
+      }
 
-    const fCameras = selectedDistrict
-      ? cameras.filter((c) => camDistrict.get(c.id) === selectedDistrict)
-      : cameras;
-    const fDetections = selectedDistrict
-      ? detections.filter((e) => detDistrict.get(e.id) === selectedDistrict)
-      : detections;
+      const fCameras = selectedDistrict
+        ? validCamerasList.filter((c) => camDistrict.get(c.id) === selectedDistrict)
+        : validCamerasList;
+      const fDetections = selectedDistrict
+        ? detections.filter((e) => detDistrict.get(e.id) === selectedDistrict)
+        : detections;
 
-    const agg = aggregateByDistrict(cameras, detections);
-    const counts = Object.fromEntries(
-      [...agg.values()].map((a) => [a.name, { cameras: a.cameras, events: a.events }]),
-    );
-    const clusters = [...agg.values()]
-      .filter((a) => a.cameras > 0 && a.centroid)
-      .map((a) => ({
-        name: a.name,
-        centroid: a.centroid as [number, number],
-        cameras: a.cameras,
-        offline: a.offlineCameras,
-        events: a.events,
-        bounds: a.bounds,
-      }));
-    return { mapCameras: fCameras, mapDetections: fDetections, districtCounts: counts, districtClusters: clusters };
+      const agg = aggregateByDistrict(validCamerasList, detections);
+      const counts = Object.fromEntries(
+        [...agg.values()].map((a) => [a.name, { cameras: a.cameras, events: a.events }]),
+      );
+      const clusters = [...agg.values()]
+        .filter((a) => a.cameras > 0 && a.centroid && isValidCoord(a.centroid[0], a.centroid[1]))
+        .map((a) => ({
+          name: a.name,
+          centroid: a.centroid as [number, number],
+          cameras: a.cameras,
+          offline: a.offlineCameras,
+          events: a.events,
+          bounds: (a.bounds || []).filter(([lat, lng]) => isValidCoord(lat, lng)),
+        }));
+      return { mapCameras: fCameras, mapDetections: fDetections, districtCounts: counts, districtClusters: clusters };
+    } catch {
+      return { mapCameras: [], mapDetections: [], districtCounts: {}, districtClusters: [] };
+    }
   }, [cameras, detections, selectedDistrict]);
 
   const selectPoint = (p: RoutePoint) => {

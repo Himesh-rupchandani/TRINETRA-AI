@@ -1,31 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { GeoJSON, useMap } from 'react-leaflet';
 import { gujaratDistricts } from '@/lib/geo/gujaratDistricts';
 import { gujaratOutline } from '@/lib/geo/gujaratOutline';
 import { gujaratMask } from '@/lib/geo/gujaratMask';
 
-/**
- * Gujarat thematic overlay — the control-room “state map” look:
- *  - state outline drawn on every basemap (Mapbox / OSM / satellite alike),
- *  - an optional dark mask outside the state that dims the rest of the world,
- *  - optional district polygons with hover tooltips (Census 2011 boundaries),
- *    shaded by camera density and clickable to focus a district.
- *
- * Geometry is bundled (src/lib/geo/*.ts, generated from the data.gov.in
- * census shapefile by scripts/make_gujarat_geojson.py) — no tile service or
- * network round-trip involved, so it also works offline in the demo venue.
- */
-
 const MASK_PANE = 'gujarat-mask';
 
-/** Custom pane below the vector-overlay pane: the mask dims tiles, never the
- *  routes, markers, popups or the playback dot drawn above it. */
 function EnsureMaskPane() {
   const map = useMap();
   useEffect(() => {
-    if (!map.getPane(MASK_PANE)) {
-      const p = map.createPane(MASK_PANE);
-      p.style.zIndex = '350';
+    try {
+      if (!map.getPane(MASK_PANE)) {
+        const p = map.createPane(MASK_PANE);
+        p.style.zIndex = '350';
+      }
+    } catch {
+      // ignore pane creation errors
     }
   }, [map]);
   return null;
@@ -40,14 +30,11 @@ export interface GujaratFocusProps {
   boundary?: boolean;
   mask?: boolean;
   districts?: boolean;
-  /** When present (with `districts`), polygons shade by camera density. */
   counts?: Record<string, DistrictCount>;
   selected?: string | null;
-  /** Fired on district click (same district re-clicked => null to clear). */
   onSelect?: (name: string | null) => void;
 }
 
-/** Quartile ramp of fill opacity keyed to max district camera count. */
 function densityFill(n: number, max: number): number {
   if (n <= 0 || max <= 0) return 0.04;
   const t = n / max;
@@ -62,74 +49,132 @@ export function GujaratFocus({
   selected = null,
   onSelect,
 }: GujaratFocusProps) {
-  const densityKey = counts ? Object.values(counts).reduce((a, c) => a + c.cameras * 31 + c.events, 0) : 0;
+  // Stable key — avoid remounting on every render, only when counts or selection change significantly
+  const densityKey = useMemo(() => {
+    if (!counts) return 0;
+    try {
+      return Object.values(counts).reduce((a, c) => a + c.cameras * 31 + c.events, 0);
+    } catch {
+      return 0;
+    }
+  }, [counts]);
+
+  // Validate geojson exists and is not empty
+  const hasOutline = useMemo(() => {
+    try {
+      return Boolean(gujaratOutline && (gujaratOutline as any).type);
+    } catch {
+      return false;
+    }
+  }, []);
+  const hasMask = useMemo(() => {
+    try {
+      return Boolean(gujaratMask && (gujaratMask as any).type);
+    } catch {
+      return false;
+    }
+  }, []);
+  const hasDistricts = useMemo(() => {
+    try {
+      return Boolean(gujaratDistricts && (gujaratDistricts as any).features?.length);
+    } catch {
+      return false;
+    }
+  }, []);
+
   return (
     <>
       <EnsureMaskPane />
-      {mask && (
+      {mask && hasMask && (
         <GeoJSON
           pane={MASK_PANE}
           interactive={false}
-          data={gujaratMask}
-          style={{ stroke: false, fillColor: '#0b1220', fillOpacity: 0.55, fillRule: 'evenodd' }}
+          data={gujaratMask as any}
+          style={{ stroke: false, fillColor: '#0b1220', fillOpacity: 0.55, fillRule: 'evenodd' as any }}
         />
       )}
-      {boundary && (
+      {boundary && hasOutline && (
         <>
-          {/* dark casing for contrast on any basemap, then the brand line */}
           <GeoJSON
             pane={MASK_PANE}
             interactive={false}
-            data={gujaratOutline}
-            style={{ color: '#000000', opacity: 0.35, weight: 6, fill: false }}
+            data={gujaratOutline as any}
+            style={{ color: '#000000', opacity: 0.35, weight: 6, fill: false } as any}
           />
           <GeoJSON
             interactive={false}
-            data={gujaratOutline}
-            style={{ color: '#f97316', opacity: 0.95, weight: 2.5, fill: false }}
+            data={gujaratOutline as any}
+            style={{ color: '#f97316', opacity: 0.95, weight: 2.5, fill: false } as any}
           />
         </>
       )}
-      {districts && (
-        // react-leaflet's GeoJSON styles once at mount — remount on data change
-        // so density + selection stay in sync with the registry/events.
+      {districts && hasDistricts && (
         <GeoJSON
           key={`dist-${densityKey}-${selected ?? ''}`}
-          data={gujaratDistricts}
+          data={gujaratDistricts as any}
           style={(feature) => {
-            const name = String(feature?.properties?.name ?? '');
-            const n = counts?.[name]?.cameras ?? 0;
-            const max = counts ? Math.max(1, ...Object.values(counts).map((c) => c.cameras)) : 1;
-            const isSel = selected === name;
-            return {
-              color: isSel ? '#f97316' : '#fb923c',
-              weight: isSel ? 2.4 : 1,
-              opacity: isSel ? 1 : 0.7,
-              fillColor: '#f97316',
-              fillOpacity: isSel ? 0.22 : densityFill(n, max),
-              dashArray: isSel ? undefined : '4 4',
-            };
+            try {
+              const name = String(feature?.properties?.name ?? '');
+              const n = counts?.[name]?.cameras ?? 0;
+              const max = counts ? Math.max(1, ...Object.values(counts).map((c) => c.cameras)) : 1;
+              const isSel = selected === name;
+              return {
+                color: isSel ? '#f97316' : '#fb923c',
+                weight: isSel ? 2.4 : 1,
+                opacity: isSel ? 1 : 0.7,
+                fillColor: '#f97316',
+                fillOpacity: isSel ? 0.22 : densityFill(n, max),
+                dashArray: isSel ? undefined : '4 4',
+              } as any;
+            } catch {
+              return { color: '#fb923c', weight: 1, opacity: 0.5, fillOpacity: 0.05 } as any;
+            }
           }}
           onEachFeature={(feature, layer) => {
-            const name = String(feature?.properties?.name ?? 'District');
-            const c = counts?.[name];
-            const tip = c
-              ? `${name} district · ${c.cameras} camera${c.cameras === 1 ? '' : 's'} · ${c.events} sighting${c.events === 1 ? '' : 's'}`
-              : `${name} district · no cameras`;
-            layer.bindTooltip(tip, { sticky: true, direction: 'top' });
-            layer.on({
-              mouseover: (e) => e.target.setStyle({ weight: 2, opacity: 1, fillOpacity: 0.28 }),
-              mouseout: (e) => {
-                const isSel = selected === name;
-                e.target.setStyle(
-                  isSel
-                    ? { weight: 2.4, opacity: 1, fillOpacity: 0.22 }
-                    : { weight: 1, opacity: 0.7, fillOpacity: densityFill(c?.cameras ?? 0, counts ? Math.max(1, ...Object.values(counts).map((x) => x.cameras)) : 1) },
-                );
-              },
-            });
-            if (onSelect) {
-              layer.on('click', () => onSelect(selected === name ? null : name));
+            try {
+              const name = String(feature?.properties?.name ?? 'District');
+              const c = counts?.[name];
+              const tip = c
+                ? `${name} district · ${c.cameras} camera${c.cameras === 1 ? '' : 's'} · ${c.events} sighting${c.events === 1 ? '' : 's'}`
+                : `${name} district · no cameras`;
+              (layer as any).bindTooltip(tip, { sticky: true, direction: 'top' });
+              (layer as any).on({
+                mouseover: (e: any) => {
+                  try {
+                    e.target.setStyle({ weight: 2, opacity: 1, fillOpacity: 0.28 });
+                  } catch {
+                    // ignore
+                  }
+                },
+                mouseout: (e: any) => {
+                  try {
+                    const isSel = selected === name;
+                    const maxCameras = counts ? Math.max(1, ...Object.values(counts).map((x) => x.cameras)) : 1;
+                    e.target.setStyle(
+                      isSel
+                        ? { weight: 2.4, opacity: 1, fillOpacity: 0.22 }
+                        : {
+                            weight: 1,
+                            opacity: 0.7,
+                            fillOpacity: densityFill(c?.cameras ?? 0, maxCameras),
+                          },
+                    );
+                  } catch {
+                    // ignore
+                  }
+                },
+              });
+              if (onSelect) {
+                (layer as any).on('click', () => {
+                  try {
+                    onSelect(selected === name ? null : name);
+                  } catch {
+                    // ignore
+                  }
+                });
+              }
+            } catch {
+              // ignore feature errors
             }
           }}
         />
