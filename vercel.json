@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd trinetra-ai && npm install && npm run build",
+  "outputDirectory": "trinetra-ai/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
