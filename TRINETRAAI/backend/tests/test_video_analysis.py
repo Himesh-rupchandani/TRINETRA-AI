@@ -269,14 +269,28 @@ def test_03_invalid_upload_is_rejected_clearly(client, clips):
         "/api/analysis/videos/upload",
         files=[("files", ("notes.txt", b"not a video", "text/plain"))],
     )
-    # every file rejected -> 422 with the reason, and nothing is registered
-    assert res.status_code == 422
-    assert "unsupported video type" in res.json()["detail"].lower()
+    # every file rejected -> the reason comes back per-file, and the file is
+    # persisted as a FAILED row so the analysis list still accounts for it
+    # (an operator who picked five clips must see five rows, even on reload)
+    assert res.status_code in (200, 201)
+    body = res.json()
+    assert body["added"] == []
+    assert len(body["errors"]) == 1
+    assert "unsupported video type" in body["errors"][0]["error"].lower()
+    failed_id = None
     db = SessionLocal()
     try:
-        assert db.query(VideoSource).filter(VideoSource.source_name == "notes.txt").count() == 0
+        row = db.query(VideoSource).filter(VideoSource.source_name == "notes.txt").one()
+        assert row.status == "FAILED"
+        assert "unsupported video type" in (row.error or "").lower()
+        failed_id = row.video_id
     finally:
         db.close()
+    # and a FAILED row with no file is not re-queued by "run everything"
+    assert client.post(
+        "/api/analysis/run", json={"video_ids": [failed_id]}
+    ).json()["queued"] == []
+    assert client.delete(f"/api/analysis/videos/{failed_id}").status_code == 200
 
     # a mixed batch keeps the good file and reports the bad one per-file
     mixed = client.post(
@@ -291,6 +305,13 @@ def test_03_invalid_upload_is_rejected_clearly(client, clips):
     assert [v["camera_id"] for v in body["added"]] == ["TCAM7"]
     assert len(body["errors"]) == 1
     assert body["errors"][0]["source_name"] == "broken.txt"
+    # the rejected file is listed as FAILED alongside the added one
+    status = client.get(
+        "/api/analysis/status", params={"batch_id": body["batch_id"]}
+    ).json()
+    assert sorted(v["status"] for v in status["videos"]) == ["FAILED", "READY"]
+    for v in status["videos"]:
+        assert client.delete(f"/api/analysis/videos/{v['video_id']}").status_code == 200
 
 
 # --------------------------------------------------------------------------- #
@@ -730,6 +751,19 @@ def test_22_unreadable_file_is_rejected_with_a_reason(client, tmp_path, monkeypa
         assert err["source_name"] == "TCAM22B.mp4"
         assert "could not be decoded" in err["error"]
         assert "ffmpeg" in err["error"], "the reason must say what is missing"
+        # the rejected file is persisted as a FAILED row (it must show in the
+        # list), and is removable like every other row
+        db = SessionLocal()
+        try:
+            failed = db.query(VideoSource).filter(
+                VideoSource.source_name == "TCAM22B.mp4"
+            ).one()
+            assert failed.status == "FAILED"
+        finally:
+            db.close()
+        body["errors"][0]["video_id"] = failed.video_id
     finally:
         for v in body["added"]:
             client.delete(f"/api/analysis/videos/{v['video_id']}")
+        if body["errors"] and body["errors"][0].get("video_id"):
+            client.delete(f"/api/analysis/videos/{body['errors'][0]['video_id']}")

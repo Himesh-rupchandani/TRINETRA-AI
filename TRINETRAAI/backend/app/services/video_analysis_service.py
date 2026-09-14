@@ -412,6 +412,38 @@ def register_upload(db, filename: str, data: bytes, batch_id: str,
         raise
 
 
+def register_failed(
+    db, filename: str, batch_id: str, error: str, source_type: str = "UPLOAD"
+) -> VideoSource:
+    """
+    Record a file that was offered for analysis but could not be registered.
+
+    A failed file is still a row in the analysis list (status FAILED, with the
+    reason), so an operator who picked five clips always sees five rows —
+    including after a page reload, when the one-shot upload response is long
+    gone. No Camera row is created: a broken clip must never appear as a live
+    camera, and ``start_analysis`` skips these rows (nothing to re-run).
+    """
+    safe = safe_filename(filename)
+    video = VideoSource(
+        video_id=uuid.uuid4().hex[:16],
+        batch_id=batch_id,
+        camera_id=unique_camera_id(db, camera_id_from_filename(safe)),
+        source_type=source_type,
+        source_name=safe,
+        source_ref=None,
+        file_path=None,
+        status=FAILED,
+        error=error,
+        progress_pct=0.0,
+    )
+    db.add(video)
+    db.commit()
+    db.refresh(video)
+    logger.info(f"[ANALYSIS] Recorded FAILED upload '{safe}': {error}")
+    return video
+
+
 def register_gdrive(db, url: str, batch_id: str, camera_id: Optional[str] = None) -> VideoSource:
     """Validate + download a shared Drive video and register it for analysis."""
     from . import gdrive_service
@@ -475,6 +507,13 @@ def start_analysis(db, video_ids: Optional[List[str]] = None) -> List[VideoSourc
     queued: List[VideoSource] = []
     for video in videos:
         if video.status in (QUEUED, PROCESSING, DOWNLOADING):
+            continue
+        if video.status == FAILED and (
+            not video.file_path or not os.path.isfile(video.file_path)
+        ):
+            # A clip that could never be registered (decode failed at upload
+            # time). Keep it FAILED with its original reason — "re-run" would
+            # analyse nothing and would overwrite the real explanation.
             continue
         if not video.file_path or not os.path.isfile(video.file_path):
             video.status = FAILED

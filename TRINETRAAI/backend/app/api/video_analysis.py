@@ -97,17 +97,18 @@ async def upload_videos(
             )
             added.append(vas.video_to_dict(video))
         except vas.AnalysisError as exc:
+            # The file still becomes a row (status FAILED) so the analysis
+            # list accounts for every picked clip — see register_failed.
+            vas.register_failed(db, name, batch, str(exc))
             errors.append({"source_name": name, "error": str(exc)})
         except Exception as exc:  # pragma: no cover - unexpected decode failures
             logger.exception(f"[ANALYSIS] upload of {name} failed")
+            vas.register_failed(db, name, batch, str(exc))
             errors.append({"source_name": name, "error": str(exc)})
 
-    if not added and errors:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=errors[0]["error"] if len(errors) == 1 else
-            "; ".join(f"{e['source_name']}: {e['error']}" for e in errors),
-        )
+    # No 422 for a rejected batch: every file is now a row in the analysis
+    # list (added, or FAILED with its reason), so the operator always sees
+    # exactly as many rows as they picked — even after a page reload.
 
     if auto_start and added:
         try:

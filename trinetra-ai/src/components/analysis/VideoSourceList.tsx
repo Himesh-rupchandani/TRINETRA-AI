@@ -40,17 +40,23 @@ export function VideoSourceList({
    */
   rejected?: Array<{ source_name: string; error: string }>;
 }) {
+  // Rejected files are now persisted by the backend as FAILED rows, so once
+  // the status refresh lands they appear in `videos`; drop the transient
+  // duplicate instead of listing the same file twice.
+  const pendingRejected = rejected.filter(
+    (r) => !videos.some((v) => v.sourceName === r.source_name),
+  );
   return (
     <Panel
       title={`Videos in this analysis — ${videos.length}${
-        rejected.length ? ` (+${rejected.length} not added)` : ''
+        pendingRejected.length ? ` (+${pendingRejected.length} not added)` : ''
       }`}
       icon={Cctv}
       actions={
         <>
-          {rejected.length > 0 && (
+          {pendingRejected.length > 0 && (
             <span className="chip border-critical/45 bg-critical/10 text-critical">
-              {rejected.length} not added
+              {pendingRejected.length} not added
             </span>
           )}
           <span className="chip border-line bg-surface-3 text-ink-muted">
@@ -59,7 +65,7 @@ export function VideoSourceList({
         </>
       }
     >
-      {videos.length === 0 && rejected.length === 0 ? (
+      {videos.length === 0 && pendingRejected.length === 0 ? (
         <EmptyState
           icon={FileVideo}
           title="No videos added yet"
@@ -149,7 +155,7 @@ export function VideoSourceList({
                   </tr>
                 );
               })}
-              {rejected.map((r) => (
+              {pendingRejected.map((r) => (
                 <tr key={`rejected-${r.source_name}`} className="opacity-90">
                   <td className="plate text-xs text-ink-faint">—</td>
                   <td>

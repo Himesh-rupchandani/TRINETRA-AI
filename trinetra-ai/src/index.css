@@ -133,14 +133,19 @@
     @apply w-full text-xs border-collapse;
   }
   .data-table thead th {
-    @apply sticky top-0 z-10 bg-surface-2 text-left text-xs font-semibold
+    @apply bg-surface-2 text-left text-xs font-semibold
            text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
   }
   /* Window-scrolled tables: stick below the sticky header (56px) + menu
      bar (measured live by TopNav into --trinetra-nav-h; 106px fallback
      for first paint). z-0 tucks the header under the bars if their
-     heights ever drift, so page content can never paint over them. */
+     heights ever drift, so page content can never paint over them.
+     ONLY this variant is sticky: tables embedded in panels that scroll
+     inside the page (e.g. Video Analysis) must keep their header in
+     normal flow, otherwise the pinned row detaches from the body and
+     can paint away from the data rows. */
   .data-table-page thead th {
+    position: sticky;
     top: calc(3.5rem + var(--trinetra-nav-h, 106px));
     z-index: 0;
   }
