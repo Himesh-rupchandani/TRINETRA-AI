@@ -132,15 +132,15 @@
   .data-table {
     @apply w-full text-xs border-collapse;
   }
+  /* Header cells are intentionally NOT sticky: with `border-collapse`
+     Chromium repaints sticky <th> at shifted offsets (a ghost copy of the
+     header bar appears in the middle of the rows), and the inner
+     overflow-x-auto wrapper makes window-sticky impossible anyway.
+     A single static header row always renders at the top of the table. */
   .data-table thead th {
-    @apply sticky top-0 z-10 bg-surface-2 text-left text-xs font-semibold
+    @apply bg-surface-2 text-left text-xs font-semibold
            text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
   }
-  /* Table headers always render at the top of their table (between the
-     panel title and the first row). NOTE: a larger sticky `top` offset was
-     removed here — every data-table-page sits inside an `overflow-x-auto`
-     wrapper, which becomes the sticky scrollport, so a positive top offset
-     pushed the header row DOWN into the middle of the tbody rows. */
   .data-table tbody td {
     @apply px-4 py-3 border-b border-line/60 align-middle whitespace-nowrap;
   }
