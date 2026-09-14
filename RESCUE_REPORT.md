@@ -1,6 +1,6 @@
 # TRINETRA AI — Emergency Debug / Rescue: Final Report
 
-Date: 2026-09-14 · Branch: `arena/01a09e58-hack` · Base commit: `2fe0cae`
+Date: 2026-09-14 · Branch: `arena/01a09e58-hack` · Base commit: `2fe0cae` · **PR: [#29](https://github.com/Himesh-rupchandani/hack/pull/29)**
 
 ## 1. What was tested (the one real video)
 
@@ -49,6 +49,15 @@ Evidence consistency (verified by re-OCR of the saved crops):
 - **CLI** `python process_video.py TRINETRAAI/backend/demo_cam04.mp4 --output /tmp/out_full`
   → `annotated.mp4`, `detections.csv`, `detections.json`, `summary.json`, `evidence/` (9 full + 9 vehicle + 3 plate = 21 JPEGs).
 - **Dashboard path** (upload → worker → DB → search) ran the same `analyze_video` core and stored the **same 9 sightings**; cross-video matching then found `GJ03AG6167` in **two** videos (`DEMO_CAM04`, `DEMO_SHORT`) with the chronological sequence, proving DB + search + comparison all work on real records.
+- **API-level verification** (FastAPI `TestClient` against the populated dev DB):
+  - `GET /api/analysis/status` → `DONE`, `DEMO_CAM04`: 360 frames read, 9 vehicles, 3 plates, 6 unknown.
+  - `GET /api/analysis/results` → `GJ03AG6167` (2 videos, `[DEMO_CAM04, DEMO_SHORT]`), `GJ03DE8157` (1 video).
+  - `GET /api/analysis/search?plate=…` → exact match for `GJ03AG6167`, `GJ03DE8157`, **and** mixed-case/spaced input `gj 03 ag 6167`.
+  - `GET /api/analysis/videos/{id}/detections` → 9 rows with `track_id`/`frame_number`/`plate`/`plate_status`/`ocr_confidence`/`evidence_url`/`plate_crop_url`.
+  - `GET /api/evidence/{ref}` → `200 image/jpeg` with real bytes for both vehicle crops and plate crops; unknown sightings expose `plate_crop_url: null` (honest).
+  - `GET /api/analysis/videos/{id}/file` → `200 video/mp4` (65 MB stored clip).
+  - `GET /api/vehicles/GJ03AG6167` → `cameras_touched: 2`.
+- **Backend → frontend trace** verified: the `/detections` payload keys (`evidence_url`, `plate_crop_url`) match `VideoDetectionRow` in `videoAnalysisService.ts`, and `DetectionLedger` renders them through `EvidenceThumb` (with an honest "no crop" fallback).
 - **CSV columns present:** `detection_id, video_filename, frame_number, timestamp, track_id, plate, plate_confidence, vehicle_confidence, evidence_frame` (+ vehicle class / plate status / raw / bboxes / evidence paths).
 
 ## 4. Root causes found & fixed
@@ -74,6 +83,7 @@ Evidence consistency (verified by re-OCR of the saved crops):
 | Frontend `npm test` | **48 / 48 passed** |
 | Frontend `tsc --noEmit` (typecheck) | **clean** |
 | Frontend `oxlint` | **0 errors** (48 pre-existing warnings) |
+| Frontend `vite build` (production) | **succeeds** (all routes/chunks emitted) |
 | cv-engine `pytest` | 92 passed; 2 failed + 1 collection error — **pre-existing at base commit `2fe0cae`** (reproduced in a clean worktree; unrelated to this change, no cv-engine file was modified) |
 
 ## 6. Files changed
