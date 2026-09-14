@@ -591,6 +591,15 @@ def _run_video(video_id: str) -> None:
             except Exception:
                 pass
 
+        # Idempotent (re)runs: a re-analysis replaces this video's previous
+        # sightings instead of appending a second copy of each track. The model
+        # and file have already been confirmed above, so nothing is cleared on a
+        # run that fails before it can produce new results.
+        db.query(VehicleEvent).filter(
+            VehicleEvent.video_id == video_id
+        ).delete(synchronize_session=False)
+        db.commit()
+
         report = analyze_video(
             video.file_path,
             detect=_detect,
