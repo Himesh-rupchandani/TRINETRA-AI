@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -45,7 +46,32 @@ from .anpr_pipeline import (
 )
 from .simple_tracker import SimpleTracker
 
-ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
+# Containers this feature is known to handle. Kept for the user-facing message
+# only — it is NOT a gate. Real CCTV/DVR exports arrive as .3gp, .ts, .wmv,
+# .dav or a raw .264/.h264 stream, and every one of those decodes fine because
+# OpenCV/ffmpeg sniff the *content*, not the filename. Gating on the extension
+# is what used to silently drop four of five uploaded clips.
+ALLOWED_VIDEO_SUFFIXES = {
+    ".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v",
+    ".3gp", ".3g2", ".asf", ".wmv", ".flv", ".f4v",
+    ".ts", ".m2ts", ".mts", ".mpg", ".mpeg", ".mpe", ".mpv", ".vob",
+    ".ogv", ".rm", ".rmvb", ".mxf", ".dav",
+    ".h264", ".h265", ".hevc", ".264", ".265", ".avc",
+}
+# Files that are definitely not a video. Rejected on the extension alone so the
+# operator gets "unsupported video type" instead of waiting for a decode of a
+# PDF. Anything not listed here is *probed* — the decoder decides, not us.
+NOT_VIDEO_SUFFIXES = {
+    ".txt", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv",
+    ".json", ".xml", ".html", ".htm", ".rtf", ".srt", ".ass", ".vtt",
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp", ".svg", ".ico",
+    ".mp3", ".wav", ".aac", ".flac", ".m4a",
+    ".zip", ".rar", ".7z", ".gz", ".tar", ".iso",
+    ".py", ".js", ".sh", ".bat", ".exe", ".dll", ".so", ".bin", ".db",
+}
+# NOTE: .ts is deliberately NOT blacklisted — MPEG-TS is a common CCTV/DVR
+# container. A TypeScript file of the same name simply fails the decode probe
+# below and is rejected with the reason, which is the honest answer either way.
 ANALYSIS_ZONE = "Video Analysis"
 
 # VideoSource.status values
@@ -154,6 +180,99 @@ def format_offset(seconds: Optional[float]) -> str:
 # Probing
 # ---------------------------------------------------------------------------
 
+def _cv2_opens(path: Path) -> bool:
+    """Can OpenCV actually pull a first frame out of this file?"""
+    cap = cv2.VideoCapture(str(path))
+    try:
+        if not cap.isOpened():
+            return False
+        ok, frame = cap.read()
+        return bool(ok) and frame is not None
+    except Exception:
+        return False
+    finally:
+        cap.release()
+
+
+def _ffmpeg_exe() -> Optional[str]:
+    """Bundled ffmpeg binary (imageio-ffmpeg, already a project dependency)."""
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as exc:  # not installed, or the binary cannot be fetched
+        logger.warning(f"[ANALYSIS] ffmpeg unavailable — cannot convert videos: {exc}")
+        return None
+
+
+def _convert_to_mp4(path: Path) -> Optional[Path]:
+    """
+    Re-encode a clip OpenCV could not read into plain H.264 MP4, which both
+    OpenCV and every browser can read.
+
+    This is the difference between "4 of your 5 clips were dropped" and "all 5
+    analysed": DVR exports (.dav, .wmv/VC-1, odd profiles) are perfectly good
+    video that the OpenCV build in a given environment sometimes cannot decode.
+    Audio is dropped — the analysis only ever looks at frames.
+    Returns None when the conversion is not possible.
+    """
+    exe = _ffmpeg_exe()
+    if not exe:
+        return None
+    dest = _unique_path(path.parent, f"{path.stem}_converted.mp4")
+    cmd = [
+        exe, "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(path),
+        "-map", "0:v:0",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-an",
+        str(dest),
+    ]
+    logger.info(f"[ANALYSIS] Converting {path.name} -> {dest.name} with ffmpeg")
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=int(getattr(settings, "ANALYSIS_CONVERT_TIMEOUT_SEC", 1800)),
+        )
+    except Exception as exc:
+        logger.warning(f"[ANALYSIS] ffmpeg conversion of {path.name} failed: {exc}")
+        dest.unlink(missing_ok=True)
+        return None
+    if proc.returncode != 0 or not dest.is_file() or not _cv2_opens(dest):
+        logger.warning(
+            f"[ANALYSIS] ffmpeg could not convert {path.name}: "
+            f"{(proc.stderr or '').strip()[:300]}"
+        )
+        dest.unlink(missing_ok=True)
+        return None
+    return dest
+
+
+def ensure_decodable(path: Path, display_name: str) -> Path:
+    """
+    Return a path OpenCV can decode, converting the file when it cannot.
+
+    The extension is never the reason a video is refused: the decoder is the
+    only authority. A file that neither OpenCV nor ffmpeg can read is rejected
+    with the reason, so nothing is ever silently dropped from a batch.
+    """
+    if _cv2_opens(path):
+        return path
+    converted = _convert_to_mp4(path)
+    if converted is None:
+        raise AnalysisError(
+            f"'{display_name}': this file could not be decoded as a video. "
+            f"Re-export it as MP4 (H.264) and add it again."
+            + ("" if _ffmpeg_exe() else
+               " (No ffmpeg converter is available on this server — "
+               "pip install imageio-ffmpeg.)")
+        )
+    logger.info(f"[ANALYSIS] '{display_name}' converted to {converted.name} for analysis")
+    path.unlink(missing_ok=True)  # the converted copy replaces the original
+    return converted
+
+
 def probe_video(path: Path) -> dict:
     """
     Read real technical metadata from the file with OpenCV.
@@ -258,10 +377,17 @@ def _register(
 
 def register_upload(db, filename: str, data: bytes, batch_id: str,
                     camera_id: Optional[str] = None) -> VideoSource:
-    """Persist an uploaded file and register it for analysis."""
+    """
+    Persist an uploaded file and register it for analysis.
+
+    Any container the decoder can actually read is accepted (.mp4, .avi, .mov,
+    .mkv, .webm and the DVR/phone formats .3gp, .ts, .wmv, .dav, .264, ...);
+    a clip OpenCV cannot decode is converted with ffmpeg first, so a batch of
+    five clips stays a batch of five instead of "only the MP4 got through".
+    """
     safe = safe_filename(filename)
     suffix = Path(safe).suffix.lower()
-    if suffix not in ALLOWED_VIDEO_SUFFIXES:
+    if suffix in NOT_VIDEO_SUFFIXES:
         raise AnalysisError(
             f"'{filename}': unsupported video type '{suffix or '?'}'. "
             f"Use {', '.join(sorted(ALLOWED_VIDEO_SUFFIXES))}."
@@ -276,6 +402,7 @@ def register_upload(db, filename: str, data: bytes, batch_id: str,
     path = _unique_path(analysis_dir(), safe)
     path.write_bytes(data)
     try:
+        path = ensure_decodable(path, filename)
         return _register(
             db, path=path, source_type="UPLOAD", source_name=safe,
             source_ref=None, batch_id=batch_id, camera_id=camera_id,
@@ -300,6 +427,7 @@ def register_gdrive(db, url: str, batch_id: str, camera_id: Optional[str] = None
         raise AnalysisError(str(exc))
 
     try:
+        path = ensure_decodable(path, file_name)
         return _register(
             db, path=path, source_type="GDRIVE", source_name=file_name,
             source_ref=link.normalized_url, batch_id=batch_id, camera_id=camera_id,

@@ -28,22 +28,38 @@ export function VideoSourceList({
   videos,
   onRemove,
   removing,
+  rejected = [],
 }: {
   videos: AnalysisVideo[];
   onRemove: (videoId: string) => void;
   removing: string | null;
+  /**
+   * Files from the last upload that could not be registered, with the reason.
+   * They are listed here rather than dropped: an operator who picked five
+   * clips must be able to account for all five.
+   */
+  rejected?: Array<{ source_name: string; error: string }>;
 }) {
   return (
     <Panel
-      title={`Videos in this analysis — ${videos.length}`}
+      title={`Videos in this analysis — ${videos.length}${
+        rejected.length ? ` (+${rejected.length} not added)` : ''
+      }`}
       icon={Cctv}
       actions={
-        <span className="chip border-line bg-surface-3 text-ink-muted">
-          {videos.filter((v) => v.status === 'DONE').length} analysed
-        </span>
+        <>
+          {rejected.length > 0 && (
+            <span className="chip border-critical/45 bg-critical/10 text-critical">
+              {rejected.length} not added
+            </span>
+          )}
+          <span className="chip border-line bg-surface-3 text-ink-muted">
+            {videos.filter((v) => v.status === 'DONE').length} analysed
+          </span>
+        </>
       }
     >
-      {videos.length === 0 ? (
+      {videos.length === 0 && rejected.length === 0 ? (
         <EmptyState
           icon={FileVideo}
           title="No videos added yet"
@@ -51,7 +67,11 @@ export function VideoSourceList({
         />
       ) : (
         <div className="overflow-x-auto">
-          <table className="data-table data-table-page">
+          {/* No `data-table-page` here: that variant pins the header for
+              window-scrolled pages, but Video Analysis scrolls inside its own
+              container, where the pinned header landed *below* the rows. The
+              plain table keeps Camera/Source/... directly above the data. */}
+          <table className="data-table">
             <thead>
               <tr>
                 <th scope="col">Camera</th>
@@ -129,6 +149,32 @@ export function VideoSourceList({
                   </tr>
                 );
               })}
+              {rejected.map((r) => (
+                <tr key={`rejected-${r.source_name}`} className="opacity-90">
+                  <td className="plate text-xs text-ink-faint">—</td>
+                  <td>
+                    <span className="inline-flex items-center gap-1.5 text-2xs text-ink-muted">
+                      <FileVideo size={12} aria-hidden />
+                      Upload
+                    </span>
+                  </td>
+                  <td className="max-w-[220px]">
+                    <span className="block truncate text-xs text-ink">{r.source_name}</span>
+                    <span className="block text-2xs text-ink-faint">never registered</span>
+                  </td>
+                  <td>
+                    <span className="chip border border-critical/45 bg-critical/10 text-critical">
+                      Not added
+                    </span>
+                    <span className="mt-1 block max-w-[320px] whitespace-normal text-2xs text-ink-faint">
+                      {r.error}
+                    </span>
+                  </td>
+                  <td className="font-mono tabular-nums text-ink-faint">—</td>
+                  <td className="font-mono tabular-nums text-ink-faint">—</td>
+                  <td />
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

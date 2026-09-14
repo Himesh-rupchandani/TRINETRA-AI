@@ -130,7 +130,7 @@ what it returns today, verified by test 5.
 
 ---
 
-## 4. Two real bugs found and fixed while verifying
+## 4. Real bugs found and fixed while verifying
 
 1. **Lazy-singleton race (data-affecting).** `ocr_service._ensure_engine()` and
    `plate_detector_service._ensure_model()` set their `_attempted` flag *before*
@@ -143,6 +143,24 @@ what it returns today, verified by test 5.
 2. **`ANALYSIS_MAX_WORKERS` was not enforced.** Every queued video spawned a
    thread regardless of the setting, oversubscribing a 2-core box. A semaphore
    now bounds concurrent workers; extra videos stay `QUEUED` (visible in the UI).
+
+3. **"Only one video came through" (data-affecting).** Registration gated on the
+   filename extension (`.mp4 .avi .mov .mkv .webm .m4v`), so the containers real
+   CCTV/DVR footage actually arrives in — `.3gp`, `.ts`, `.wmv`, `.dav`, a raw
+   `.264` stream — were refused with *"unsupported video type"* and never
+   entered the list. Reproduced against a running server: uploading
+   `CAM1.mp4 + cctv1.3gp + cctv2.ts + cctv3.wmv + hik.264` registered **1**
+   video. OpenCV/ffmpeg decide by *content*, not by name (all five decode), so
+   the extension is now only a hint: obvious non-videos (`.txt`, `.pdf`, …) are
+   still refused outright, everything else is probed. A clip the local OpenCV
+   build cannot decode is re-encoded to H.264 MP4 with the bundled ffmpeg
+   (`imageio-ffmpeg`, already a dependency) instead of being dropped, and each
+   file is registered off the event loop so a slow conversion cannot stall the
+   API. The same batch now registers **5 of 5**
+   (`CAM1, CCTV1, CCTV2, CCTV3, HIK`). Files that still cannot be used are
+   listed in *Videos in this analysis* as **Not added** rows with the exact
+   reason, so a five-clip batch always accounts for five rows — nothing
+   disappears silently. Covered by tests 20, 21, 21b and 22.
 
 ---
 
