@@ -146,8 +146,13 @@ def _annotate_frame(
     tracks: Sequence[TrackedBox],
     plates: Dict[int, str],
 ) -> np.ndarray:
-    """Draw the model's own boxes (track id + class + best-known plate)."""
-    out = frame
+    """Draw the model's own boxes (track id + class + best-known plate).
+
+    Draws onto a COPY so the caller's frame stays raw: the annotated image is
+    the full-frame evidence, while vehicle/plate crops are always cut from the
+    un-annotated pixels (a green box border must never bleed into a crop).
+    """
+    out = frame.copy()
     for t in tracks:
         x1, y1, x2, y2 = int(t.x1), int(t.y1), int(t.x2), int(t.y2)
         cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -296,10 +301,15 @@ def analyze_video(
                         seen_tracks.add(t.track_id)
                         stats.vehicles_detected += 1
                     area = max(t.x2 - t.x1, 0) * max(t.y2 - t.y1, 0)
-                    # Keep the clearest view as the no-plate fallback frame.
-                    prev_area = best_vehicle.get(t.track_id, (-1.0, None))[0]
-                    if area >= prev_area:
-                        best_vehicle[t.track_id] = (float(area), _snapshot(t, frame, frame_idx, offset_sec, live))
+                    # No-plate fallback frame: keep the clearest GENUINELY
+                    # DETECTED view only. A carried-over box (misses > 0) keeps
+                    # the geometry of its last real detection, so it can only
+                    # ever tie — but tying on a later missed frame would store
+                    # a crop of empty road, which must never become evidence.
+                    if t.misses == 0:
+                        prev_area = best_vehicle.get(t.track_id, (-1.0, None))[0]
+                        if area >= prev_area:
+                            best_vehicle[t.track_id] = (float(area), _snapshot(t, frame, frame_idx, offset_sec, live))
 
                     if t.hits < min_hits or area < min_area:
                         continue
@@ -309,6 +319,10 @@ def analyze_video(
                         continue
                     cooldown[t.track_id] = cooldown_steps
 
+                    # OCR still runs on carried-over boxes: a one-step detector
+                    # flicker must not discard a real plate. The read itself
+                    # validates that a plate is actually present on this frame
+                    # (an empty-road box yields no plate and is ignored).
                     try:
                         read = read_plate(
                             frame, (t.x1, t.y1, t.x2, t.y2), t.class_name)
