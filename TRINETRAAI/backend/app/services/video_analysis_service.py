@@ -525,7 +525,6 @@ def _run_video(video_id: str) -> None:
     slots = _worker_slots()
     slots.acquire()  # the video stays QUEUED until a CPU slot is free
     db = SessionLocal()
-    cap = None
     try:
         from .event_service import create_watchlist_alert, match_watchlist
         from .ocr_service import ocr_service
@@ -748,11 +747,6 @@ def _run_video(video_id: str) -> None:
         except Exception:
             pass
     finally:
-        try:
-            if cap is not None:
-                cap.release()
-        except Exception:
-            pass
         try:
             db.close()
         except Exception:
