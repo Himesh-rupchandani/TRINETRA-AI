@@ -11,6 +11,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # (and this check runs while `settings` is still being constructed).
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
+# Serverless platform markers — any one present means the filesystem is
+# ephemeral even when the code tree is technically writable (Vercel's cwd IS
+# writable, so the read-only probe alone would report PERSISTENT).
+_SERVERLESS_ENV_VARS = (
+    "VERCEL",
+    "VERCEL_ENV",
+    "VERCEL_REGION",
+    "AWS_LAMBDA_FUNCTION_NAME",
+    "FUNCTION_TARGET",
+    "K_SERVICE",
+)
+
+
+def is_serverless_environment() -> bool:
+    """True when running inside a serverless function (Vercel / Cloud Run / Lambda)."""
+    return any(os.environ.get(k) for k in _SERVERLESS_ENV_VARS)
+
 
 def _writable(dirpath: Path) -> bool:
     """True when `dirpath` exists (or can be created) and accepts writes."""
@@ -240,8 +257,8 @@ class Settings(BaseSettings):
 
     @property
     def ephemeral_storage(self) -> bool:
-        """True when storage was relocated to a temp dir that dies with the instance."""
-        return bool(self.RUNTIME_DATA_ROOT)
+        """True when storage was relocated to a temp dir or we are on a serverless host."""
+        return bool(self.RUNTIME_DATA_ROOT or is_serverless_environment())
 
     model_config = SettingsConfigDict(
         env_file=".env",

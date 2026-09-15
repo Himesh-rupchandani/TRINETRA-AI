@@ -38,7 +38,7 @@ Backend (`TRINETRAAI/backend/app/core/config.py` reads these):
 |---|---|---|
 | `APP_ENV` | `production` | turns off dev conveniences (see `INTERNAL_API_KEY`) |
 | `DEMO_MODE` | `false` | unreachable cameras stay honestly `OFFLINE` instead of a synthetic frame |
-| `AUTO_SEED_DEMO` | *(optional)* | leave unset: on a temp-dir database the demo grid seeds itself |
+| `AUTO_SEED_DEMO` | *(optional, override only)* | leave unset: on a serverless/ephemeral host (Vercel, Cloud Run, Lambda) the demo grid seeds itself on a blank DB with no env var. Set `false` once a persistent DB (Postgres) is attached so boot never seeds over operator data. |
 | `INTERNAL_API_KEY` | a random secret | authorizes `POST /api/internal/*`; unset = those endpoints are disabled, not open |
 | `DATABASE_URL` | *(optional)* | only needed if you attach a real Postgres (below) |
 
@@ -107,8 +107,11 @@ Attach Vercel Postgres / Neon and the app stops being read-mostly-demo:
    `POSTGRES_URL`.
 2. Add `DATABASE_URL` = `postgresql+psycopg://user:pass@host/db` (the psycopg 3
    driver already ships in `requirements.txt`).
-3. Set `AUTO_SEED_DEMO=false`, then seed once against the deployed API or run
-   `python -m scripts.seed_demo` with that `DATABASE_URL`.
+3. Set `AUTO_SEED_DEMO=false` (explicit override — once a persistent DB is
+   attached the boot path must be `SKIPPED`, never `SEEDED`; verify at
+   `/api/health` → `components.demo_data` says `SKIPPED`), then seed once
+   against the deployed API or run `python -m scripts.seed_demo` with that
+   `DATABASE_URL`.
 
 Schema is created by `Base.metadata.create_all` at boot — no migration step is
 required for a fresh database.
@@ -131,9 +134,16 @@ are worth knowing before you touch them again:
 2. **Dependencies were split**: `requirements.txt` is the API set (what Vercel
    installs), `requirements-ml.txt` adds the CV extras and is what the Docker
    image, the Windows scripts and the local quick-start now install.
-3. **A read-only code tree is detected and worked around** in
-   `app/core/config.py`: if the SQLite/evidence/upload paths are not writable,
-   all of them move to one temp root (override with `RUNTIME_FALLBACK_DIR` or
-   `TRINETRA_DATA_DIR`), and only then does the boot-time demo seed kick in —
-   so a persistent database that already holds operator data is never seeded
-   over.
+3. **A read-only / serverless host is detected and worked around** in
+   `app/core/config.py` + `app/core/bootstrap.py`: if the code tree is not
+   writable **or** the process is on Vercel / Cloud Run / Lambda
+   (`VERCEL`/`VERCEL_ENV`/`VERCEL_REGION`, `AWS_LAMBDA_FUNCTION_NAME`,
+   `FUNCTION_TARGET`, `K_SERVICE`), all writable paths move to a temp root
+   (override with `RUNTIME_FALLBACK_DIR` or `TRINETRA_DATA_DIR`) and the
+   storage is reported as `EPHEMERAL` even though Vercel's working dir is
+   writable.  The demo grid then seeds on a blank install with **no env var**
+   (`AUTO_SEED_DEMO` is an explicit override only) and `/api/health`
+   surfaces it as `components.demo_data: "SEEDED 30/22/5"` (or
+   `SKIPPED`/`FAILED`) so the state is debuggable from the browser.  Boot
+   seeding is atomic — a failure rolls back to the savepoint and the 4
+   `init_db` rows remain, so the registry is never left with 0 rows.

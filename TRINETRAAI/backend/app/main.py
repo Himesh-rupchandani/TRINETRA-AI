@@ -21,7 +21,8 @@ from sqlalchemy import text
 from .core.config import settings
 from .core.logging_config import logger
 from .core.vision import vision_available, vision_status, warn_once
-from .core.bootstrap import ensure_demo_dataset, storage_report
+from .core.bootstrap import ensure_demo_dataset, get_demo_seed_report, storage_report
+from .core.bootstrap import _format_demo_data  # internal, but stable for health
 from .database.database import init_db, get_db, SessionLocal
 from .database.models import Camera
 from .database.schemas import HealthResponse
@@ -56,8 +57,18 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager for database initialization and camera streams."""
     logger.info("Starting TRINETRA AI Surveillance Engine...")
 
-    # 1. Initialize DB tables (creates vehicle_events + alert ack fields)
-    init_db()
+    # 1. Ensure tables exist before we probe blank DB.  init_db() also does this,
+    # but we need the tables before the demo-seed probe because the new atomic
+    # rule is strict: cameras==0 and events==0.  A fresh DB has 0 rows; demo adds
+    # 30, then init_db sees 30 and skips its 4 bootstrap.  This order is what
+    # makes the 30/22/5 grid appear on a cold serverless start with NO env var.
+    from app.database.models import Base
+    from app.database.database import engine as _engine, _auto_migrate
+    try:
+        Base.metadata.create_all(bind=_engine)
+        _auto_migrate(_engine)
+    except Exception as e:
+        logger.warning(f"DB table ensure before demo seed failed: {e}")
 
     # 1a. Serverless/read-only awareness. On a host whose database starts
     # empty every cold start (Vercel, Cloud Run) the registry would otherwise
@@ -72,6 +83,10 @@ async def lifespan(app: FastAPI):
             logger.info(f"Demo dataset ready: {seed_report['cameras']} cameras, {seed_report['events']} events.")
     finally:
         seed_db.close()
+
+    # 1b. Bootstrap 4 cameras if still blank (persistent blank or demo failed/ skipped)
+    # init_db is idempotent — after a successful demo it sees 30 and does nothing.
+    init_db()
     warn_once(logger)
 
     # 1b. Ensure evidence root exists (backend+frontend only mode may not have cv-engine folder)
@@ -172,9 +187,18 @@ def health_check(db: Session = Depends(get_db)):
 
     cam_list = camera_manager.list_cameras()
     active_count = sum(1 for c in cam_list if c["is_alive"])
+    # total_cameras is the registry size (DB count) — not the in-memory
+    # manager size.  On a vision-less host (Vercel, TRINETRA_API_ONLY) the
+    # manager is intentionally empty, but the registry, map and GIS must still
+    # report 31 cameras (30 grid + CAMLIVE).
+    try:
+        db_total = db.query(Camera).count()
+    except Exception:
+        db_total = len(cam_list)
 
     vis = vision_status()
     storage = storage_report()
+    demo_report = get_demo_seed_report()
     components = {
         "api": "HEALTHY",
         "database": "HEALTHY" if db_ok else "UNHEALTHY",
@@ -187,6 +211,7 @@ def health_check(db: Session = Depends(get_db)):
         # features are genuinely off, and the control room should say so.
         "cv_pipeline": "HEALTHY" if vis["available"] else "DISABLED (API-only: no cv2/numpy)",
         "storage": storage["mode"],
+        "demo_data": _format_demo_data(demo_report),
     }
 
     return HealthResponse(
@@ -196,7 +221,7 @@ def health_check(db: Session = Depends(get_db)):
         environment=settings.APP_ENV,
         database_connected=db_ok,
         active_cameras=active_count,
-        total_cameras=len(cam_list),
+        total_cameras=db_total,
         demo_mode=settings.DEMO_MODE,
         timestamp=datetime.now(timezone.utc),
         components=components,
