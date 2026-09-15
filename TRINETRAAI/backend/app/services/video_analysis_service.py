@@ -29,7 +29,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import cv2
+# Resolved through app/core/vision so the API also boots on hosts without the
+# CV extras (serverless/API-only mode) — see that module for the contract.
+from ..core.vision import cv2
 
 from ..core.config import settings
 from ..core.logging_config import logger
@@ -63,7 +65,6 @@ _worker_lock = threading.Lock()
 _active_workers: Dict[str, threading.Thread] = {}
 _worker_slots_sem: Optional[threading.Semaphore] = None
 
-
 def _worker_slots() -> threading.Semaphore:
     """
     Bound how many videos are decoded + inferred at the same time.
@@ -79,10 +80,8 @@ def _worker_slots() -> threading.Semaphore:
             _worker_slots_sem = threading.Semaphore(n)
         return _worker_slots_sem
 
-
 class AnalysisError(Exception):
     """User-facing error (message is displayed verbatim in the UI)."""
-
 
 # ---------------------------------------------------------------------------
 # Paths & identifiers
@@ -93,20 +92,16 @@ class AnalysisError(Exception):
 def _backend_root() -> Path:
     return BACKEND_ROOT
 
-
 def analysis_dir() -> Path:
     return analysis_root()
 
-
 def _evidence_root() -> Path:
     return evidence_root()
-
 
 def safe_filename(name: str) -> str:
     base = os.path.basename(name or "video.mp4")
     base = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._") or "video.mp4"
     return base[:120]
-
 
 def camera_id_from_filename(filename: str) -> str:
     """
@@ -119,7 +114,6 @@ def camera_id_from_filename(filename: str) -> str:
     cid = re.sub(r"[^A-Za-z0-9]+", "_", stem).upper().strip("_")
     return cid[:40] or "VIDEO"
 
-
 def unique_camera_id(db, desired: str) -> str:
     """First free camera id based on ``desired`` (CAM1, CAM1_2, CAM1_3, ...)."""
     taken = {str(r[0]).upper() for r in db.query(Camera.camera_id).all()}
@@ -129,7 +123,6 @@ def unique_camera_id(db, desired: str) -> str:
     while f"{desired.upper()}_{i}" in taken:
         i += 1
     return f"{desired.upper()}_{i}"
-
 
 def _unique_path(directory: Path, file_name: str) -> Path:
     target = directory / safe_filename(file_name)
@@ -141,14 +134,12 @@ def _unique_path(directory: Path, file_name: str) -> Path:
         i += 1
     return directory / f"{stem}_{i}{ext}"
 
-
 def format_offset(seconds: Optional[float]) -> str:
     """134.2 -> '00:02:14'."""
     if seconds is None:
         return "--:--:--"
     s = max(0, int(seconds))
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
-
 
 # ---------------------------------------------------------------------------
 # Probing
@@ -188,7 +179,6 @@ def probe_video(path: Path) -> dict:
         }
     finally:
         cap.release()
-
 
 # ---------------------------------------------------------------------------
 # Registration
@@ -255,7 +245,6 @@ def _register(
     )
     return video
 
-
 def register_upload(db, filename: str, data: bytes, batch_id: str,
                     camera_id: Optional[str] = None) -> VideoSource:
     """Persist an uploaded file and register it for analysis."""
@@ -284,7 +273,6 @@ def register_upload(db, filename: str, data: bytes, batch_id: str,
         path.unlink(missing_ok=True)
         raise
 
-
 def register_gdrive(db, url: str, batch_id: str, camera_id: Optional[str] = None) -> VideoSource:
     """Validate + download a shared Drive video and register it for analysis."""
     from . import gdrive_service
@@ -308,7 +296,6 @@ def register_gdrive(db, url: str, batch_id: str, camera_id: Optional[str] = None
         path.unlink(missing_ok=True)
         raise
 
-
 def delete_video(db, video_id: str) -> None:
     video = db.query(VideoSource).filter(VideoSource.video_id == video_id).first()
     if not video:
@@ -326,7 +313,6 @@ def delete_video(db, video_id: str) -> None:
             pass
     db.delete(video)
     db.commit()
-
 
 # ---------------------------------------------------------------------------
 # Processing
@@ -369,7 +355,6 @@ def start_analysis(db, video_ids: Optional[List[str]] = None) -> List[VideoSourc
         _spawn(video.video_id)
     return queued
 
-
 def _spawn(video_id: str) -> None:
     with _worker_lock:
         existing = _active_workers.get(video_id)
@@ -380,7 +365,6 @@ def _spawn(video_id: str) -> None:
         )
         _active_workers[video_id] = thread
     thread.start()
-
 
 def _broadcast(kind: str, payload: dict) -> None:
     """Best-effort realtime notification from a worker thread.
@@ -394,7 +378,6 @@ def _broadcast(kind: str, payload: dict) -> None:
         ws_manager.broadcast_threadsafe(kind, payload)
     except Exception as exc:
         logger.warning(f"[ANALYSIS] realtime broadcast failed: {exc}")
-
 
 def _run_video(video_id: str) -> None:
     slots = _worker_slots()
@@ -692,7 +675,6 @@ def _run_video(video_id: str) -> None:
         with _worker_lock:
             _active_workers.pop(video_id, None)
 
-
 # ---------------------------------------------------------------------------
 # Serialisation
 # ---------------------------------------------------------------------------
@@ -725,13 +707,11 @@ def video_to_dict(video: VideoSource) -> dict:
         "completed_at": video.completed_at,
     }
 
-
 def list_videos(db, batch_id: Optional[str] = None) -> List[dict]:
     q = db.query(VideoSource)
     if batch_id:
         q = q.filter(VideoSource.batch_id == batch_id)
     return [video_to_dict(v) for v in q.order_by(VideoSource.id.asc()).all()]
-
 
 def batch_status(db, batch_id: Optional[str] = None) -> dict:
     videos = list_videos(db, batch_id)

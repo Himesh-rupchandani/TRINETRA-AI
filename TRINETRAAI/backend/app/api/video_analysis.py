@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..core.logging_config import logger
+from ..core.vision import require_vision
 from ..database.database import get_db
 from ..database.models import VehicleEvent, VideoSource
 from ..services import gdrive_service, plate_matching
@@ -170,7 +171,11 @@ def delete_video(video_id: str, db: Session = Depends(get_db)):
 # Processing
 # ---------------------------------------------------------------------------
 
-@router.post("/run", summary="Run the detection + ANPR pipeline on the videos")
+@router.post(
+    "/run",
+    summary="Run the detection + ANPR pipeline on the videos",
+    dependencies=[Depends(require_vision)],
+)
 def run_analysis(payload: Optional[RunRequest] = None, db: Session = Depends(get_db)):
     ids = payload.video_ids if payload else None
     try:

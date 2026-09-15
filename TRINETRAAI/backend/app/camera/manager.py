@@ -4,8 +4,6 @@ from pathlib import Path
 import threading
 import time
 from typing import Dict, List, Optional, Callable
-import cv2
-import numpy as np
 
 # Allow running this file directly as a script
 if __name__ == "__main__" and not __package__:
@@ -15,6 +13,10 @@ if __name__ == "__main__" and not __package__:
         if str(p) not in sys.path:
             sys.path.insert(0, str(p))
     __package__ = "backend.app.camera"
+
+# Resolved through app/core/vision so the API also boots on hosts without the
+# CV extras (serverless/API-only mode) — see that module for the contract.
+from ..core.vision import cv2, np
 
 from ..core.config import settings
 from ..core.logging_config import logger
@@ -484,7 +486,6 @@ class CameraManager:
                 time.sleep(0.5)
 
         logger.info(f"[{camera_id}] Ingestion worker terminated.")
-
 
 # Global singleton instance
 camera_manager = CameraManager()

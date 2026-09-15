@@ -18,8 +18,9 @@ import threading
 from dataclasses import dataclass
 from typing import List, Optional
 
-import cv2
-import numpy as np
+# Resolved through app/core/vision so the API also boots on hosts without the
+# CV extras (serverless/API-only mode) — see that module for the contract.
+from ..core.vision import cv2, np
 
 from ..core.config import settings
 from ..core.logging_config import logger
@@ -32,14 +33,12 @@ from ..utils.plate_normalizer import INDIAN_PLATE_RE, normalize_plate
 # pipeline rejected it — the two layers disagreed on the same OCR read.
 _INDIAN_PLATE = INDIAN_PLATE_RE
 
-
 @dataclass
 class PlateReading:
     raw: str
     normalized: str
     confidence: float  # 0.0 - 1.0
     indian_format: bool
-
 
 def _clip(x1: float, y1: float, x2: float, y2: float, w: int, h: int, pad: float = 0.0):
     bw, bh = x2 - x1, y2 - y1
@@ -52,7 +51,6 @@ def _clip(x1: float, y1: float, x2: float, y2: float, w: int, h: int, pad: float
     if x2 - x1 < 8 or y2 - y1 < 8:
         return None
     return x1, y1, x2, y2
-
 
 def extract_plate_crops(frame: np.ndarray, bbox, vehicle_class: str = "car") -> List[np.ndarray]:
     """Candidate plate-region crops for one detected vehicle, best-first."""
@@ -68,7 +66,6 @@ def extract_plate_crops(frame: np.ndarray, bbox, vehicle_class: str = "car") -> 
         crops.append(frame[box[1]:box[3], box[0]:box[2]].copy())
     return crops
 
-
 def preprocess_for_ocr(crop: np.ndarray, target_width: int = 320) -> np.ndarray:
     if crop is None or crop.size == 0:
         return crop
@@ -79,7 +76,6 @@ def preprocess_for_ocr(crop: np.ndarray, target_width: int = 320) -> np.ndarray:
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     gray = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-
 
 def upscale_plate(crop: np.ndarray, target_height: int = 64, max_scale: float = 6.0) -> np.ndarray:
     """
@@ -102,7 +98,6 @@ def upscale_plate(crop: np.ndarray, target_height: int = 64, max_scale: float = 
                      interpolation=cv2.INTER_LANCZOS4)
     blurred = cv2.GaussianBlur(out, (0, 0), 1.2)
     return cv2.addWeighted(out, 1.6, blurred, -0.6, 0)
-
 
 def preprocess_variants(crop: np.ndarray) -> List[np.ndarray]:
     """
@@ -139,7 +134,6 @@ def preprocess_variants(crop: np.ndarray) -> List[np.ndarray]:
     variants.append(base)
     return variants
 
-
 def candidate_from_text(text: str) -> Optional[str]:
     """Normalize one OCR line; return None when it is obviously not a plate."""
     if not text:
@@ -152,7 +146,6 @@ def candidate_from_text(text: str) -> Optional[str]:
     if not any(ch.isalpha() for ch in norm):
         return None
     return norm
-
 
 class OcrService:
     """Singleton OCR wrapper with graceful degradation to Unknown plates."""
@@ -284,7 +277,6 @@ class OcrService:
             if best is not None and best.confidence >= 0.9 and best.indian_format:
                 break
         return best
-
 
 # Global singleton — the OCR model is loaded once per backend process.
 ocr_service = OcrService()

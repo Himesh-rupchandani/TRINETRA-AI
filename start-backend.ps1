@@ -40,7 +40,7 @@ Write-Host "Activating venv..." -ForegroundColor Yellow
 
 # Install requirements
 Write-Host "Installing requirements..." -ForegroundColor Yellow
-pip install -r requirements.txt
+pip install -r requirements-ml.txt
 
 # ultralytics may pull GUI OpenCV after the headless wheel. Repair cv2 with
 # the active venv interpreter so the backend also works on headless systems.

@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-import numpy as np
+
+from ..core.vision import np
 
 
 class CameraState(str, Enum):
@@ -12,7 +13,6 @@ class CameraState(str, Enum):
     DEGRADED = "DEGRADED"
     RECONNECTING = "RECONNECTING"
     STOPPED = "STOPPED"
-
 
 @dataclass
 class FramePacket:

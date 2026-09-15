@@ -20,7 +20,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import cv2
+# Resolved through app/core/vision so the API also boots on hosts without the
+# CV extras (serverless/API-only mode) — see that module for the contract.
+from ..core.vision import cv2
 
 from ..core.config import settings
 from ..core.logging_config import logger
@@ -43,34 +45,28 @@ FAILED = "FAILED"
 _jobs_lock = threading.Lock()
 _jobs: Dict[str, dict] = {}
 
-
 # Path resolution is centralized in app.core.paths so the API read side and
 # this write side can never disagree (relative EVIDENCE_ROOT used to resolve
 # against the process CWD in one place and the backend root in another).
 def _backend_root() -> Path:
     return BACKEND_ROOT
 
-
 def upload_dir() -> Path:
     return upload_root()
 
-
 def _evidence_root() -> Path:
     return evidence_root()
-
 
 def _safe_filename(name: str) -> str:
     base = os.path.basename(name or "upload.mp4")
     base = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._") or "upload.mp4"
     return base[:120]
 
-
 def normalise_camera_id(camera_id: str) -> str:
     cam = re.sub(r"[^A-Za-z0-9_-]", "", (camera_id or "").strip()).upper()
     if not cam:
         raise ValueError("Camera ID is required (e.g. CAM1).")
     return cam
-
 
 def next_camera_id(db) -> str:
     """First free CAM<n> id (CAM1, CAM2, ...). Sample metadata only."""
@@ -79,7 +75,6 @@ def next_camera_id(db) -> str:
     while f"CAM{n}" in existing:
         n += 1
     return f"CAM{n}"
-
 
 def is_uploaded_camera(cam: Camera) -> bool:
     try:
@@ -91,9 +86,7 @@ def is_uploaded_camera(cam: Camera) -> bool:
     except Exception:
         return False
 
-
 UPLOAD_CHUNK_BYTES = 1024 * 1024
-
 
 def _validate_upload_suffix(filename: str) -> str:
     """Return the sanitized filename, rejecting unsupported container types."""
@@ -106,10 +99,8 @@ def _validate_upload_suffix(filename: str) -> str:
         )
     return safe
 
-
 def _max_upload_bytes() -> int:
     return int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
-
 
 def _unique_target(safe: str) -> Path:
     target = upload_dir() / safe
@@ -120,7 +111,6 @@ def _unique_target(safe: str) -> Path:
             i += 1
         target = upload_dir() / f"{stem}_{i}{ext}"
     return target
-
 
 class UploadWriter:
     """Memory-safe writer for one uploaded video.
@@ -196,11 +186,9 @@ class UploadWriter:
         if exc_type is not None or not self._closed:
             self._discard()
 
-
 def open_upload_writer(filename: str) -> UploadWriter:
     """Context manager that streams one upload to disk (see ``UploadWriter``)."""
     return UploadWriter(filename)
-
 
 def save_upload(filename: str, data: bytes) -> Path:
     """Persist an in-memory upload; returns its absolute path.
@@ -211,7 +199,6 @@ def save_upload(filename: str, data: bytes) -> Path:
     with open_upload_writer(filename) as writer:
         writer.write(data)
         return writer.finish()
-
 
 def get_job(camera_id: str) -> dict:
     with _jobs_lock:
@@ -230,12 +217,10 @@ def get_job(camera_id: str) -> dict:
             }
         return dict(job)
 
-
 def _set_job(camera_id: str, **fields) -> None:
     with _jobs_lock:
         job = _jobs.setdefault(camera_id.upper(), {"job_status": IDLE})
         job.update(fields)
-
 
 def summaries(db) -> List[dict]:
     """Uploaded cameras + their job state, newest first."""
@@ -257,13 +242,11 @@ def summaries(db) -> List[dict]:
         )
     return out
 
-
 def format_video_offset(seconds: Optional[float]) -> str:
     if seconds is None:
         return "--:--:--"
     s = max(0, int(seconds))
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
-
 
 # ---------------------------------------------------------------------------
 # Background processing
@@ -292,7 +275,6 @@ def start_processing(camera_id: str) -> dict:
     thread.start()
     return get_job(cam_id)
 
-
 def _broadcast(payload: dict, kind: str) -> None:
     """Best-effort realtime notification from a worker thread.
 
@@ -307,7 +289,6 @@ def _broadcast(payload: dict, kind: str) -> None:
         ws_manager.broadcast_threadsafe(kind, payload)
     except Exception as exc:
         logger.warning(f"[UPLOAD:{payload.get('camera_id', '?')}] realtime broadcast failed: {exc}")
-
 
 def _process_video(camera_id: str) -> None:
     db = SessionLocal()

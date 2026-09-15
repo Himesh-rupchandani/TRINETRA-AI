@@ -1,6 +1,33 @@
+import os
+import tempfile
+from pathlib import Path
 from typing import List, Union
-from pydantic import field_validator
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# app/core/config.py -> parents[2] == TRINETRAAI/backend. Mirrors the anchor
+# rule in app/core/paths.py; repeated here because that module imports this one
+# (and this check runs while `settings` is still being constructed).
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _writable(dirpath: Path) -> bool:
+    """True when `dirpath` exists (or can be created) and accepts writes."""
+    probe = None
+    try:
+        dirpath.mkdir(parents=True, exist_ok=True)
+        probe = dirpath / ".trinetra-write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        return True
+    except Exception:
+        return False
+    finally:
+        if probe is not None:
+            try:
+                probe.unlink()
+            except Exception:
+                pass
 
 
 class Settings(BaseSettings):
@@ -95,6 +122,13 @@ class Settings(BaseSettings):
     # Alert deduplication cooldown window (seconds)
     ALERT_DEDUP_COOLDOWN_SECONDS: int = 180
 
+    # Shared secret for POST /api/internal/* (Sentinel catalogue sync etc.).
+    # Empty means "not configured". There is deliberately NO default token in
+    # the source: a value committed to a public repository is public. In
+    # development/demo mode internal endpoints stay open for local tooling; in
+    # production an unconfigured key disables them (see app/api/internal.py).
+    INTERNAL_API_KEY: str = ""
+
     # Sentinel CCTV catalogue sync URL
     SENTINEL_CATALOGUE_URL: str = "https://cctv.corp8.cloud/cameras.json"
 
@@ -121,6 +155,20 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 250
     UPLOAD_DIR: str = "uploads"
 
+    # ---- Serverless / read-only-filesystem behaviour -----------------------
+    # When the code directory cannot be written to (Vercel/Cloud Run mount the
+    # function bundle read-only), every writable path is relocated under
+    # RUNTIME_FALLBACK_DIR automatically. Empty means "nothing was relocated".
+    RUNTIME_DATA_ROOT: str = ""
+    RUNTIME_FALLBACK_DIR: str = ""   # empty -> <tempdir>/trinetra
+    # Seed the 30-camera demo grid + GJ01AB1234 journey when the database is
+    # born empty. Explicit opt-in for persistent hosts; on an ephemeral
+    # serverless filesystem (see RUNTIME_DATA_ROOT below) it happens
+    # automatically, because a database that starts blank and dies with the
+    # instance can only ever be demo data — nothing of the operator's is at
+    # risk. A populated registry is never rewritten.
+    AUTO_SEED_DEMO: bool = False
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
@@ -135,6 +183,65 @@ class Settings(BaseSettings):
         elif isinstance(v, list):
             return v
         return ["*"]
+
+    @model_validator(mode="after")
+    def _relocate_unwritable_storage(self) -> "Settings":
+        """Move every writable path under a temp root when the code tree is read-only.
+
+        Serverless platforms (Vercel, Cloud Run, AWS Lambda) mount the deployed
+        bundle read-only: only their temp directory accepts writes. Without this
+        the first SQLite write of the boot sequence raises `attempt to write a
+        readonly database`, which looks exactly like a broken API. So each
+        configured storage location is probed once, and on failure all of them
+        are relocated together — the read side (`/api/evidence/...`) and the
+        write side (pipelines) then still agree, because they re-read these
+        values through `app.core.paths`.
+        """
+        def sqlite_file(url: str) -> Path | None:
+            if not url.startswith("sqlite"):
+                return None
+            raw = url.split("///", 1)[1] if "///" in url else ""
+            if not raw:
+                return None
+            p = Path(raw).expanduser()
+            # SQLAlchemy resolves a relative SQLite path against the CWD.
+            return p if p.is_absolute() else (Path.cwd() / p)
+
+        candidates = [sqlite_file(self.DATABASE_URL)]
+        for raw in (self.EVIDENCE_ROOT, self.UPLOAD_DIR, self.ANALYSIS_DIR):
+            p = Path(str(raw)).expanduser()
+            candidates.append(p if p.is_absolute() else (_BACKEND_ROOT / p))
+
+        if all(c is None or _writable(c.parent) for c in candidates):
+            return self
+
+        raw_root = (self.RUNTIME_FALLBACK_DIR or os.environ.get("TRINETRA_DATA_DIR") or "").strip()
+        root = Path(raw_root).expanduser() if raw_root else Path(tempfile.gettempdir()) / "trinetra"
+        if not _writable(root):
+            # The configured/explicit fallback is not usable either — take the
+            # one location serverless platforms guarantee is writable.
+            root = Path(tempfile.gettempdir()) / "trinetra"
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Nowhere writable at all: leave the config untouched and let the
+            # failure surface at its real source instead of hiding it here.
+            return self
+
+        root = root.resolve()
+        if self.DATABASE_URL.startswith("sqlite"):
+            name = Path(sqlite_file(self.DATABASE_URL) or "trinetra.db").name
+            self.DATABASE_URL = f"sqlite:///{root / name}"
+        self.EVIDENCE_ROOT = str(root / "evidence")
+        self.UPLOAD_DIR = str(root / "uploads")
+        self.ANALYSIS_DIR = str(root / "uploads" / "analysis")
+        self.RUNTIME_DATA_ROOT = str(root)
+        return self
+
+    @property
+    def ephemeral_storage(self) -> bool:
+        """True when storage was relocated to a temp dir that dies with the instance."""
+        return bool(self.RUNTIME_DATA_ROOT)
 
     model_config = SettingsConfigDict(
         env_file=".env",
