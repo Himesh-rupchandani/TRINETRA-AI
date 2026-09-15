@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { TopNav } from '@/components/layout/TopNav';
 import { HeroBanner } from '@/components/layout/HeroBanner';
 import { AlertBanner } from '@/components/layout/AlertBanner';
+import { BackendCheck } from '@/components/layout/BackendCheck';
 import { LiveAlertToaster } from '@/features/alerts/LiveAlertToaster';
 import { Tour } from '@/features/tour/Tour';
 import { tourStore } from '@/features/tour/tourStore';
@@ -35,6 +36,10 @@ export function MainLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-surface-0">
       <Header />
+      {/* Deployment self-diagnosis: renders only when this origin cannot serve
+          the API (or seeded it badly), so `0/0` and `0/1` always come with a
+          reason. See lib/backendStatus.ts. */}
+      <BackendCheck />
       {isHome && <AlertBanner />}
       {isHome && <HeroBanner />}
       <TopNav />

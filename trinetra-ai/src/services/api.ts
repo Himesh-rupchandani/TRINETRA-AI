@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import { config } from '@/lib/config';
+import { backendMissingMessage, isSpaFallbackBody } from '@/lib/backendStatus';
 
 /**
  * Single axios instance for the whole app.
@@ -48,13 +49,34 @@ http.interceptors.response.use(
   },
 );
 
+/**
+ * A JSON endpoint that answers with the SPA's own HTML shell is a DEPLOYMENT
+ * shape, not data: Vercel serves `/api/*` from the `backend` service only when
+ * the project's Root Directory is the repository root, so a frontend-rooted
+ * project hands `index.html` back with a `200`. axios returns that HTML as a
+ * string, callers read zero rows, and the dashboard rendered an empty grid
+ * (`0/0`) instead of naming the problem.
+ *
+ * Failing loudly here is what keeps that class of bug visible:
+ * `lib/backendStatus.ts` explains the cause, and `MainLayout` shows that
+ * explanation to the operator.
+ */
+function assertJsonBody(url: string, data: unknown): void {
+  if (!isSpaFallbackBody(data)) return;
+  const origin =
+    typeof window !== 'undefined' && window.location ? window.location.origin : config.apiBaseUrl;
+  throw new ApiError(`${config.apiBaseUrl}${url} — ${backendMissingMessage(origin, url, 200)}`, 200);
+}
+
 export async function get<T>(url: string, cfg?: AxiosRequestConfig): Promise<T> {
   const res = await http.get<T>(url, cfg);
+  assertJsonBody(url, res.data);
   return res.data;
 }
 
 export async function post<T>(url: string, body?: unknown, cfg?: AxiosRequestConfig): Promise<T> {
   const res = await http.post<T>(url, body, cfg);
+  assertJsonBody(url, res.data);
   return res.data;
 }
 
