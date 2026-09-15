@@ -16,9 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install python dependencies first for efficient layer caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install python dependencies first for efficient layer caching.
+# The image is the FULL deployment: it must decode frames and run ANPR, so it
+# takes requirements-ml.txt (which also installs the core API set). For an
+# API-only image, swap the file and drop ffmpeg/libgl from the apt line.
+COPY requirements.txt requirements-ml.txt ./
+RUN pip install --no-cache-dir -r requirements-ml.txt
 
 # Copy application source
 COPY . .

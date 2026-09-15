@@ -30,8 +30,9 @@ import threading
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
-import cv2
-import numpy as np
+# Resolved through app/core/vision so the API also boots on hosts without the
+# CV extras (serverless/API-only mode) — see that module for the contract.
+from ..core.vision import cv2, np
 
 from ..core.config import settings
 from ..core.logging_config import logger
@@ -63,7 +64,6 @@ class PlateBox:
     def as_list(self) -> List[int]:
         return [self.x1, self.y1, self.x2, self.y2]
 
-
 def _clip(x1, y1, x2, y2, w, h, pad_x: float = 0.0, pad_y: float = 0.0):
     bw, bh = x2 - x1, y2 - y1
     x1 -= pad_x * bw
@@ -75,7 +75,6 @@ def _clip(x1, y1, x2, y2, w, h, pad_x: float = 0.0, pad_y: float = 0.0):
     if x2 - x1 < 4 or y2 - y1 < 4:
         return None
     return x1, y1, x2, y2
-
 
 class PlateDetectorService:
     """Thread-safe singleton. The learned model (when present) loads once."""
@@ -288,6 +287,5 @@ class PlateDetectorService:
         if vy2 - top < 6:
             top = vy1
         return [PlateBox(vx1, top, vx2, vy2, confidence=0.05, source="heuristic")]
-
 
 plate_detector_service = PlateDetectorService()

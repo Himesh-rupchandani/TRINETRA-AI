@@ -16,6 +16,7 @@ Hybrid CCTV intelligence platform for the Gujarat Police Innovation Hackathon.
 | Backend | `TRINETRAAI/backend/` | FastAPI: event ingestion, watchlist matching, alert dedup, GIS vehicle routes, Sentinel catalogue sync, WebSocket realtime |
 | Frontend | `trinetra-ai/` | Dashboard, camera grid, investigation & GIS views |
 | **Detection module** | [`trinetra_detection/`](trinetra_detection/README.md) | Standalone YOLO11 vehicle + number-plate detection (image / video / webcam-RTSP). Fully independent — no backend or DB needed |
+| **Deployment** | [`vercel.json`](vercel.json) + [`DEPLOY_VERCEL.md`](DEPLOY_VERCEL.md) | One Vercel project, two services: SPA on the CDN + FastAPI as a function under the same origin at `/api` |
 
 ## Standalone detection module (YOLO11 vehicle + number-plate)
 
@@ -57,7 +58,7 @@ No cv-engine, no heavy ML models needed. 2 terminals.
 cd "TRINETRAAI\backend"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r requirements.txt   # API set. Add `-ml` variant for live video/ANPR
 python ..\..\scripts\ensure_headless_opencv.py  # keep cv2 server-safe on Windows/Linux
 python -m scripts.seed_demo   # seeds 30 cameras ONLINE (auto-fixes stale 4-camera DB)
 uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -80,7 +81,7 @@ npm run dev
 **Linux / macOS:**
 
 ```bash
-cd TRINETRAAI/backend && pip install -r requirements.txt
+cd TRINETRAAI/backend && pip install -r requirements-ml.txt
 python ../../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python -m scripts.seed_demo
 uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -98,7 +99,7 @@ See `WINDOWS_SETUP.md` for detailed OFFLINE/404 troubleshooting.
 
 ```bash
 # Backend (port 8000)
-cd TRINETRAAI/backend && pip install -r requirements.txt
+cd TRINETRAAI/backend && pip install -r requirements-ml.txt
 python ../../scripts/ensure_headless_opencv.py  # repair GUI/headless cv2 conflicts
 python -m scripts.seed_demo
 # Point every registry camera at a local traffic clip (offline demo) —
@@ -268,10 +269,33 @@ honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
 > compiled into the browser bundle. `VITE_BACKEND_ORIGIN` is not read by
 > anything — setting it silently leaves the proxy at its default target.
 
+## Deploying to Vercel (frontend + backend on one domain)
+
+`vercel.json` uses [Vercel Services](https://vercel.com/docs/services): the Vite
+SPA builds from `trinetra-ai/`, the FastAPI app runs from `TRINETRAAI/backend/`
+as a function, and a rewrite puts it on the **same origin** at `/api` — so the
+deployed site needs no CORS and no second URL.
+
+The backend boots in **API-only mode** there: `requirements.txt` is the API
+dependency set (CV extras moved to `requirements-ml.txt`), `app/core/vision.py`
+resolves `cv2`/`numpy` lazily so the app imports without them and the
+frame-level routes answer a clear `503`, unwritable storage paths are relocated
+to a temp root, and a blank temp database seeds the 30-camera demo grid so a
+cold deploy is not an empty control room.
+
+```bash
+# what a deployed URL must expose (see DEPLOY_VERCEL.md for the env vars)
+curl -s https://<deployment>/api/health | jq '.status, .components.storage'
+```
+
+Live video, WebSockets, big uploads and the CV pipeline itself stay on the
+Docker deployment — `DEPLOY_VERCEL.md` lists exactly what works where, and
+`/api/health` reports `EPHEMERAL` storage rather than pretending writes persist.
+
 ## Tests
 
 ```bash
-cd TRINETRAAI/backend && pytest          # 197 tests (incl. tests/test_bugfix_regressions.py)
+cd TRINETRAAI/backend && pytest          # 221 tests (incl. tests/test_bugfix_regressions.py)
 cd cv-engine && pytest                   # 81 offline tests (3 live-feed tests opt-in)
 cd cv-engine && TRINETRA_LIVE=1 pytest -m live tests/test_live_sentinel.py -v
 cd trinetra-ai && npm test               # 48 frontend contract tests (plain node, no runner)

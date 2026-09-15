@@ -20,7 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
-import numpy as np
+# Resolved through app/core/vision so the API also boots on hosts without the
+# CV extras (serverless/API-only mode) — see that module for the contract.
+from ..core.vision import np
 
 from ..core.config import settings
 from ..utils.plate_normalizer import INDIAN_PLATE_RE, LOOSE_PLATE_RE
@@ -38,7 +40,6 @@ PLATE_STATUS_HIGH = "HIGH"
 PLATE_STATUS_LOW = "LOW_CONFIDENCE"
 PLATE_STATUS_UNKNOWN = "UNKNOWN"
 
-
 @dataclass
 class PlateRead:
     """One plate reading for one vehicle in one frame."""
@@ -55,7 +56,6 @@ class PlateRead:
         low = float(getattr(settings, "OCR_LOW_CONFIDENCE_MARK", 0.80))
         return PLATE_STATUS_HIGH if self.confidence >= low else PLATE_STATUS_LOW
 
-
 def format_score(normalized: str) -> float:
     """1.0 = canonical Indian plate, 0.7 = plausible, 0.45 = generic alnum."""
     if not normalized:
@@ -65,7 +65,6 @@ def format_score(normalized: str) -> float:
     if LOOSE_PLATE_RE.match(normalized):
         return 0.7
     return 0.45
-
 
 def read_plate_for_vehicle(
     frame: np.ndarray,
@@ -121,7 +120,6 @@ def read_plate_for_vehicle(
                 return best
     return best
 
-
 # ---------------------------------------------------------------------------
 # Per-track aggregation
 # ---------------------------------------------------------------------------
@@ -135,7 +133,6 @@ class TrackPlateVote:
     reads: int
     confidence_sum: float
     indian_format: bool
-
 
 class TrackPlateAccumulator:
     """

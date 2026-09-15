@@ -1,25 +1,31 @@
+# TRINETRA AI backend — core runtime dependencies
+# =================================================
+# Everything needed to serve the API: registry, events, watchlist, alerts,
+# vehicle investigation + GIS routes, stats, bandwidth/speed/insights engines,
+# BSA reports, SSE realtime. Deliberately WITHOUT the computer-vision stack so
+# this set can run where a 2 GB torch install cannot: serverless functions
+# (Vercel/Cloud Run), CI containers, or a machine that only needs the data API.
+#
+# Frame decoding, live MJPEG, vehicle detection and ANPR need the extras in
+# requirements-ml.txt. app/core/vision.py resolves both lazily, so the app
+# imports cleanly either way and the CV routes answer 503 with an explanation
+# instead of crashing at boot.
+#
+#   Full local/Docker CV deployment:  pip install -r requirements-ml.txt
+#   API-only / serverless:            pip install -r requirements.txt
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
 pydantic-settings>=2.2.0
 sqlalchemy>=2.0.28
-alembic>=1.13.1
 python-dotenv>=1.0.1
 python-multipart>=0.0.9
-# OpenCV is repaired after dependency installation by:
-#   python ../../scripts/ensure_headless_opencv.py
-# (ultralytics declares GUI opencv-python, so listing the headless wheel here
-# alone is not enough to make pip choose the server-safe build.)
-numpy>=1.26.0
-pillow>=10.2.0
 httpx>=0.27.0
-# Real-time vehicle detection (YOLO11) for the live view. CPU-only torch is
-# enough: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-ultralytics>=8.3.0
-# ANPR/OCR for uploaded CCTV videos (bundled ONNX models — works fully offline).
-# The pipeline degrades gracefully to "Unknown" plates when this is absent.
-rapidocr-onnxruntime>=1.0.0
+# Postgres driver, so a durable database is an env-var change
+# (DATABASE_URL=postgresql+psycopg://…) instead of a redeploy of new code.
+# Harmless on SQLite-only hosts — it is never imported there.
+psycopg[binary]>=3.1.18
+
+# Test suite (also used by the frontend-contract runner)
 pytest>=8.1.0
 pytest-asyncio>=0.23.0
-# Server-safe cv2 provider; run the helper above after pip resolves all deps.
-opencv-python-headless>=4.9.0

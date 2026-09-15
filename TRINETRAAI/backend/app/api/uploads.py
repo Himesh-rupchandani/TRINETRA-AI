@@ -17,6 +17,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.logging_config import logger
+from ..core.vision import require_vision
 from ..database.database import get_db
 from ..database.models import Camera, VehicleEvent
 from ..database.schemas import (
@@ -177,7 +178,11 @@ def get_uploaded_video(camera_id: str, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/videos/{camera_id}/process", response_model=UploadedVideoResponse)
+@router.post(
+    "/videos/{camera_id}/process",
+    response_model=UploadedVideoResponse,
+    dependencies=[Depends(require_vision)],
+)
 def process_uploaded_video(camera_id: str, db: Session = Depends(get_db)):
     """(Re-)run vehicle + number-plate detection on an uploaded video."""
     cam = (

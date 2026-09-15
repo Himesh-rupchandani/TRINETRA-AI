@@ -51,7 +51,7 @@ fi
 
 if [ ! -d "$BACKEND/.venv" ] && ! python3 -c "import fastapi" 2>/dev/null; then
   echo "📦 Installing backend deps..."
-  (cd "$BACKEND" && pip install -r requirements.txt || pip3 install -r requirements.txt)
+  (cd "$BACKEND" && pip install -r requirements-ml.txt || pip3 install -r requirements-ml.txt)
 fi
 
 # ultralytics may pull GUI OpenCV after the headless wheel. Repair cv2 with the

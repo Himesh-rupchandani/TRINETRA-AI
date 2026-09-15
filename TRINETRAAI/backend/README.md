@@ -50,8 +50,8 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (CV extras included; use requirements.txt for an API-only install)
+pip install -r requirements-ml.txt
 # ultralytics may install GUI OpenCV; repair cv2 for server/headless use
 python ..\..\scripts\ensure_headless_opencv.py
 

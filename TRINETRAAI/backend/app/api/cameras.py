@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
+from ..core.vision import require_vision
 from ..database.database import get_db
 from sqlalchemy import func
 from ..database.models import Camera
@@ -330,7 +331,7 @@ def delete_camera(camera_id: str, db: Session = Depends(get_db)):
     return None
 
 
-@router.post("/{camera_id}/start")
+@router.post("/{camera_id}/start", dependencies=[Depends(require_vision)])
 def start_camera(camera_id: str, db: Session = Depends(get_db)):
     """Start ingestion worker for a camera."""
     cam = db.query(Camera).filter(Camera.camera_id == camera_id).first()
@@ -359,7 +360,7 @@ def start_camera(camera_id: str, db: Session = Depends(get_db)):
     return {"status": "started", "camera_id": camera_id}
 
 
-@router.post("/{camera_id}/stop")
+@router.post("/{camera_id}/stop", dependencies=[Depends(require_vision)])
 def stop_camera(camera_id: str):
     """Stop ingestion worker and release resources for a camera."""
     success = camera_manager.stop_camera(camera_id)
@@ -371,14 +372,14 @@ def stop_camera(camera_id: str):
     return {"status": "stopped", "camera_id": camera_id}
 
 
-@router.post("/{camera_id}/restart")
+@router.post("/{camera_id}/restart", dependencies=[Depends(require_vision)])
 def restart_camera(camera_id: str):
     """Restart stream ingestion for a camera."""
     success = camera_manager.restart_camera(camera_id)
     return {"status": "restarted", "camera_id": camera_id, "success": success}
 
 
-@router.get("/{camera_id}/live")
+@router.get("/{camera_id}/live", dependencies=[Depends(require_vision)])
 def live_mjpeg_stream(camera_id: str, db: Session = Depends(get_db)):
     """
     Live Multipart MJPEG Stream endpoint for browser and dashboard video feeds.
@@ -422,7 +423,7 @@ def live_signal_status(camera_id: str):
     }
 
 
-@router.get("/{camera_id}/live/detect")
+@router.get("/{camera_id}/live/detect", dependencies=[Depends(require_vision)])
 def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
     """
     Live MJPEG stream with real-time OpenCV vehicle detection (green boxes).

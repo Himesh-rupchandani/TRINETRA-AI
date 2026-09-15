@@ -24,8 +24,9 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-import cv2
-import numpy as np
+# Resolved through app/core/vision so the API also boots on hosts without the
+# CV extras (serverless/API-only mode) — see that module for the contract.
+from ..core.vision import cv2, np
 
 from ..core.config import settings
 from ..core.logging_config import logger
@@ -33,7 +34,6 @@ from ..core.logging_config import logger
 # COCO class id -> label, restricted to road vehicles.
 VEHICLE_CLASS_IDS: Dict[int, str] = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 GREEN = (0, 255, 0)  # BGR
-
 
 @dataclass
 class VehicleDetection:
@@ -45,7 +45,6 @@ class VehicleDetection:
     y2: int
     class_name: str
     confidence: float
-
 
 class VehicleDetectionService:
     """Singleton wrapper around a YOLO11 vehicle detector with per-camera throttling."""
@@ -222,7 +221,6 @@ class VehicleDetectionService:
         with self._state_lock:
             self._frame_counter.pop(camera_id, None)
             self._last_detections.pop(camera_id, None)
-
 
 # Global singleton — the model is loaded once per backend process.
 vehicle_detection_service = VehicleDetectionService()

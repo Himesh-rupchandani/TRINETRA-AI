@@ -33,12 +33,24 @@ def verify_internal_auth(
     Validates internal authentication token.
     Allows demo/dev mode bypass when in local development.
     """
-    configured_token = getattr(settings, "INTERNAL_API_KEY", "trinetra-internal-secret")
+    # No default token here on purpose: a secret committed to a public repo is
+    # public, and this endpoint can rewrite the whole camera registry.
+    configured_token = (getattr(settings, "INTERNAL_API_KEY", "") or "").strip()
     provided_token = x_internal_token or auth_token
 
     # In development/demo mode without configured restriction, allow internal requests
     if settings.APP_ENV in ("development", "test") or settings.DEMO_MODE:
         return True
+
+    if not configured_token:
+        logger.warning(
+            "[INTERNAL AUTH] INTERNAL_API_KEY is not configured — internal sync is "
+            "disabled in production rather than falling back to a committed default."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Internal endpoints disabled: set INTERNAL_API_KEY to authorize syncs.",
+        )
 
     if not provided_token or provided_token != configured_token:
         logger.warning("[INTERNAL AUTH] Unauthorized internal sync attempt.")

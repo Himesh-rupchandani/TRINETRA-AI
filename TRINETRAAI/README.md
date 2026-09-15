@@ -16,7 +16,7 @@ docker compose up --build -d
 cd backend
 python -m venv .venv
 .\.venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-ml.txt
 python ..\..\scripts\ensure_headless_opencv.py
 python -m scripts.seed_demo
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

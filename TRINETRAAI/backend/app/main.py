@@ -20,6 +20,8 @@ from sqlalchemy import text
 
 from .core.config import settings
 from .core.logging_config import logger
+from .core.vision import vision_available, vision_status, warn_once
+from .core.bootstrap import ensure_demo_dataset, storage_report
 from .database.database import init_db, get_db, SessionLocal
 from .database.models import Camera
 from .database.schemas import HealthResponse
@@ -57,6 +59,21 @@ async def lifespan(app: FastAPI):
     # 1. Initialize DB tables (creates vehicle_events + alert ack fields)
     init_db()
 
+    # 1a. Serverless/read-only awareness. On a host whose database starts
+    # empty every cold start (Vercel, Cloud Run) the registry would otherwise
+    # be blank and the control room would read as "broken" rather than "fresh".
+    storage = storage_report()
+    if storage.get("mode") != "PERSISTENT":
+        logger.warning(f"Storage mode {storage['mode']}: {storage.get('detail', storage.get('path'))}")
+    seed_db = SessionLocal()
+    try:
+        seed_report = ensure_demo_dataset(seed_db)
+        if seed_report.get("seeded"):
+            logger.info(f"Demo dataset ready: {seed_report['cameras']} cameras, {seed_report['events']} events.")
+    finally:
+        seed_db.close()
+    warn_once(logger)
+
     # 1b. Ensure evidence root exists (backend+frontend only mode may not have cv-engine folder)
     try:
         # Same resolution authority the evidence API and the video pipelines use.
@@ -78,6 +95,15 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error syncing live camera source: {e}")
         cameras = db.query(Camera).all()
+        if not vision_available():
+            # No OpenCV in this process: there is nothing to decode, so do not
+            # build 30 dead stream objects. The registry, events, watchlist,
+            # GIS and reports are all unaffected — only frame-level CV is off.
+            logger.info(
+                f"Skipping CameraManager registration for {len(cameras)} cameras "
+                "(vision stack unavailable — API-only mode)."
+            )
+            cameras = []
         logger.info(f"Registering {len(cameras)} CCTV cameras into CameraManager...")
         for cam in cameras:
             # Resident ingest workers are for REAL network cameras only
@@ -147,6 +173,8 @@ def health_check(db: Session = Depends(get_db)):
     cam_list = camera_manager.list_cameras()
     active_count = sum(1 for c in cam_list if c["is_alive"])
 
+    vis = vision_status()
+    storage = storage_report()
     components = {
         "api": "HEALTHY",
         "database": "HEALTHY" if db_ok else "UNHEALTHY",
@@ -155,6 +183,10 @@ def health_check(db: Session = Depends(get_db)):
         "alert_engine": "HEALTHY",
         "sentinel_catalogue": "HEALTHY",
         "realtime_channel": "HEALTHY",
+        # Reported honestly instead of assumed: on a vision-less host these
+        # features are genuinely off, and the control room should say so.
+        "cv_pipeline": "HEALTHY" if vis["available"] else "DISABLED (API-only: no cv2/numpy)",
+        "storage": storage["mode"],
     }
 
     return HealthResponse(

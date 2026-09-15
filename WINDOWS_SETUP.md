@@ -23,8 +23,8 @@ python -m venv .venv
 # If activation blocked:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
-# Install
-pip install -r requirements.txt
+# Install (CV extras: opencv + ultralytics + OCR; requirements.txt alone = API-only)
+pip install -r requirements-ml.txt
 
 # Seed 30 cameras (fixes stale DB with 4 OFFLINE cameras)
 # If you have old trinetra.db with 4 cameras, this will now auto-clear and reseed 30
