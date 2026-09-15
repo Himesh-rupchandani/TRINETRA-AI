@@ -147,3 +147,84 @@ are worth knowing before you touch them again:
    `SKIPPED`/`FAILED`) so the state is debuggable from the browser.  Boot
    seeding is atomic — a failure rolls back to the savepoint and the 4
    `init_db` rows remain, so the registry is never left with 0 rows.
+
+## 8. Troubleshooting: the dashboard renders `0/1` (or `0/0`)
+
+Both numbers are *real* — they are the Camera Network KPI
+(`camerasOnline`/`totalCameras` from `GET /api/stats/kpis`) — but neither says
+why the grid is empty. Read the number as a fingerprint first:
+
+| On screen | What the origin is actually serving | Fix |
+|---|---|---|
+| `0/1` | A live API whose registry holds exactly one row: the env-configured `CAMLIVE` slot (`OFFLINE`, no source on Vercel). That is what a **pre-atomic-seed build** leaves behind when its seed rolled back — it deleted the 4 `init_db` rows and committed before inserting. | The **domain is attached to an old deployment**. Redeploy that project on the current commit (or promote a newer deployment to Production). |
+| `0/0` or `—/—` | **No backend at all on this origin**: `/api/*` is answered by the SPA's own catch-all rewrite, so `GET /api/health` returns `200 text/html`. | The project serving this URL has **Root Directory = `trinetra-ai`**, so the root `vercel.json` `services` block never applies. See below. |
+| `30/31` | Correct: 30 registry cameras + `CAMLIVE`, all reported by the API. | — |
+
+### 8.1 Which Vercel project can even serve `/api`?
+
+`services` (frontend + backend on one domain) is only read from the
+**repository-root** `vercel.json`, and Vercel only reads that file when the
+project's **Root Directory** is the repo root. A project pinned to
+`trinetra-ai/` builds an SPA whose own rewrite answers `/api/*`.
+
+Check the mapping before blaming the code — Vercel →
+project → **Settings → Build & Deployment → Root Directory**, and
+**Settings → Domains** to see which project owns the production URL:
+
+| Project | Root Directory | Can serve `/api/*`? |
+|---|---|---|
+| `trinetra-ai-kmhx` | repo root | **yes** — the services project |
+| `trinetra-ai`, `trinetra-ai-u8mp` | `trinetra-ai` | no — frontend only (SPA fallback for `/api/*`) |
+
+### 8.2 Two ways to fix it
+
+* **Move the domain** (preferred, no rebuild): Vercel → the services project
+  (`trinetra-ai-kmhx`) → **Settings → Domains → Add** the production domain, and
+  remove it from whichever project currently holds it. Both projects must be in
+  the same team for the domain to transfer.
+* **Or keep the domain where it is** and set that project's **Root Directory**
+  to `.` (repo root), keep Framework Preset = Vite, then **Deployments →
+  Redeploy** (without cache). The root `vercel.json` then routes `/api` to the
+  FastAPI service on the same origin.
+
+Pushing to `main` *does* trigger a production build on every connected project
+(confirmed for `trinetra-ai`, `trinetra-ai-u8mp` and `trinetra-ai-kmhx` on
+`5a8bf2e`, 07:16–07:17 UTC 2026-09-15). An empty "trigger commit" is therefore
+never needed: if the domain did not move, the **domain**, not the build, is the
+problem — fix it above.
+
+### 8.3 Prove it in one command
+
+```bash
+node scripts/verify/verify_deploy.mjs                       # prod + kmhx aliases
+node scripts/verify/verify_deploy.mjs https://your-url       # any origin
+```
+
+It classifies each origin (`OK`, `NO_BACKEND`, `STALE_DEPLOYMENT`,
+`EMPTY_REGISTRY`, `UNREACHABLE`, `PROTECTED`) and prints the exact
+`online/total` pair the dashboard will render. Exit code is 1 unless every
+origin is `OK`. `docs/ci/deploy-probe.yml` runs the same check from GitHub
+Actions — copy it to `.github/workflows/` (a token with the `workflows`
+permission is required to push that path).
+
+Where `curl` is blocked (corporate proxy, preview tunnel), the same answer comes
+from the browser console on the page in question:
+
+```js
+fetch('/api/health', { headers: { accept: 'application/json' } })
+  .then(async (r) => console.log(r.status, r.headers.get('content-type'), (await r.text()).slice(0, 200)));
+```
+
+`application/json` + `"total_cameras": 31` is a healthy origin; `text/html`
+means there is no backend on that domain; valid JSON *without*
+`components.demo_data` means the deployment is older than the atomic-seed fix.
+
+### 8.4 The UI now says this out loud
+
+`lib/backendStatus.ts` + `components/layout/BackendCheck.tsx` render a strip
+under the header whenever the origin cannot serve the API, when the API is
+older than the seed fix, when seeding failed, or when the registry lost rows
+after seeding — and `services/api.ts` refuses to read an HTML shell as JSON, so
+an unreachable API is an error instead of an empty grid. The strip is silent on
+a healthy deployment and in mock mode; set `VITE_DEPLOY_CHECK=false` to disable
+it entirely.
