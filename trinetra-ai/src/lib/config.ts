@@ -25,8 +25,10 @@ const MAPBOX_ATTRIBUTION =
  */
 const mapTiles: Record<BasemapId, { base: string; labels?: string; maxZoom?: number }> = {
   street: {
-    // Carto Voyager — clean control-room style; uses {s} subdomains for parallel loading
-    base: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    // OpenStreetMap's standard keyless raster tiles. Carto's public raster
+    // endpoint now overlays an "API KEY REQUIRED" watermark without a
+    // Carto token, so do not use it as the default basemap.
+    base: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     maxZoom: 19,
   },
   satellite: {
@@ -105,7 +107,7 @@ export const config = {
     basemaps,
     defaultBasemap: (mapboxEnabled ? 'mapbox' : 'street') as BasemapId,
     attribution: {
-      street: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      street: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       satellite:
         'Imagery &copy; Esri, Maxar, Earthstar Geographics &mdash; Esri, HERE, Garmin, OpenStreetMap contributors',
       mapbox: MAPBOX_ATTRIBUTION,
