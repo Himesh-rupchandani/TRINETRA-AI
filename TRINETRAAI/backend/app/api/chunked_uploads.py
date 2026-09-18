@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ..core.logging_config import logger
@@ -38,20 +38,41 @@ router = APIRouter(prefix="/uploads", tags=["Uploads (chunked)"])
 
 
 @router.post("/chunks/init")
-async def init_chunk_upload(
-    filename: str = Form(...),
-    total_chunks: int = Form(...),
-    total_size: int = Form(...),
-    source: str = Form("upload", description='"upload" (single CCTV video) or "analysis" (multi-video)'),
-    camera_id: Optional[str] = Form(None),
-    name: Optional[str] = Form(None),
-    location: Optional[str] = Form(None),
-    camera_ids: Optional[str] = Form(None),
-    batch_id: Optional[str] = Form(None),
-    auto_start: bool = Form(False),
-):
+async def init_chunk_upload(request: Request):
     """Begin a chunked upload session. Returns the id the client will tag
     subsequent chunks with, plus the recommended chunk size."""
+    try:
+        form = await request.form()
+    except Exception as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"Invalid form: {exc}")
+
+    def _str(k, default=None):
+        v = form.get(k)
+        if v is None:
+            return default
+        s = str(v).strip()
+        return s or default
+
+    def _int(k, default=0):
+        v = form.get(k)
+        try:
+            return int(str(v).strip())
+        except (TypeError, ValueError):
+            return default
+
+    def _bool(k, default=False):
+        v = form.get(k)
+        if v is None:
+            return default
+        return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+    filename = _str("filename")
+    if not filename:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="filename is required.")
+    total_chunks = _int("total_chunks")
+    total_size = _int("total_size")
+    source = _str("source", "upload")
+
     if source not in ("upload", "analysis"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='source must be "upload" or "analysis".')
     sess = cu.init_session(
@@ -59,12 +80,12 @@ async def init_chunk_upload(
         total_chunks=total_chunks,
         total_size=total_size,
         source=source,
-        camera_id=camera_id,
-        name=name,
-        location=location,
-        camera_ids_csv=camera_ids,
-        batch_id=batch_id,
-        auto_start=auto_start,
+        camera_id=_str("camera_id"),
+        name=_str("name"),
+        location=_str("location"),
+        camera_ids_csv=_str("camera_ids"),
+        batch_id=_str("batch_id"),
+        auto_start=_bool("auto_start", False),
     )
     return {
         "upload_id": sess.upload_id,
@@ -75,20 +96,31 @@ async def init_chunk_upload(
 
 
 @router.post("/chunks/{upload_id}")
-async def upload_chunk(
-    upload_id: str,
-    chunk_number: int = Form(...),
-    chunk: UploadFile = File(...),
-):
-    """Append one chunk (1-based? no — 0-based) to the upload session."""
-    data = await chunk.read()
+async def upload_chunk(upload_id: str, request: Request):
+    """Append one chunk (0-based, in order) to the upload session."""
+    try:
+        form = await request.form()
+    except Exception as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"Invalid form: {exc}")
+
+    def _int(k, default=-1):
+        v = form.get(k)
+        try:
+            return int(str(v).strip())
+        except (TypeError, ValueError):
+            return default
+
+    chunk_number = _int("chunk_number", -1)
+    if chunk_number < 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="chunk_number is required.")
+    chunk_file = form.get("chunk")
+    if not isinstance(chunk_file, UploadFile):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="chunk file is required.")
+    data = await chunk_file.read()
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty chunk.")
     if len(data) > cu.CHUNK_SIZE_BYTES + 1024 * 1024:  # +1 MB grace for FormData overhead
-        raise HTTPException(
-            _413,
-            detail="Chunk too large — split further on the client.",
-        )
+        raise HTTPException(_413, detail="Chunk too large — split further on the client.")
     progress = cu.append_chunk(upload_id, int(chunk_number), data)
     return progress
 
