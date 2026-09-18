@@ -1,11 +1,10 @@
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Car, MapPin, Maximize2, Video } from 'lucide-react';
 import type { Camera } from '@/types';
 import { StatusChip } from '@/components/common/Chips';
+import { CameraPreview } from '@/components/camera/CameraPreview';
 import { cn, formatTime, relativeTime } from '@/lib/utils';
-import { config } from '@/lib/config';
-import { cameraStill, hideBrokenImage } from '@/utils/mediaAssets';
 
 interface Props {
   camera: Camera;
@@ -13,19 +12,29 @@ interface Props {
   compact?: boolean;
   selected?: boolean;
   variant?: 'card' | 'list';
+  /**
+   * Play this camera on the card. Live preview is the default: the video only
+   * starts while the card is on screen (see `useCameraPreview`), so a full
+   * registry page does not pull the whole grid through the gateway.
+   */
+  preview?: boolean;
 }
 
 /**
- * Registry card. Deliberately does NOT mount a stream — feeds are only
- * loaded when an operator explicitly opens one (see performance notes).
- * In demo mode a clearly-labelled synthetic preview is shown instead.
+ * Registry card. The media area shows the camera's LIVE picture — WebRTC with
+ * an HLS fallback, or the backend's AI detection view when it is offered —
+ * instead of the grey camera icon it used to render. It is still not a stream
+ * wall: every preview is viewport-gated and released again when the card is
+ * scrolled away, and compact/list contexts keep the plain placeholder.
  */
-export const CameraCard = memo(function CameraCard({ camera, onView, compact, selected, variant = 'card' }: Props) {
-  const preview = useMemo(
-    () => (config.useMocks ? cameraStill(camera.id) : null),
-    [camera.id],
-  );
-
+export const CameraCard = memo(function CameraCard({
+  camera,
+  onView,
+  compact,
+  selected,
+  variant = 'card',
+  preview = true,
+}: Props) {
   if (variant === 'list') {
     return (
       <Link
@@ -35,17 +44,10 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
           selected && 'border-brand/50 ring-1 ring-brand/20',
         )}
       >
+        {/* Rows stay a lightweight icon: a 76px thumbnail is too small to read
+            and its player buttons could not be nested inside this link. */}
         <span className="relative grid h-12 w-[76px] shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-surface-2 text-ink-faint">
           <Video size={16} aria-hidden />
-          {preview && (
-            <img
-              src={preview}
-              alt=""
-              onError={hideBrokenImage}
-              className="absolute inset-0 h-full w-full object-cover"
-              loading="lazy"
-            />
-          )}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-mono text-xs font-bold text-ink">{camera.name}</p>
@@ -67,24 +69,11 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
       )}
     >
       {!compact && (
-        <div className="relative">
-          <div className="grid aspect-video w-full place-items-center border-b border-line bg-surface-2 text-ink-faint">
-            <Video size={18} aria-hidden />
-          </div>
-          {preview && (
-            <img
-              src={preview}
-              alt=""
-              onError={hideBrokenImage}
-              className="absolute inset-0 aspect-video w-full border-b border-line object-cover"
-              loading="lazy"
-            />
-          )}
-          {preview && (
-            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-amber-300">
-              DEMO
-            </span>
-          )}
+        /* The media area is the camera itself — live, no click required.
+            Navigation stays on the buttons below so the preview's own controls
+            (retry / try live) never end up nested inside a link. */
+        <div className="relative aspect-video w-full border-b border-line bg-surface-2">
+          <CameraPreview camera={camera} enabled={preview} />
         </div>
       )}
 

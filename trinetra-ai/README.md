@@ -234,7 +234,7 @@ free gateway capacity.
 | Join-time decoder warnings are not fatal | Logged at `info`, never surfaced as an error. The player waits for the first IDR instead of failing. |
 | Expect a scene discontinuity at the loop point | Resolution changes are counted and displayed as "N scene cuts"; long-lived state is not reset. |
 | No footage download — build against live capture | There is no download path; every frame is consumed live. |
-| Pace your load; open only what you process | The camera grid pulls **zero** streams. A feed opens only on explicit operator action, and `Stop` / unmount / camera-switch `DELETE`s the session. Hidden tabs pause. |
+| Pace your load; open only what you process | The grid previews **only the cards on screen** — each one releases its feed when it scrolls away, the table view pulls nothing, and the full player still starts on explicit operator action only. Hidden tabs pause. |
 | Read the camera list from the catalogue | `cameras.json` is password-gated, so the app reads its registry from `GET /api/cameras`, which is exactly where a backend would republish the catalogue. |
 | Handle mixed H.264 / H.265 and resolutions | Codec support is probed with `RTCRtpReceiver.getCapabilities()` **before** negotiating. Resolution is read from the live decoder, not assumed. |
 
@@ -252,6 +252,24 @@ The grid really is mixed, and the UI is honest about each case:
   with bytes received and keyframe requests sent, and keeps the session open
   rather than restarting the wait.
 
+### Live previews on the camera cards
+
+The Live Cameras grid shows the camera itself, not a grey placeholder: every
+card on screen plays its own feed automatically. The rules that keep a register
+of 30 (or 80 000) cameras from becoming 30 simultaneous pulls live in
+`useCameraPreview`:
+
+| Rule | How |
+|---|---|
+| Only visible cards stream | `useInViewport` opens a preview ~180 px before the card enters the viewport and closes it again when it leaves. Scroll flings are debounced, so passing a card does not open a stream. |
+| Same transport ladder as the player | WebRTC (WHEP) first → the HLS compatibility stream when WebRTC cannot get through → the backend's annotated MJPEG vehicle-detection view when it is offered for that camera. |
+| Honest states only | `LIVE` / `PLAYBACK` (file-backed replay) / `AI DETECTION` / `NO LIVE SIGNAL` are read from the actual picture. An MJPEG view that is up but receiving no frames is probed against `GET /api/cameras/{id}/live/signal` and never badged LIVE. |
+| Bounded retries | Backoff 2 s → 30 s, at most 6 attempts per tile, then one short sentence and a manual *Try live*. A codec this browser cannot decode is reported immediately instead of retry-looping. |
+| Nothing synthetic disguised | In mock mode the tile shows the labelled `DEMO FEED` frame, never a fake `LIVE`. |
+
+The table view, compact cards and the list variant keep the plain placeholder —
+a 76 px thumbnail is unreadable, and the grid is where the operator is looking.
+
 ### Turning it off
 
 `VITE_LIVE_STREAMS=false` reverts the player to synthetic demo frames — useful
@@ -260,9 +278,10 @@ is unaffected.
 
 ## 9. Performance notes
 
-- **Streams are opt-in.** Nothing auto-plays. The camera grid renders metadata cards only;
-  a feed starts when an operator presses *Start Stream* or opens a detail page. 30 concurrent
-  feeds are never mounted.
+- **Streams are viewport-gated.** Camera cards play live (that is the point of the grid), but a
+  preview exists only while its card is on screen: scrolling away tears the stream down, the table
+  view mounts none, and the full player still starts on explicit operator action. The number of
+  concurrent feeds is therefore bounded by what fits on the display, not by the registry size.
 - Routes and the map/chart bundles are **code-split** (`React.lazy`); Leaflet loads only on
   screens that draw a map.
 - The event pool is queried **server-side style** with pagination (25 rows/page) — the table

@@ -222,3 +222,55 @@ test('the reconnecting UI covers both the hooks and the ticket scheduler', () =>
   includes(playerSrc, 'Next try in', 'the operator must see when the next automatic attempt happens');
   includes(playerSrc, 'onClick={tryNow}', 'manual override must stay available while auto-retrying');
 });
+
+/* ---------------- camera cards: a live preview, not a stream wall ---------- */
+suite('camera cards — the grey camera tile is now the camera itself');
+
+const cardSrc = readSource('trinetra-ai/src/components/camera/CameraCard.tsx');
+const previewSrc = readSource('trinetra-ai/src/components/camera/CameraPreview.tsx');
+const previewHook = readSource('trinetra-ai/src/hooks/useCameraPreview.ts');
+const viewportHook = readSource('trinetra-ai/src/hooks/useInViewport.ts');
+
+test('the card media area mounts the live preview', () => {
+  includes(cardSrc, 'import { CameraPreview } from \'@/components/camera/CameraPreview\';');
+  includes(cardSrc, '<CameraPreview camera={camera} enabled={preview} />');
+  excludes(cardSrc, 'config.useMocks ? cameraStill(camera.id) : null', 'the static demo still is no longer the tile');
+});
+
+test('a preview only runs while its card is on screen', () => {
+  includes(previewHook, 'const visible = useInViewport(containerRef, enabled);');
+  includes(previewHook, 'if (!enabled || !visible) {', 'the viewport gate must stay in front of every request');
+  includes(viewportHook, 'new IntersectionObserver(');
+  includes(viewportHook, "rootMargin = '180px'", 'previews must start just before the card is actually looked at');
+  includes(viewportHook, 'settle = setTimeout(() => setVisible(next), delayMs);', 'scroll flings must not open a stream per card');
+});
+
+test('previews follow the same transport ladder as the full player', () => {
+  includes(previewHook, 'const ticket = await cameraService.stream(camera.id);', 'previews ask the backend for a ticket, never build a URL');
+  includes(previewHook, 'if (ticket.detectionUrl) {', 'the AI detection view wins when the backend offers it');
+  includes(previewHook, "const hls = whepUrlToHls(ticket.streamUrl);");
+  includes(previewHook, 'const next = await connectWhep(url);', 'WebRTC first');
+  includes(previewHook, 'attachHls(el, url, () => fail(UNAVAILABLE))', 'the HLS compatibility stream is the fallback');
+  includes(previewHook, 'const url = (useHls ? plan.hlsUrl : plan.url) ?? null;');
+});
+
+test('an undecodable feed is reported, not retried forever', () => {
+  includes(previewHook, 'if (!webRtcAvailable() || !canDecodeOverWebRtc(camera.codec)) {');
+  includes(previewHook, 'const MAX_ATTEMPTS = 6;', 'retries must be bounded');
+  includes(previewHook, 'setGiveUp(true);', 'a spent retry budget must release the media');
+  includes(previewHook, "if (plan.kind !== 'WEBRTC' || giveUp) return;", 'giving up must tear the peer connection down');
+  includes(previewHook, 'el.srcObject = null;', 'a released tile must not hold the stream');
+});
+
+test('a manual retry re-requests the picture it is retrying', () => {
+  includes(previewHook, 'function withRetryMarker(url: string, nonce: number): string {');
+  includes(previewHook, 'url: withRetryMarker(ticket.streamUrl, retryNonce),', 'an unchanged <img> src would never be re-fetched');
+  includes(previewHook, 'url: withRetryMarker(ticket.detectionUrl, retryNonce),');
+});
+
+test('nothing synthetic is ever shown as LIVE', () => {
+  includes(previewSrc, 'DEMO FEED');
+  includes(previewSrc, 'synthetic &&', 'the demo frame must stay labelled');
+  includes(previewHook, 'still: null');
+  includes(previewHook, 'const still = config.useMocks ? cameraStill(camera.id) : null;', 'a synthetic frame is mock-mode only');
+});
