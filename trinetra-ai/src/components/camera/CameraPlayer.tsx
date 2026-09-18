@@ -55,11 +55,14 @@ export function CameraPlayer({
   camera,
   poster,
   autoRequest = false,
+  embedded = false,
   className,
 }: {
   camera: Camera;
   poster?: string;
   autoRequest?: boolean;
+  /** Hide the standalone control footer — used when embedded inside a card. */
+  embedded?: boolean;
   className?: string;
 }) {
   const [ticket, setTicket] = useState<CameraStreamTicket | null>(null);
@@ -583,7 +586,7 @@ export function CameraPlayer({
         )}
       </div>
 
-      {showVideo && (
+      {showVideo && !embedded && (
         <div className="border-t border-line bg-surface-1 px-3 py-2">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
