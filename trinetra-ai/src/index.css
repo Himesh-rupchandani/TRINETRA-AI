@@ -132,17 +132,22 @@
   .data-table {
     @apply w-full text-xs border-collapse;
   }
+  /* Embedded tables (CameraDetail's 380px box, upload/analysis panels) scroll
+     inside their own fixed-height box, where sticky top:0 is correct. */
   .data-table thead th {
     @apply sticky top-0 z-10 bg-surface-2 text-left text-xs font-semibold
            text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
   }
-  /* Window-scrolled tables: stick below the sticky header (56px) + menu
-     bar (measured live by TopNav into --trinetra-nav-h; 106px fallback
-     for first paint). z-0 tucks the header under the bars if their
-     heights ever drift, so page content can never paint over them. */
+  /* Full-page tables (Find Vehicle, Vehicle Log, Cameras, Registry, ...):
+     keep the header STATIC, at the top of the table. Do NOT make these
+     sticky: these pages scroll inside nested containers (page scroller +
+     overflow-x table wrapper) and a sticky th gets pinned relative to the
+     wrong scrollport — observed as the header row floating in the middle
+     of the rows (Find Vehicle) and pinned over the nav bar (Vehicle Log),
+     in both the window-scroll and inner-scroll configurations. A static
+     thead is unconditionally at the top of its table. */
   .data-table-page thead th {
-    top: calc(3.5rem + var(--trinetra-nav-h, 106px));
-    z-index: 0;
+    position: static;
   }
   .data-table tbody td {
     @apply px-4 py-3 border-b border-line/60 align-middle whitespace-nowrap;

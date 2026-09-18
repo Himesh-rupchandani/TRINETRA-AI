@@ -178,3 +178,47 @@ test('frontend tests are runnable with plain node', () => {
   ok(pkg.scripts.predev.includes('auto-setup-env.mjs'), 'predev must still auto-create env files');
   includes(pkg.scripts.build, 'tsc -b', 'the build must typecheck project references');
 });
+
+/* ------------------- live video: persistent auto-reconnect ---------------- */
+suite('camera player — a requested feed retries automatically until it plays');
+
+const hlsHook = readSource('trinetra-ai/src/hooks/useHlsStream.ts');
+const playerSrc = readSource('trinetra-ai/src/components/camera/CameraPlayer.tsx');
+
+test('the HLS compatibility stream reconnects with backoff instead of parking', () => {
+  includes(hlsHook, 'const delay = backoffDelay(attempts)', 'retries must use the shared 2s→30s backoff ladder');
+  includes(hlsHook, "setPhase('RECONNECTING')", 'a failed compatibility stream must surface the reconnecting state');
+  includes(hlsHook, 'setAttempt(attempts)', 'the attempt counter must drive backoff and the UI');
+  includes(hlsHook, 'setRetryAt(Date.now() + delay)', 'the UI countdown needs the scheduled retry time');
+  includes(hlsHook, 'return { videoRef, phase, error, mediaTime, attempt, retryAt, retryNow }');
+  excludes(hlsHook, 'if (attempts < 2)', 'the old one-retry-then-give-up gate must stay removed');
+  excludes(hlsHook, "setPhase('UNAVAILABLE')", 'the compatibility stream must never park in UNAVAILABLE');
+});
+
+test('HLS retries do not accumulate duplicate video-element listeners', () => {
+  includes(hlsHook, 'const stopCurrent = () => {', 'each retry must tear down the previous attempt first');
+  includes(hlsHook, 'cleanupFns.splice(0)');
+  includes(hlsHook, 'stopCurrent();', 'start() must call stopCurrent() before re-arming listeners');
+});
+
+test('the player schedules a fresh ticket when a transport dead-ends', () => {
+  includes(playerSrc, 'Persistent auto-reconnect');
+  includes(playerSrc, 'const deadEnd =');
+  includes(playerSrc, "(transport === 'whep' && whepPhase === 'UNAVAILABLE' && !hlsUrl)");
+  includes(playerSrc, '(ticketError != null && !requesting)', 'a failed ticket fetch must be retried, not shown as a dead end');
+  includes(playerSrc, "camera.status === 'OFFLINE'", 'offline cameras must not be retried forever');
+  includes(playerSrc, 'noSource', 'unconfigured sources must not be retried forever');
+  includes(playerSrc, 'FATAL_BROWSER_ERRORS.has(ticketError)', 'browser-incompatible feeds must not be retried');
+  includes(playerSrc, 'backoffDelay((roundRef.current += 1))', 'ticket retries must use the same capped backoff');
+  includes(playerSrc, 'void requestStream()', 'the scheduled action re-requests the ticket');
+});
+
+test('a re-fetched ticket restarts the ladder from WebRTC', () => {
+  includes(playerSrc, "setTransport('whep');\n      setWanted(true);", 'every fresh ticket must re-probe WebRTC before stepping down');
+});
+
+test('the reconnecting UI covers both the hooks and the ticket scheduler', () => {
+  includes(playerSrc, "phase === 'RECONNECTING' || autoRetryAt != null ?");
+  includes(playerSrc, 'Next try in', 'the operator must see when the next automatic attempt happens');
+  includes(playerSrc, 'onClick={tryNow}', 'manual override must stay available while auto-retrying');
+});

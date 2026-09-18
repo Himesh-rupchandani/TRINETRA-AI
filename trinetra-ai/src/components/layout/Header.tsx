@@ -107,7 +107,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface-1 px-3.5 sm:gap-3 sm:px-5">
+    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2.5 border-b border-line bg-surface-1 px-3.5 sm:gap-3 sm:px-5">
       {showBack && (
         <button
           type="button"

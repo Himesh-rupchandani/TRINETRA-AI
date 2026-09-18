@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { backoffDelay } from '@/services/whepClient';
 import { CircleDot, Loader2, Play, RotateCw, ScanSearch, ShieldAlert, Square } from 'lucide-react';
 import type { Camera, CameraStreamTicket } from '@/types';
 import { cameraService } from '@/services/cameraService';
@@ -23,6 +24,16 @@ import { StatusChip } from '@/components/common/Chips';
  *  - when WebRTC cannot get through (or the codec is undecodable over it),
  *    playback steps down to the HLS compatibility stream (guide §1).
  */
+/**
+ * Ticket errors that mean "this browser can never play this feed" — retrying
+ * cannot help, so the auto-retry loop stays off for these. Everything else
+ * (gateway 502, expired ticket, cold start…) is retried automatically.
+ */
+const NO_RTC_ERROR = 'This browser cannot play live video. Please use Chrome, Edge or Safari.';
+const NO_CODEC_ERROR =
+  'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.';
+const FATAL_BROWSER_ERRORS = new Set([NO_RTC_ERROR, NO_CODEC_ERROR]);
+
 /** Zeroed stats for the HLS path — the OSD falls back to catalogue values. */
 const HLS_ZERO_STATS: StreamStats = {
   fps: null,
@@ -123,6 +134,8 @@ export function CameraPlayer({
     phase: hlsPhase,
     error: hlsError,
     mediaTime: hlsMediaTime,
+    attempt: hlsAttempt,
+    retryAt: hlsRetryAt,
     retryNow: hlsRetry,
   } = useHlsStream(useImg || !hlsActive ? null : hlsUrl, wanted && hlsActive);
 
@@ -131,8 +144,8 @@ export function CameraPlayer({
   const phase = hlsActive ? hlsPhase : whepPhase;
   const error = hlsActive ? hlsError : whepError;
   const stats = hlsActive ? { ...HLS_ZERO_STATS, mediaTime: hlsMediaTime } : whepStats;
-  const attempt = hlsActive ? 0 : whepAttempt;
-  const retryAt = hlsActive ? null : whepRetryAt;
+  const attempt = hlsActive ? hlsAttempt : whepAttempt;
+  const retryAt = hlsActive ? hlsRetryAt : whepRetryAt;
   const retryNow = hlsActive ? hlsRetry : whepRetry;
   /** Manual "start over": back to WebRTC with a reset backoff ladder. */
   const restartChain = () => {
@@ -178,14 +191,15 @@ export function CameraPlayer({
       if ((!rtcOk || !decodable) && hls) {
         setTransport('hls');
       } else if (!rtcOk) {
-        setTicketError('This browser cannot play live video. Please use Chrome, Edge or Safari.');
+        setTicketError(NO_RTC_ERROR);
         return;
       } else if (!decodable) {
-        setTicketError(
-          'This camera records in a video format your browser cannot play. Its recordings are still used by the AI system — try opening it in a different browser.',
-        );
+        setTicketError(NO_CODEC_ERROR);
         return;
       }
+      // A re-fetched ticket always restarts the ladder from the top (WebRTC),
+      // so a permanent auto-retry loop re-probes both transports.
+      setTransport('whep');
       setWanted(true);
     } catch (e) {
       setTicketError(e instanceof Error ? e.message : 'Could not connect to this camera.');
@@ -199,6 +213,10 @@ export function CameraPlayer({
     setTicket(null);
     setTransport('whep');
     setDetectionFailed(false);
+    setAutoRetryAt(null);
+    pendingRetryRef.current = null;
+    roundRef.current = 0;
+    setRetryRound(0);
   };
 
   // Switching camera always releases the previous feed first.
@@ -207,6 +225,10 @@ export function CameraPlayer({
     setTicket(null);
     setTransport('whep');
     setTicketError(null);
+    setAutoRetryAt(null);
+    pendingRetryRef.current = null;
+    roundRef.current = 0;
+    setRetryRound(0);
     if (autoRequest && camera.status !== 'OFFLINE') void requestStream();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera.id]);
@@ -220,6 +242,97 @@ export function CameraPlayer({
   /** Demo mode with no reachable gateway: show a clean demo frame, not an error. */
   const demoFeed =
     config.useMocks && !onAir && (noSource || Boolean(ticketError) || phase === 'UNAVAILABLE');
+
+  // ------------------------------------------------------------------
+  // Persistent auto-reconnect
+  //
+  // A feed the operator asked for keeps trying until it plays. The WHEP
+  // and HLS hooks each retry internally with backoff (2s → 30s), and
+  // this scheduler covers the gaps between them: a failed ticket fetch
+  // (gateway 502, cold start) or a WebRTC verdict with no compatibility
+  // stream falls back to a FRESH ticket, which restarts the ladder from
+  // the top. Only a switched-off camera, an unconfigured source, or a
+  // browser that cannot play this feed at all stops the loop.
+  const [autoRetryAt, setAutoRetryAt] = useState<number | null>(null);
+  const [retryRound, setRetryRound] = useState(0);
+  const roundRef = useRef(0);
+  const pendingRetryRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (onAir) {
+      roundRef.current = 0;
+      setRetryRound(0);
+    }
+  }, [onAir]);
+
+  useLayoutEffect(() => {
+    if (
+      !wanted ||
+      onAir ||
+      connecting ||
+      camera.status === 'OFFLINE' ||
+      noSource ||
+      (ticketError != null && FATAL_BROWSER_ERRORS.has(ticketError))
+    ) {
+      if (autoRetryAt != null) setAutoRetryAt(null);
+      return;
+    }
+    const deadEnd =
+      (transport === 'hls' && hlsPhase === 'UNAVAILABLE') ||
+      (transport === 'whep' && whepPhase === 'UNAVAILABLE' && !hlsUrl) ||
+      (ticketError != null && !requesting);
+    if (!deadEnd || autoRetryAt != null) return;
+    const delay = backoffDelay((roundRef.current += 1));
+    pendingRetryRef.current = () => {
+      pendingRetryRef.current = null;
+      void requestStream();
+    };
+    setAutoRetryAt(Date.now() + delay);
+    setRetryRound(roundRef.current);
+    const t = setTimeout(() => {
+      setAutoRetryAt(null);
+      pendingRetryRef.current?.();
+    }, delay);
+    return () => {
+      clearTimeout(t);
+      pendingRetryRef.current = null;
+    };
+  }, [
+    wanted,
+    onAir,
+    connecting,
+    camera.status,
+    noSource,
+    ticketError,
+    requesting,
+    transport,
+    hlsPhase,
+    whepPhase,
+    hlsUrl,
+    autoRetryAt,
+  ]);
+
+  /** "Try now": run the scheduled auto-retry immediately, or nudge the active hook. */
+  const tryNow = () => {
+    if (autoRetryAt != null) {
+      setAutoRetryAt(null);
+      pendingRetryRef.current?.();
+      return;
+    }
+    retryNow();
+  };
+
+  // The "Next try in X seconds" countdown needs a render every second while
+  // a retry is pending (the WHEP stats interval does this for free on that
+  // path; the HLS path and the ticket scheduler have none of their own).
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (phase !== 'RECONNECTING' && autoRetryAt == null) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [phase, autoRetryAt]);
+  const nowMs = useMemo(() => Date.now(), [tick]);
+  const nextTryAt = autoRetryAt ?? retryAt;
 
   // Measured values win over catalogue metadata; fall back only when unknown.
   const shownRes =
@@ -397,23 +510,24 @@ export function CameraPlayer({
                     </>
                   )}
                 </div>
-              ) : phase === 'RECONNECTING' ? (
+              ) : phase === 'RECONNECTING' || autoRetryAt != null ? (
                 <>
                   <RotateCw size={18} className="mx-auto mb-1.5 animate-spin text-degraded" aria-hidden />
                   <p className="text-sm font-semibold text-white/90">
-                    Video interrupted — reconnecting (try {attempt})
+                    Video interrupted — reconnecting (try {autoRetryAt != null ? retryRound : attempt})
                   </p>
                   <p className="mt-1 text-2xs leading-relaxed text-white/65">
-                    The camera stopped sending video. We are reconnecting automatically —
-                    you do not need to do anything.
-                    {retryAt
-                      ? ` Next try in ${Math.max(0, Math.round((retryAt - Date.now()) / 1000))} seconds.`
+                    {autoRetryAt != null
+                      ? 'The video stream is not responding. We are requesting it again automatically — you do not need to do anything.'
+                      : 'The camera stopped sending video. We are reconnecting automatically — you do not need to do anything.'}
+                    {nextTryAt
+                      ? ` Next try in ${Math.max(0, Math.round((nextTryAt - nowMs) / 1000))} seconds.`
                       : ''}
                   </p>
                   <button
                     type="button"
                     className="btn-ghost btn-xs mt-3 border-white/30 text-white/85"
-                    onClick={retryNow}
+                    onClick={tryNow}
                   >
                     Try now
                   </button>
