@@ -27,6 +27,18 @@
   },
   "rewrites": [
     {
+      "source": "/sentinel",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/sentinel/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
       "source": "/api",
       "destination": {
         "service": "backend"

@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
-from ..core.vision import require_vision
+from ..core.vision import require_vision, vision_available
 from ..database.database import get_db
 from sqlalchemy import func
 from ..database.models import Camera
@@ -31,6 +31,7 @@ from ..database.schemas import (
     CameraListResponse,
 )
 from ..camera.manager import camera_manager
+from ..services.sentinel_stream_service import is_sentinel_camera
 
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
 
@@ -65,9 +66,17 @@ def _resolve_camera_status(cam: "Camera") -> tuple:
         mapped = _LIVE_TO_API_STATUS.get(stream_status.get("status"), None)
         if mapped:
             return mapped, stream_status.get("last_seen") or cam.last_seen
+    stype = (cam.stream_type or "").lower()
+    # Sentinel grid cameras are continuously published at the media gateway;
+    # the browser's own WHEP/HLS pull opens the feed (same-origin /sentinel
+    # proxy). They are therefore viewable even on hosts where no local AI
+    # worker runs (Vercel / API-only deployments never decode frames). A live
+    # worker, when actually delivering frames, still wins over this rule.
+    if stype in ("hls", "rtsp", "webrtc") and is_sentinel_camera(cam.stream_url):
+        return "ONLINE", cam.last_seen
     # File-backed cameras are playable whenever their media exists on disk:
     # the live view is decoded on demand, so no permanent worker is required.
-    if (cam.stream_type or "").lower() == "file" and cam.stream_url and os.path.exists(cam.stream_url):
+    if stype == "file" and cam.stream_url and os.path.exists(cam.stream_url):
         return "ONLINE", cam.last_seen
     return (cam.status or "OFFLINE"), cam.last_seen
 
@@ -239,10 +248,14 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
     # Real-time OpenCV vehicle detection view: the backend decodes the same
     # source (RTSP/HLS/file) and streams annotated MJPEG. Same-origin path,
     # no credentials — the authenticated URL is built backend-side only.
+    # Offered only when this process can actually decode (vision stack
+    # present): on a serverless/API-only host the endpoint would 503, and
+    # the player would burn a request and a flicker on a dead view.
     detection_url = (
         f"/api/cameras/{slug}/live/detect"
         if playable
         and settings.VEHICLE_DETECTION_ENABLED
+        and vision_available()
         and (cam.stream_type or "").lower() in ("file", "rtsp", "hls")
         else None
     )

@@ -70,9 +70,14 @@ def client():
         stream_url="https://cctv.corp8.cloud/cam04/index.m3u8", stream_type="hls",
         latitude=23.0338, longitude=72.585, status="ONLINE",
     ))
+    # CAM08 is deliberately NOT a Sentinel grid camera: grid sources are
+    # continuously published by the media gateway, so they resolve ONLINE and
+    # playable even without a local worker (that is what makes live playback
+    # work on Vercel). A genuinely offline camera for the unplayable-ticket
+    # contract must be a non-grid source nobody is ingesting.
     db.add(Camera(
         camera_id="CAM08", name="ISCON Crossroads CCTV", location="ISCON Junction",
-        stream_url="https://cctv.corp8.cloud/cam08/index.m3u8", stream_type="hls",
+        stream_url="rtsp://192.168.0.88:554/main", stream_type="rtsp",
         latitude=23.0295, longitude=72.5054, status="OFFLINE",
     ))
     db.add(Watchlist(plate_number="GJ01AB1234", category="stolen vehicle",

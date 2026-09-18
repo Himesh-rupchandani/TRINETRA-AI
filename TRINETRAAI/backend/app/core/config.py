@@ -159,6 +159,13 @@ class Settings(BaseSettings):
     SENTINEL_HLS_BASE_URL: str = "https://cctv.corp8.cloud"
     SENTINEL_RTSP_HOST: str = "103.250.160.189"
     SENTINEL_RTSP_PORT: int = 8554
+    # Same-origin /sentinel media proxy (browser playback on deployed origins).
+    # The proxy forwards /sentinel/* to these origins with the Basic auth above
+    # and never returns them to the client. Default mirrors the dev proxy in
+    # trinetra-ai/vite.config.ts: WHEP signalling on the gateway's WebRTC port,
+    # HLS on the same host's HTTP port.
+    SENTINEL_WHEP_ORIGIN: str = "http://103.250.160.189:8889"
+    SENTINEL_HLS_ORIGIN: str = ""   # empty -> http://<WHEP host>
 
     # CORS
     CORS_ORIGINS: Union[List[str], str] = [

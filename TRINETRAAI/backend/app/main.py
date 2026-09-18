@@ -50,6 +50,7 @@ from .api.speed import router as speed_router
 from .api.bandwidth import router as bandwidth_router
 from .api.insights import router as insights_router
 from .api.reports import router as reports_router
+from .api.sentinel_proxy import router as sentinel_proxy_router
 
 
 @asynccontextmanager
@@ -270,6 +271,13 @@ for prefix in ["/api", "/api/v1"]:
 
 # Also mount WebSocket router without prefix
 app.include_router(ws_router)
+
+# Same-origin Sentinel media proxy: browser playback paths (/sentinel/…) are
+# proxied to the media gateway with server-side Basic auth. Mounted at the
+# origin root on purpose — the frontend's tickets carry same-origin paths
+# (/sentinel/stream/<id>/whep, /sentinel/live/stream/<id>/index.m3u8), never
+# /api. This is the Vercel-side twin of the Vite dev proxy.
+app.include_router(sentinel_proxy_router)
 
 
 if __name__ == "__main__":
