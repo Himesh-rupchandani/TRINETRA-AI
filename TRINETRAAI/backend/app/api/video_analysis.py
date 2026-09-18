@@ -96,7 +96,8 @@ async def upload_videos(
     for key in ("files", "file"):
         val = form.getlist(key)
         for item in val:
-            if isinstance(item, UploadFile) and item.filename:
+            # request.form() yields starlette UploadFile (see note in chunked_uploads.py)
+            if hasattr(item, "read") and hasattr(item, "filename") and getattr(item, "filename", None):
                 files.append(item)
 
     if not files:

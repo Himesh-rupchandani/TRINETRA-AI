@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy.orm import Session
 
 from ..core.logging_config import logger
@@ -114,7 +115,11 @@ async def upload_chunk(upload_id: str, request: Request):
     if chunk_number < 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="chunk_number is required.")
     chunk_file = form.get("chunk")
-    if not isinstance(chunk_file, UploadFile):
+    # request.form() returns starlette.datastructures.UploadFile (NOT
+    # fastapi.datastructures.UploadFile — they are different classes in
+    # recent FastAPI versions, so a naive isinstance(FastAPI-UploadFile)
+    # returns False on real payloads -> "chunk file is required" 400).
+    if not hasattr(chunk_file, "read") or not hasattr(chunk_file, "filename"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="chunk file is required.")
     data = await chunk_file.read()
     if not data:
