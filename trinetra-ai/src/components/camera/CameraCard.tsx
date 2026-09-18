@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Activity, Car, MapPin, Maximize2, Video } from 'lucide-react';
 import type { Camera } from '@/types';
 import { StatusChip } from '@/components/common/Chips';
+import { CameraPlayer } from '@/components/camera/CameraPlayer';
 import { cn, formatTime, relativeTime } from '@/lib/utils';
 import { config } from '@/lib/config';
 import { cameraStill, hideBrokenImage } from '@/utils/mediaAssets';
@@ -16,9 +17,12 @@ interface Props {
 }
 
 /**
- * Registry card. Deliberately does NOT mount a stream — feeds are only
- * loaded when an operator explicitly opens one (see performance notes).
- * In demo mode a clearly-labelled synthetic preview is shown instead.
+ * Registry card. The top section is the live camera player (the same
+ * WHEP/HLS/MJPEG source used everywhere else) — it auto-requests the feed
+ * and honestly falls back to a placeholder/status when the camera is offline
+ * or the stream is unreachable, so a card never pretends to be live.
+ * The info below the video (name, status, department, format, size, last
+ * vehicle…) is unchanged.
  */
 export const CameraCard = memo(function CameraCard({ camera, onView, compact, selected, variant = 'card' }: Props) {
   const preview = useMemo(
@@ -67,25 +71,12 @@ export const CameraCard = memo(function CameraCard({ camera, onView, compact, se
       )}
     >
       {!compact && (
-        <div className="relative">
-          <div className="grid aspect-video w-full place-items-center border-b border-line bg-surface-2 text-ink-faint">
-            <Video size={18} aria-hidden />
-          </div>
-          {preview && (
-            <img
-              src={preview}
-              alt=""
-              onError={hideBrokenImage}
-              className="absolute inset-0 aspect-video w-full border-b border-line object-cover"
-              loading="lazy"
-            />
-          )}
-          {preview && (
-            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-wider text-amber-300">
-              DEMO
-            </span>
-          )}
-        </div>
+        <CameraPlayer
+          camera={camera}
+          autoRequest
+          embedded
+          className="rounded-none border-0 border-b border-line"
+        />
       )}
 
       <div className="flex items-start justify-between gap-2.5 px-4 py-3">
