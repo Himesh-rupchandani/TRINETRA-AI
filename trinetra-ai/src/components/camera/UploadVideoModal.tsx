@@ -21,6 +21,7 @@ export function UploadVideoModal({
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progressPct, setProgressPct] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export function UploadVideoModal({
     setFile(null);
     setError(null);
     setUploading(false);
+    setProgressPct(null);
     uploadService
       .nextCameraId()
       .then((id) => {
@@ -44,14 +46,21 @@ export function UploadVideoModal({
     if (!file || !cameraId.trim() || uploading) return;
     setUploading(true);
     setError(null);
+    setProgressPct(0);
     try {
-      const done = await uploadService.upload(file, cameraId.trim().toUpperCase(), name.trim());
+      const done = await uploadService.upload(
+        file,
+        cameraId.trim().toUpperCase(),
+        name.trim(),
+        (p) => setProgressPct(p.percentage),
+      );
       onUploaded(done.cameraId);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
+      setProgressPct(null);
     }
   };
 
@@ -153,10 +162,30 @@ export function UploadVideoModal({
         </div>
 
         {uploading && (
-          <p className="text-xs text-ink-muted" role="status">
-            Uploading and starting detection… this can take a while for large videos. You can watch
-            the progress on the camera page.
-          </p>
+          <div className="space-y-2">
+            {progressPct !== null && (
+              <>
+                <div className="flex items-center justify-between text-2xs text-ink-muted">
+                  <span>Uploading {file?.name}</span>
+                  <span className="font-mono">{progressPct}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+                  <div
+                    className="h-full bg-brand transition-all duration-200"
+                    style={{ width: `${progressPct}%` }}
+                    role="progressbar"
+                    aria-valuenow={progressPct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+              </>
+            )}
+            <p className="text-xs text-ink-muted" role="status">
+              Large videos are uploaded in chunks to bypass hosting limits — please leave this tab
+              open. Detection starts automatically after upload.
+            </p>
+          </div>
         )}
         {error && (
           <p className="rounded-lg border border-critical/30 bg-critical/10 px-3 py-2 text-xs text-critical" role="alert">

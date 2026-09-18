@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import tempfile
 import uuid
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -29,6 +31,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..core.config import settings
 from ..core.logging_config import logger
 from ..core.vision import require_vision
 from ..database.database import get_db
@@ -82,14 +85,46 @@ async def upload_videos(
     for idx, upload in enumerate(files):
         name = upload.filename or f"video_{idx + 1}.mp4"
         try:
-            data = await upload.read()
-            video = vas.register_upload(
-                db, name, data, batch,
-                camera_id=explicit[idx] if idx < len(explicit) else None,
-            )
-            added.append(vas.video_to_dict(video))
+            # Stream to disk instead of buffering the entire file in RAM —
+            # avoids a multi-GB upload OOMing the function the moment it arrives.
+            safe = vas.safe_filename(name)
+            suffix = Path(safe).suffix.lower()
+            if suffix not in vas.ALLOWED_VIDEO_SUFFIXES:
+                raise vas.AnalysisError(
+                    f"'{name}': unsupported video type '{suffix or '?'}'. "
+                    f"Use {', '.join(sorted(vas.ALLOWED_VIDEO_SUFFIXES))}."
+                )
+            tmp_dir = vas.analysis_dir()
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            max_bytes = int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
+            tmp_path = Path(tempfile.mkstemp(prefix=".ul_", suffix=suffix, dir=tmp_dir)[1])
+            bytes_written = 0
+            try:
+                with tmp_path.open("wb") as fh:
+                    while True:
+                        chunk = await upload.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        bytes_written += len(chunk)
+                        if bytes_written > max_bytes:
+                            raise vas.AnalysisError(
+                                f"'{name}' exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB upload limit."
+                            )
+                        fh.write(chunk)
+                if bytes_written == 0:
+                    raise vas.AnalysisError(f"'{name}' is empty.")
+                video = vas.register_from_path(
+                    db, tmp_path, name, batch,
+                    camera_id=explicit[idx] if idx < len(explicit) else None,
+                )
+                added.append(vas.video_to_dict(video))
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
         except vas.AnalysisError as exc:
             errors.append({"source_name": name, "error": str(exc)})
+        except HTTPException:
+            raise
         except Exception as exc:  # pragma: no cover - unexpected decode failures
             logger.exception(f"[ANALYSIS] upload of {name} failed")
             errors.append({"source_name": name, "error": str(exc)})

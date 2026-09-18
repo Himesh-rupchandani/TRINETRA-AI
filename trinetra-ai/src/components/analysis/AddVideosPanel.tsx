@@ -21,6 +21,11 @@ export function AddVideosPanel({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [fileErrors, setFileErrors] = useState<Array<{ source_name: string; error: string }>>([]);
+  const [progress, setProgress] = useState<{
+    fileName: string;
+    percentage: number;
+    overall: number;
+  } | null>(null);
 
   const [driveUrl, setDriveUrl] = useState('');
   const [driveCameraId, setDriveCameraId] = useState('');
@@ -45,8 +50,14 @@ export function AddVideosPanel({
     setUploading(true);
     setUploadError(null);
     setFileErrors([]);
+    setProgress({ fileName: files[0]?.name ?? '', percentage: 0, overall: 0 });
     try {
-      const res = await videoAnalysisService.uploadFiles(files, { batchId });
+      const res = await videoAnalysisService.uploadFiles(files, {
+        batchId,
+        onProgress: (p) => {
+          setProgress({ fileName: p.fileName, percentage: p.percentage, overall: p.overallPercentage });
+        },
+      });
       setFiles([]);
       setFileErrors(res.errors);
       onAdded(res.added, res.batchId);
@@ -54,6 +65,7 @@ export function AddVideosPanel({
       setUploadError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setUploading(false);
+      setProgress(null);
     }
   };
 
@@ -184,6 +196,28 @@ export function AddVideosPanel({
             )}
           </button>
 
+          {uploading && progress && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between text-2xs text-ink-muted">
+                <span className="truncate pr-2">Uploading {progress.fileName}…</span>
+                <span className="font-mono">{progress.overall}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+                <div
+                  className="h-full bg-brand transition-all duration-200"
+                  style={{ width: `${progress.overall}%` }}
+                  role="progressbar"
+                  aria-valuenow={progress.overall}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                />
+              </div>
+              <p className="text-2xs text-ink-faint">
+                Large videos are uploaded in small chunks to bypass hosting limits, so please leave
+                this tab open. Processing starts automatically after upload.
+              </p>
+            </div>
+          )}
           {uploadError && (
             <p className="mt-2 rounded-lg border border-critical/30 bg-critical/10 px-3 py-2 text-2xs text-critical" role="alert">
               {uploadError}

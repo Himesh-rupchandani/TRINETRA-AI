@@ -273,6 +273,43 @@ def register_upload(db, filename: str, data: bytes, batch_id: str,
         path.unlink(missing_ok=True)
         raise
 
+def register_from_path(db, path: Path, source_name: str, batch_id: str,
+                       camera_id: Optional[str] = None) -> VideoSource:
+    """Register a video that is already on disk (used by chunked uploads).
+
+    ``path`` is MOVED/RENAMED into the analysis directory with a unique name if
+    a file with the same name already exists — so callers can safely hand us a
+    temp file and not worry about collisions.
+    """
+    safe = safe_filename(source_name)
+    suffix = Path(safe).suffix.lower()
+    if suffix not in ALLOWED_VIDEO_SUFFIXES:
+        raise AnalysisError(
+            f"'{source_name}': unsupported video type '{suffix or '?'}'. "
+            f"Use {', '.join(sorted(ALLOWED_VIDEO_SUFFIXES))}."
+        )
+    if not path.exists() or path.stat().st_size == 0:
+        raise AnalysisError(f"'{source_name}' is empty or missing.")
+    max_bytes = int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
+    if path.stat().st_size > max_bytes:
+        raise AnalysisError(
+            f"'{source_name}' exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB upload limit."
+        )
+    # Move the temp/assembly file into its canonical home.
+    target = _unique_path(analysis_dir(), safe)
+    if str(path.resolve()) != str(target.resolve()):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(path, target)
+    try:
+        return _register(
+            db, path=target, source_type="UPLOAD", source_name=safe,
+            source_ref=None, batch_id=batch_id, camera_id=camera_id,
+        )
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+
+
 def register_gdrive(db, url: str, batch_id: str, camera_id: Optional[str] = None) -> VideoSource:
     """Validate + download a shared Drive video and register it for analysis."""
     from . import gdrive_service

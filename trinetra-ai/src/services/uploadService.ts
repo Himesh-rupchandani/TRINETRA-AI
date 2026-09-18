@@ -1,6 +1,11 @@
 import type { VehicleEvent } from '@/types';
 import { get, http, isMockMode } from './api';
 import { cameraDirectory, toVehicleEvent, type VehicleEventDto } from './adapters';
+import {
+  DIRECT_UPLOAD_THRESHOLD,
+  uploadChunked,
+  type ChunkProgressCb,
+} from './chunkedUpload';
 
 export type UploadJobStatus = 'IDLE' | 'QUEUED' | 'PROCESSING' | 'DONE' | 'FAILED';
 
@@ -86,18 +91,38 @@ export const uploadService = {
     return (res ?? []).map(toUploadedVideo);
   },
 
-  async upload(file: File, cameraId: string, name?: string): Promise<UploadedVideo> {
+  async upload(
+    file: File,
+    cameraId: string,
+    name?: string,
+    onProgress?: ChunkProgressCb,
+  ): Promise<UploadedVideo> {
     if (isMockMode) throw new Error(MOCK_GUARD);
-    const form = new FormData();
-    form.append('file', file);
-    form.append('camera_id', cameraId);
-    if (name?.trim()) form.append('name', name.trim());
-    // Uploads can be large: no client-side timeout beyond the default axios one.
-    const res = await http.post<UploadedVideoDto>('/uploads/videos', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 0,
-    });
-    return toUploadedVideo(res.data);
+    // Tiny files can go through the legacy endpoint — but anything larger than
+    // ~2 MB must use the chunked path to dodge Vercel's 4.5 MB request-body
+    // cap, which is what was causing the "Request failed with status code 413"
+    // error when users tried to upload real CCTV footage.
+    if (file.size <= DIRECT_UPLOAD_THRESHOLD) {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('camera_id', cameraId);
+      if (name?.trim()) form.append('name', name.trim());
+      const res = await http.post<UploadedVideoDto>('/uploads/videos', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 0,
+      });
+      return toUploadedVideo(res.data);
+    }
+    const { data } = await uploadChunked<UploadedVideoDto>(
+      file,
+      {
+        source: 'upload',
+        cameraId,
+        name: name?.trim() || undefined,
+      },
+      onProgress,
+    );
+    return toUploadedVideo(data);
   },
 
   async detail(cameraId: string): Promise<UploadedVideoDetail> {
