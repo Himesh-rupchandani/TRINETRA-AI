@@ -147,10 +147,34 @@ def format_offset(seconds: Optional[float]) -> str:
 
 def probe_video(path: Path) -> dict:
     """
-    Read real technical metadata from the file with OpenCV.
-    Raises AnalysisError when the file cannot be decoded.
+    Read technical metadata from the file with OpenCV.
+
+    On hosts without the CV stack (Vercel serverless, ``TRINETRA_API_ONLY=1``)
+    we CANNOT decode frames, but we must not crash the upload: the operator
+    still needs the file to register so they can run analysis on a worker
+    that *does* have cv2. We return placeholder metadata and mark the video
+    with ``cv_unavailable=True`` so callers can set a clean error state.
     """
-    cap = cv2.VideoCapture(str(path))
+    # --- Vision stack unavailable: accept the upload, defer probing. ---
+    from ..core.vision import vision_available, VisionUnavailable
+    size_bytes = path.stat().st_size
+    if not vision_available():
+        return {
+            "fps": None,
+            "width": None,
+            "height": None,
+            "frames_total": 0,
+            "duration_sec": None,
+            "size_bytes": size_bytes,
+            "cv_unavailable": True,
+        }
+    try:
+        cap = cv2.VideoCapture(str(path))
+    except VisionUnavailable as exc:
+        return {
+            "fps": None, "width": None, "height": None, "frames_total": 0,
+            "duration_sec": None, "size_bytes": size_bytes, "cv_unavailable": True,
+        }
     try:
         if not cap.isOpened():
             raise AnalysisError(
@@ -164,21 +188,28 @@ def probe_video(path: Path) -> dict:
         ok, frame = cap.read()
         if not ok or frame is None:
             raise AnalysisError("The video contains no readable frames.")
-        if width <= 0 or height <= 0:
-            height, width = frame.shape[:2]
+        if width <= 0 or height <= 0 and frame is not None:
+            try:
+                height, width = frame.shape[:2]
+            except Exception:
+                width, height = 0, 0
         if fps <= 0 or fps > 240:
             fps = 25.0
         duration = (frames / fps) if frames > 0 else None
         return {
             "fps": round(fps, 3),
-            "width": width,
-            "height": height,
+            "width": width or None,
+            "height": height or None,
             "frames_total": frames,
             "duration_sec": round(duration, 2) if duration else None,
-            "size_bytes": path.stat().st_size,
+            "size_bytes": size_bytes,
+            "cv_unavailable": False,
         }
     finally:
-        cap.release()
+        try:
+            cap.release()
+        except Exception:
+            pass
 
 # ---------------------------------------------------------------------------
 # Registration
@@ -197,6 +228,7 @@ def _register(
 ) -> VideoSource:
     """Create the VideoSource + its paired Camera registry row."""
     meta = probe_video(path)
+    cv_unavail = bool(meta.get("cv_unavailable"))
 
     cam_id = unique_camera_id(db, (camera_id or camera_id_from_filename(source_name)))
     cam = Camera(
@@ -214,7 +246,7 @@ def _register(
         codec="H264",
         width=meta["width"],
         height=meta["height"],
-        fps=int(round(meta["fps"])),
+        fps=(int(round(meta["fps"])) if meta.get("fps") else None),
         status="ONLINE",
     )
     db.add(cam)
@@ -227,8 +259,15 @@ def _register(
         source_name=source_name,
         source_ref=source_ref,
         file_path=str(path),
-        status=READY,
+        status=("FAILED" if cv_unavail else READY),
         progress_pct=0.0,
+        error=(
+            "OpenCV is not available on this server so the video cannot be "
+            "analysed here. Run the backend locally (pip install -r "
+            "requirements-ml.txt) or deploy the Docker image to enable the "
+            "detection + ANPR pipeline. The file has been saved and listed "
+            "below." if cv_unavail else None
+        ),
         fps=meta["fps"],
         width=meta["width"],
         height=meta["height"],
@@ -360,6 +399,15 @@ def start_analysis(db, video_ids: Optional[List[str]] = None) -> List[VideoSourc
     Queue analysis for the given videos (or every non-terminal video).
     Returns the queued VideoSource rows.
     """
+    from ..core.vision import vision_available
+    if not vision_available():
+        raise AnalysisError(
+            "Detection + ANPR require the OpenCV/NumPy stack, which is not "
+            "installed on this (serverless) host. Run the backend locally "
+            "(`pip install -r requirements-ml.txt`) or deploy the Docker "
+            "image to analyse videos. Videos you uploaded are listed below "
+            "and will be processed when the pipeline runs on a CV-enabled host."
+        )
     q = db.query(VideoSource)
     if video_ids:
         q = q.filter(VideoSource.video_id.in_(video_ids))

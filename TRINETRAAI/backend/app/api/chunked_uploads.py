@@ -250,6 +250,14 @@ def _complete_analysis_upload(sess, path, db: Session):
     except vas.AnalysisError as exc:
         path.unlink(missing_ok=True)
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except Exception as exc:
+        path.unlink(missing_ok=True)
+        # Surface unexpected errors (e.g. CV stack missing at probe time) as
+        # a 422 with the message instead of a bare 500.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc) or "Registration failed.",
+        )
     added = [vas.video_to_dict(video)]
     errors = []
     if sess.auto_start:

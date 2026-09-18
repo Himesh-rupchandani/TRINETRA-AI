@@ -149,9 +149,14 @@ async def upload_videos(
                     camera_id=explicit[idx] if idx < len(explicit) else None,
                 )
                 added.append(vas.video_to_dict(video))
-            except Exception:
-                tmp_path.unlink(missing_ok=True)
+            except vas.AnalysisError:
                 raise
+            except Exception as exc:
+                tmp_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(exc) or f"Could not register '{name}'.",
+                )
         except vas.AnalysisError as exc:
             errors.append({"source_name": name, "error": str(exc)})
         except HTTPException:
