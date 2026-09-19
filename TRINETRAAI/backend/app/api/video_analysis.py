@@ -21,14 +21,17 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import tempfile
 import uuid
+from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..core.config import settings
 from ..core.logging_config import logger
 from ..core.vision import require_vision
 from ..database.database import get_db
@@ -53,43 +56,111 @@ class RunRequest(BaseModel):
 # Registration
 # ---------------------------------------------------------------------------
 
+def _as_bool(v) -> bool:
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return False
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
 @router.post(
     "/videos/upload",
     status_code=status.HTTP_201_CREATED,
     summary="Upload one or more local videos for analysis",
 )
 async def upload_videos(
-    files: List[UploadFile] = File(..., description="One or more video files"),
-    batch_id: Optional[str] = Form(None),
-    camera_ids: Optional[str] = Form(
-        None, description="Optional comma-separated camera ids, aligned with the files"
-    ),
-    auto_start: bool = Form(False, description="Start analysis immediately after upload"),
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Store each uploaded video and register it as its own camera/video id.
     The filename is used as the camera identifier (``CAM1.mp4`` → ``CAM1``)
     unless an explicit id is supplied.
+
+    Form fields are parsed manually from ``request.form()`` instead of via
+    FastAPI's ``File(...) / Form(...)`` magic because mixing ``List[UploadFile]``
+    with ``Form(...)`` fields triggers a pydantic/FastAPI bug (HTTP 422
+    "object() takes no arguments" / HTTP 500) on certain deployed versions.
     """
+    try:
+        form = await request.form()
+    except Exception as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not parse multipart form: {exc}",
+        )
+
+    # Collect every uploaded file (supports both "files" and legacy "file").
+    files: List[UploadFile] = []
+    for key in ("files", "file"):
+        val = form.getlist(key)
+        for item in val:
+            # request.form() yields starlette UploadFile (see note in chunked_uploads.py)
+            if hasattr(item, "read") and hasattr(item, "filename") and getattr(item, "filename", None):
+                files.append(item)
+
     if not files:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No files were uploaded.")
 
-    batch = (batch_id or "").strip() or uuid.uuid4().hex[:12]
-    explicit = [c.strip() for c in (camera_ids or "").split(",") if c.strip()]
+    batch_id_val = form.get("batch_id")
+    camera_ids_val = form.get("camera_ids")
+    auto_start = _as_bool(form.get("auto_start"))
+    # NOTE: default for analysis is ALWAYS False here. The operator presses
+    # "Start analysis" manually after uploads finish — matching the UX request.
+
+    batch = (str(batch_id_val).strip() if batch_id_val else "") or uuid.uuid4().hex[:12]
+    explicit = [c.strip() for c in (str(camera_ids_val) if camera_ids_val else "").split(",") if c.strip()]
 
     added, errors = [], []
     for idx, upload in enumerate(files):
         name = upload.filename or f"video_{idx + 1}.mp4"
         try:
-            data = await upload.read()
-            video = vas.register_upload(
-                db, name, data, batch,
-                camera_id=explicit[idx] if idx < len(explicit) else None,
-            )
-            added.append(vas.video_to_dict(video))
+            # Stream to disk instead of buffering the entire file in RAM —
+            # avoids a multi-GB upload OOMing the function the moment it arrives.
+            safe = vas.safe_filename(name)
+            suffix = Path(safe).suffix.lower()
+            if suffix not in vas.ALLOWED_VIDEO_SUFFIXES:
+                raise vas.AnalysisError(
+                    f"'{name}': unsupported video type '{suffix or '?'}'. "
+                    f"Use {', '.join(sorted(vas.ALLOWED_VIDEO_SUFFIXES))}."
+                )
+            tmp_dir = vas.analysis_dir()
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            max_bytes = int(settings.MAX_UPLOAD_SIZE_MB) * 1024 * 1024
+            tmp_path = Path(tempfile.mkstemp(prefix=".ul_", suffix=suffix, dir=tmp_dir)[1])
+            bytes_written = 0
+            try:
+                with tmp_path.open("wb") as fh:
+                    while True:
+                        chunk = await upload.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        bytes_written += len(chunk)
+                        if bytes_written > max_bytes:
+                            raise vas.AnalysisError(
+                                f"'{name}' exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB upload limit."
+                            )
+                        fh.write(chunk)
+                if bytes_written == 0:
+                    raise vas.AnalysisError(f"'{name}' is empty.")
+                video = vas.register_from_path(
+                    db, tmp_path, name, batch,
+                    camera_id=explicit[idx] if idx < len(explicit) else None,
+                )
+                added.append(vas.video_to_dict(video))
+            except vas.AnalysisError:
+                raise
+            except Exception as exc:
+                tmp_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(exc) or f"Could not register '{name}'.",
+                )
         except vas.AnalysisError as exc:
             errors.append({"source_name": name, "error": str(exc)})
+        except HTTPException:
+            raise
         except Exception as exc:  # pragma: no cover - unexpected decode failures
             logger.exception(f"[ANALYSIS] upload of {name} failed")
             errors.append({"source_name": name, "error": str(exc)})

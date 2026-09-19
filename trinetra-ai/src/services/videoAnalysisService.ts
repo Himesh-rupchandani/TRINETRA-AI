@@ -1,4 +1,5 @@
 import { get, http, isMockMode, post } from './api';
+import { DIRECT_UPLOAD_THRESHOLD, uploadChunked } from './chunkedUpload';
 
 /* ------------------------------------------------------------------ types */
 
@@ -280,26 +281,112 @@ export const videoAnalysisService = {
 
   async uploadFiles(
     files: File[],
-    opts: { batchId?: string; cameraIds?: string[]; autoStart?: boolean } = {},
+    opts: {
+      batchId?: string;
+      cameraIds?: string[];
+      autoStart?: boolean;
+      onProgress?: (p: {
+        fileIndex: number;
+        fileName: string;
+        loaded: number;
+        total: number;
+        percentage: number;
+        overallPercentage: number;
+      }) => void;
+    } = {},
   ): Promise<{ batchId: string; added: AnalysisVideo[]; errors: Array<{ source_name: string; error: string }> }> {
     if (isMockMode) throw new Error(MOCK_GUARD);
-    const form = new FormData();
-    files.forEach((f) => form.append('files', f));
-    if (opts.batchId) form.append('batch_id', opts.batchId);
-    if (opts.cameraIds?.length) form.append('camera_ids', opts.cameraIds.join(','));
-    form.append('auto_start', String(Boolean(opts.autoStart)));
-    const res = await http.post<{
-      batch_id: string;
-      added: AnalysisVideoDto[];
-      errors: Array<{ source_name: string; error: string }>;
-    }>('/analysis/videos/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 0,
-    });
+
+    const added: AnalysisVideoDto[] = [];
+    const errors: Array<{ source_name: string; error: string }> = [];
+    let batchId: string = opts.batchId ?? '';
+
+    // Compute the aggregate file size for an overall percentage.
+    const totalBytes = files.reduce((s, f) => s + f.size, 0);
+    let bytesSent = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      try {
+        let res;
+        if (f.size <= DIRECT_UPLOAD_THRESHOLD) {
+          // Tiny single file: use the legacy endpoint (one file per request
+          // keeps the request comfortably under 4.5 MB).
+          const form = new FormData();
+          form.append('files', f);
+          if (batchId) form.append('batch_id', batchId);
+          if (opts.cameraIds?.[i]) form.append('camera_ids', opts.cameraIds[i]);
+          form.append('auto_start', String(Boolean(opts.autoStart)));
+          const r = await http.post<{
+            batch_id: string;
+            added: AnalysisVideoDto[];
+            errors: Array<{ source_name: string; error: string }>;
+          }>('/analysis/videos/upload', form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 0,
+          });
+          res = r.data;
+          opts.onProgress?.({
+            fileIndex: i,
+            fileName: f.name,
+            loaded: f.size,
+            total: f.size,
+            percentage: 100,
+            overallPercentage: Math.min(
+              100,
+              Math.round(((bytesSent + f.size) / totalBytes) * 100),
+            ),
+          });
+          bytesSent += f.size;
+        } else {
+          // Large file: chunked upload bypasses Vercel's 4.5 MB body limit.
+          const { data } = await uploadChunked<{
+            batch_id: string;
+            added: AnalysisVideoDto[];
+            errors: Array<{ source_name: string; error: string }>;
+          }>(
+            f,
+            {
+              source: 'analysis',
+              batchId: batchId || undefined,
+              cameraIdsCsv: opts.cameraIds?.[i],
+              autoStart: opts.autoStart,
+            },
+            (p) => {
+              opts.onProgress?.({
+                fileIndex: i,
+                fileName: f.name,
+                loaded: p.loaded,
+                total: p.total,
+                percentage: p.percentage,
+                overallPercentage: Math.min(
+                  100,
+                  Math.round(((bytesSent + p.loaded) / totalBytes) * 100),
+                ),
+              });
+            },
+          );
+          res = data;
+          bytesSent += f.size;
+        }
+        if (res?.batch_id && !batchId) batchId = res.batch_id;
+        if (res?.batch_id && batchId && res.batch_id !== batchId) {
+          // Keep the first batch id across files — subsequent files reuse it.
+        }
+        added.push(...(res?.added ?? []));
+        errors.push(...(res?.errors ?? []));
+      } catch (e) {
+        errors.push({
+          source_name: f.name,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
     return {
-      batchId: res.data.batch_id,
-      added: (res.data.added ?? []).map(toVideo),
-      errors: res.data.errors ?? [],
+      batchId,
+      added: added.map(toVideo),
+      errors,
     };
   },
 

@@ -35,15 +35,46 @@ export class ApiError extends Error {
   }
 }
 
+function stringifyDetail(d: unknown): string {
+  if (d == null) return 'Request failed';
+  if (typeof d === 'string') return d;
+  if (typeof d === 'object') {
+    // FastAPI may return {"detail": {"error": "...", "message": "..."}} or an
+    // array of {msg, loc, ...}. Pick the most human-readable field, and fall
+    // back to JSON so the user never sees "[object Object]".
+    const any = d as Record<string, unknown>;
+    if (typeof any.message === 'string') return any.message;
+    if (typeof any.error === 'string') {
+      return typeof any.detail === 'string'
+        ? `${any.error}: ${any.detail}`
+        : any.error;
+    }
+    if (typeof any.detail === 'string') return any.detail;
+    if (Array.isArray(any.detail)) {
+      return (any.detail as Array<{ msg?: string }>)
+        .map((e) => e?.msg ?? JSON.stringify(e))
+        .join('; ');
+    }
+    try {
+      return JSON.stringify(d);
+    } catch {
+      return 'Request failed';
+    }
+  }
+  return String(d);
+}
+
 http.interceptors.response.use(
   (r) => r,
   (error) => {
     const status = error?.response?.status;
-    const detail =
-      error?.response?.data?.message ??
+    const rawDetail =
       error?.response?.data?.detail ??
+      error?.response?.data?.message ??
+      error?.response?.data ??
       error?.message ??
       'Request failed';
+    const detail = stringifyDetail(rawDetail);
     // Never log request bodies or headers — they may carry credentials.
     return Promise.reject(new ApiError(detail, status));
   },
