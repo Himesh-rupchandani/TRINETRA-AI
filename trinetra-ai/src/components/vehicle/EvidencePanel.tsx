@@ -21,8 +21,10 @@ export function EvidencePanel({
   className?: string;
   dense?: boolean;
 }) {
-  const [frameError, setFrameError] = useState(false);
-  const [plateError, setPlateError] = useState(false);
+  // Errors belong to one URL, not to the panel forever. New detections must
+  // load automatically after an older photo failed or expired.
+  const [failedFrame, setFailedFrame] = useState<string | null>(null);
+  const [failedPlate, setFailedPlate] = useState<string | null>(null);
 
   if (!event) {
     return (
@@ -37,6 +39,8 @@ export function EvidencePanel({
   }
 
   const ev = event.evidence;
+  const frameError = Boolean(ev?.frameUrl && failedFrame === ev.frameUrl);
+  const plateError = Boolean(ev?.plateCropUrl && failedPlate === ev.plateCropUrl);
   const isUpload = event.evidenceRef?.startsWith('uploads/') || event.evidenceRef?.startsWith('analysis/');
 
   return (
@@ -81,12 +85,13 @@ export function EvidencePanel({
           </div>
         ) : ev?.frameUrl && !frameError ? (
           <img
+            key={ev.frameUrl}
             src={ev.frameUrl}
             alt={`CCTV frame from ${event.cameraName ?? event.cameraId} at ${formatDateTime(event.timestamp)}`}
-            className="aspect-video w-full object-cover"
+            className="aspect-video w-full object-contain"
             loading="lazy"
             decoding="async"
-            onError={() => setFrameError(true)}
+            onError={() => setFailedFrame(ev.frameUrl!)}
           />
         ) : ev?.frameUrl && frameError ? (
           <div className="grid aspect-video w-full place-items-center gap-2 bg-surface-2 p-4 text-center">
@@ -98,14 +103,9 @@ export function EvidencePanel({
                 {isUpload ? ' For uploaded videos, evidence is stored under the backend evidence folder.' : ''}
               </p>
             </div>
-            <img
-              src={vehicleStill(event.vehicleClass)}
-              alt="Fallback vehicle"
-              onError={hideBrokenImage}
-              className="mt-2 h-20 w-auto rounded border border-line object-contain opacity-60"
-              loading="lazy"
-              decoding="async"
-            />
+            <button type="button" className="btn-ghost btn-xs" onClick={() => setFailedFrame(null)}>
+              Retry photo
+            </button>
           </div>
         ) : (
           <div className="grid aspect-video w-full place-items-center gap-2 bg-surface-2 p-4 text-center">
@@ -133,17 +133,19 @@ export function EvidencePanel({
         <figure className="overflow-hidden rounded border border-line bg-black">
           {ev?.plateCropUrl && !plateError ? (
             <img
+              key={ev.plateCropUrl}
               src={ev.plateCropUrl}
               alt={event.plate}
               className="flex h-20 w-full items-center justify-center object-contain font-mono text-2xl font-bold tracking-widest text-white"
               loading="lazy"
               decoding="async"
-              onError={() => setPlateError(true)}
+              onError={() => setFailedPlate(ev.plateCropUrl!)}
             />
           ) : ev?.plateCropUrl && plateError ? (
             <div className="grid h-20 place-items-center gap-1 bg-surface-2 p-2 text-center">
               <p className="font-mono text-xs font-bold tracking-widest text-ink">{prettyPlate(event.plate)}</p>
               <p className="text-[10px] text-ink-faint">Plate crop unavailable</p>
+              <button type="button" className="text-[10px] underline" onClick={() => setFailedPlate(null)}>Retry plate crop</button>
             </div>
           ) : (
             <div className="grid h-20 place-items-center bg-surface-2 text-2xs text-ink-faint">

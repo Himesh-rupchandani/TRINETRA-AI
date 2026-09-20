@@ -114,6 +114,12 @@ export async function post<T>(url: string, body?: unknown, cfg?: AxiosRequestCon
 /** True when the app is running against synthetic data. */
 export const isMockMode = config.useMocks;
 
+/** Browser asset endpoint; use the same API origin/prefix as JSON requests. */
+export function apiAssetUrl(path: string, baseUrl = config.apiBaseUrl): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+}
+
 /** Absolute URL for a realtime endpoint, honouring the configured base URL. */
 export function realtimeUrl(path: string, protocol: 'http' | 'ws' = 'http'): string {
   const base = config.apiBaseUrl.startsWith('http')

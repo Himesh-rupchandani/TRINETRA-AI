@@ -60,6 +60,7 @@ export function CameraPlayer({
   autoRequest = false,
   embedded = false,
   className,
+  onDetectionSnapshot,
 }: {
   camera: Camera;
   poster?: string;
@@ -67,6 +68,7 @@ export function CameraPlayer({
   /** Hide the standalone control footer — used when embedded inside a card. */
   embedded?: boolean;
   className?: string;
+  onDetectionSnapshot?: (snapshot: LiveAnprSnapshot | null) => void;
 }) {
   const [ticket, setTicket] = useState<CameraStreamTicket | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -93,12 +95,14 @@ export function CameraPlayer({
   const onAnprStatus = useCallback((value: LiveAnprSnapshot) => {
     setAnprStatus(value);
     setAnprError(null);
-  }, []);
+    onDetectionSnapshot?.(value);
+  }, [onDetectionSnapshot]);
   const useImg = isMjpeg || detectionActive;
 
   useEffect(() => {
     setAnprStatus(null);
     setAnprError(null);
+    onDetectionSnapshot?.(null);
     if (!detectionActive || !wanted || config.useMocks) return;
     const abort = new AbortController();
     let stopped = false;
@@ -115,7 +119,7 @@ export function CameraPlayer({
     };
     void poll();
     return () => { stopped = true; abort.abort(); clearTimeout(timer); };
-  }, [detectionActive, wanted, camera.id, onAnprStatus]);
+  }, [detectionActive, wanted, camera.id, onAnprStatus, onDetectionSnapshot]);
 
   // The MJPEG views (file feed / AI detection view) can also serve an honest
   // "NO SIGNAL" placeholder when the camera source is unreachable from this

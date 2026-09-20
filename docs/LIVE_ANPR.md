@@ -66,6 +66,29 @@ not become police/watchlist alarms merely because a plate was read.
   processed/captured during playback, not a recovered original recording date.
 - Notifications are in-app, not SMS or operating-system push notifications.
 
+## Photo evidence — direct from detections
+
+**Photo evidence** sits beside the player on desktop and directly below it on
+mobile. It automatically shows the latest detected vehicle crops (up to the
+configured vehicle budget), **before OCR or two-read agreement**. A vehicle
+whose plate is unreadable still gets its real photo, labelled **Plate not read**.
+No stock photo is substituted when a real image cannot be loaded.
+
+- The gallery follows new captures without a refresh or table selection.
+  Selecting **View** in the history pins that saved event for review;
+  **Follow latest** resumes the automatic gallery.
+- Preview images use unique capture IDs, original observation timestamps and
+  recording offsets. They are not a second live video or invented log entries.
+- `GET /api/cameras/{id}/anpr` (and browser frame responses) includes `photos`.
+  Image paths resolve under the configured API origin/version prefix, including
+  `/api/v1`. The new photo endpoint serves JPEG bytes without running inference.
+- Preview storage is memory-only: **30 seconds, at most 64 capture batches / 16 MB
+  globally**. It does not write every frame to disk or create unknown-plate log
+  records. Readable, agreed plate sightings still retain their normal saved
+  evidence in the Vehicle Log. Preview photos are not archival evidence.
+- Saved evidence shows the whole crop (`object-contain`), supports retries, and
+  retries a new URL automatically even if the previous capture failed to load.
+
 ## Detection integrity
 
 - Nothing is generated to fill an empty log. No read → `UNKNOWN` in the
@@ -200,6 +223,11 @@ With that backend and the real-mode frontend running:
 .venv/bin/python scripts/verify/live_anpr_browser.py \
   --app-url http://127.0.0.1:5173 --camera-id recorded
 ```
+
+To check the immediate photo gallery without requiring a readable plate or
+waiting for a notification, add `--photos-only`. This verifies loaded vehicle
+images and automatic capture updates using the real model, without selecting
+an existing Vehicle Log entry.
 
 `--chromium-binary /path/to/chromium` supports an existing Chromium install.
 The script writes its JSON report and screenshots into the ignored

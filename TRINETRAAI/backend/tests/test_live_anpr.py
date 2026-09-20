@@ -563,3 +563,98 @@ def test_mjpeg_loop_seek_and_fast_decoder_do_not_draw_old_offsets(rig):
     for media_time in (0.5, 11.0, 18.0):
         assert np.array_equal(svc.annotate("CAM2", raw.copy(), media_time=media_time), raw)
     assert np.count_nonzero(svc.annotate("CAM2", raw.copy(), media_time=13.1)[:, :, 1] > 200) > 100
+
+
+def test_vehicle_photos_available_before_plate_confirmation(api, rig):
+    _, factory, _, messages, process = rig
+    first = process()
+    assert len(first["photos"]) == 3
+    assert not rows(factory) and not messages
+    for photo in first["photos"]:
+        assert photo["plate_number"] is None and photo["event_id"] is None
+        assert photo["captured_at"] and photo["plate_image_path"]
+        response = api.get("/api" + photo["image_path"])
+        assert response.status_code == 200 and response.headers["content-type"] == "image/jpeg"
+        assert "private" in response.headers["cache-control"]
+        image = cv2.imdecode(np.frombuffer(response.content, np.uint8), cv2.IMREAD_COLOR)
+        assert image.shape == (200, 170, 3)  # exact detected vehicle, not a stock photo
+        assert abs(float(image.mean()) - 127) < 2
+        assert api.get("/api" + photo["plate_image_path"]).status_code == 200
+    second = process()
+    assert {photo["plate_number"] for photo in second["photos"]} == set(PLATES)
+    assert {photo["event_id"] for photo in second["photos"]} == {e.id for e in rows(factory)}
+
+
+def test_unreadable_or_missing_ocr_still_shows_actual_vehicle_photos(api, rig, monkeypatch):
+    _, factory, _, messages, process = rig
+    monkeypatch.setattr(type(live.ocr_service), "available", property(lambda self: False))
+    result = process()
+    assert result["status"] == "UNAVAILABLE" and len(result["photos"]) == 3
+    assert all(p["plate_number"] is None and p["plate_image_path"] is None for p in result["photos"])
+    assert all(api.get("/api" + p["image_path"]).status_code == 200 for p in result["photos"])
+    assert not rows(factory) and not messages
+
+
+def test_photo_preview_is_camera_scoped_and_expires(api, rig):
+    svc, _, clock, _, process = rig
+    photo = process()["photos"][0]
+    path = "/api" + photo["image_path"]
+    assert api.get(path.replace("/cam1/", "/cam2/")).status_code == 404
+    assert api.get(path.replace("/vehicle.jpg", "/arbitrary.jpg")).status_code == 422
+    assert api.get(path.replace("/cam1/", "/missing/")).status_code == 404
+    clock.advance(live.PHOTO_PREVIEW_SECONDS + 1)
+    assert svc.snapshot("cam1")["photos"] == []
+    assert api.get(path).status_code == 404
+    assert svc._photo_bytes == 0
+
+
+def test_photo_cache_is_bounded_by_count_and_bytes(api, rig, monkeypatch):
+    svc, _, _, _, process = rig
+    monkeypatch.setattr(live, "MAX_PHOTO_BATCHES", 2)
+    first = process()["photos"][0]
+    for _ in range(4):
+        result = process()
+    assert len(svc._photo_batches) == 2
+    assert api.get("/api" + first["image_path"]).status_code == 404
+    assert api.get("/api" + result["photos"][0]["image_path"]).status_code == 200
+    assert svc._photo_bytes == sum(batch.size for batch in svc._photo_batches.values())
+    monkeypatch.setattr(live, "MAX_PHOTO_BYTES", 100)
+    process()
+    assert svc._photo_bytes <= 100
+    assert svc.snapshot("cam1")["photos"] == []
+
+
+def test_photo_capture_is_immutable_and_forget_releases_only_that_camera(api, rig):
+    svc, _, _, _, process = rig
+    first = process("CAM1")["photos"][0]
+    original = api.get("/api" + first["image_path"]).content
+    second = process("CAM1", frame=np.full((360, 640, 3), 210, dtype=np.uint8))["photos"][0]
+    assert first["image_path"] != second["image_path"]
+    assert api.get("/api" + first["image_path"]).content == original
+    other = process("CAM2")["photos"][0]
+    svc.forget("cam1")
+    assert api.get("/api" + first["image_path"]).status_code == 404
+    assert api.get("/api" + other["image_path"]).status_code == 200
+    assert svc._photo_bytes == sum(batch.size for batch in svc._photo_batches.values())
+
+
+def test_photo_endpoint_does_not_wait_for_ocr(api, rig, monkeypatch):
+    svc, factory, _, _, _ = rig
+    monkeypatch.setattr(svc, "start", lambda: live.LiveAnprService.start(svc))
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_ocr(*args):
+        entered.set()
+        assert release.wait(3)
+        return None
+
+    monkeypatch.setattr(live, "read_plate_for_vehicle", slow_ocr)
+    try:
+        assert svc.submit("CAM1", np.full((360, 640, 3), 127, dtype=np.uint8))
+        assert entered.wait(3)
+        result = api.get("/api/cameras/cam1/anpr").json()
+        assert result["status"] == "PROCESSING" and len(result["photos"]) == 3
+        assert api.get("/api" + result["photos"][0]["image_path"]).status_code == 200
+        assert not rows(factory)
+    finally:
+        release.set()

@@ -12,6 +12,20 @@ export interface LiveDetection {
   event_id: number | null;
 }
 
+export interface LivePhoto {
+  id: string;
+  track_id: number;
+  class_name: string;
+  image_path: string;
+  plate_image_path: string | null;
+  captured_at: string;
+  media_time: number | null;
+  plate_number: string | null;
+  plate_status: 'HIGH' | 'LOW_CONFIDENCE' | 'UNKNOWN';
+  plate_confidence: number | null;
+  event_id: number | null;
+}
+
 export interface LiveAnprSnapshot {
   camera_id: string;
   status: 'IDLE' | 'WARMING_UP' | 'PROCESSING' | 'SCANNING' | 'UNAVAILABLE' | 'ERROR' | 'DISABLED' | 'BUSY' | 'SHARED';
@@ -29,6 +43,7 @@ export interface LiveAnprSnapshot {
   pending: boolean;
   accepted?: boolean;
   detections: LiveDetection[];
+  photos?: LivePhoto[];
 }
 
 export const liveAnprService = {

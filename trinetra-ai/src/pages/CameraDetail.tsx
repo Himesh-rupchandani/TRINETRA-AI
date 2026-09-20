@@ -4,7 +4,10 @@ import { Activity, MapPin, ScanLine } from 'lucide-react';
 import { InvestigationLayout } from '@/layouts/InvestigationLayout';
 import { CameraPlayer } from '@/components/camera/CameraPlayer';
 import { UploadedVideoPanel } from '@/components/camera/UploadedVideoPanel';
-import { EvidencePanel } from '@/components/vehicle/EvidencePanel';
+import { LivePhotoEvidence } from '@/components/camera/LivePhotoEvidence';
+import { useLive } from '@/features/alerts/LiveProvider';
+import { latestCameraEvidence } from '@/lib/evidence';
+import type { LiveAnprSnapshot } from '@/services/liveAnprService';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { Panel, AsyncBoundary, KeyValue, ErrorState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
@@ -16,11 +19,17 @@ import { formatDateTime, formatTime, formatVideoOffset, relativeTime, prettyEven
 
 export default function CameraDetail() {
   const { cameraId = '' } = useParams();
+  return <CameraDetailView key={cameraId} cameraId={cameraId} />;
+}
+
+function CameraDetailView({ cameraId }: { cameraId: string }) {
   const navigate = useNavigate();
   const { data: camera, loading, error, refresh } = useCamera(cameraId);
   const events = useEventSearch({ cameraId }, 1, 30);
   const [selected, setSelected] = useState<VehicleEvent | null>(null);
   const [watchlistOnly, setWatchlistOnly] = useState(false);
+  const [snapshot, setSnapshot] = useState<LiveAnprSnapshot | null>(null);
+  const { plateNotifications } = useLive();
 
   const all = useMemo(() => events.data?.items ?? [], [events.data]);
   const list = useMemo(
@@ -28,7 +37,7 @@ export default function CameraDetail() {
     [all, watchlistOnly],
   );
   const watchlistHits = useMemo(() => all.filter((e) => e.watchlistMatch).length, [all]);
-  const activeEvidence = selected ?? list[0] ?? null;
+  const latestSaved = useMemo(() => latestCameraEvidence(cameraId, [...plateNotifications, ...all]), [cameraId, plateNotifications, all]);
 
   if (error) {
     return (
@@ -80,11 +89,22 @@ export default function CameraDetail() {
     >
       <AsyncBoundary loading={loading || !camera} error={error} onRetry={refresh} loadingLabel="Loading camera">
         {camera && (
-          <div className="grid gap-3 p-4 sm:gap-4 sm:p-5">
-            {/* MAIN — player + recent AI events */}
-            <div className="flex flex-col gap-3 sm:gap-4 xl:col-span-8">
-              <CameraPlayer camera={camera} autoRequest />
+          <div className="grid gap-3 p-4 sm:gap-4 sm:p-5 xl:grid-cols-12">
+            <div className="min-w-0 xl:col-span-8">
+              <CameraPlayer camera={camera} autoRequest onDetectionSnapshot={setSnapshot} />
+            </div>
 
+            {/* Beside the player on desktop; directly below it on mobile. */}
+            <div id="camera-photo-evidence" className="min-w-0 xl:col-span-4 xl:row-span-2">
+              <Panel title="Photo evidence" icon={ScanLine} actions={
+                selected ? <button type="button" className="btn-ghost btn-xs" onClick={() => setSelected(null)}>Follow latest</button>
+                  : <span className="chip border-online/30 bg-online/10 text-online">Auto-updating</span>
+              }>
+                <LivePhotoEvidence camera={camera} snapshot={snapshot} selected={selected} latestSaved={latestSaved} />
+              </Panel>
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-3 sm:gap-4 xl:col-span-8">
               {camera.streamType === 'FILE' && <UploadedVideoPanel cameraId={camera.id} />}
 
               <Panel
@@ -135,7 +155,7 @@ export default function CameraDetail() {
                       </thead>
                       <tbody>
                         {list.map((e) => (
-                          <tr key={e.id} data-event-id={e.id} className={activeEvidence?.id === e.id ? 'bg-brand/10' : undefined}>
+                          <tr key={e.id} data-event-id={e.id} className={selected?.id === e.id ? 'bg-brand/10' : undefined}>
                             <td className="font-mono tabular-nums text-ink">
                               {formatTime(e.timestamp)}
                               {e.videoOffsetSec != null && (
@@ -165,7 +185,10 @@ export default function CameraDetail() {
                               )}
                             </td>
                             <td className="text-right">
-                              <button type="button" className="btn-ghost btn-xs" onClick={() => setSelected(e)}>
+                              <button type="button" className="btn-ghost btn-xs" onClick={() => {
+                                setSelected(e);
+                                document.getElementById('camera-photo-evidence')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                              }}>
                                 View
                               </button>
                             </td>
@@ -178,8 +201,8 @@ export default function CameraDetail() {
               </Panel>
             </div>
 
-            {/* SIDE — metadata, location, evidence */}
-            <div className="flex flex-col gap-3 sm:gap-4 xl:col-span-4">
+            {/* Metadata stays below the camera/evidence workflow. */}
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:col-span-12">
               <Panel title="Camera details" icon={Activity}>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 p-4">
                   <KeyValue label="Camera ID">
@@ -228,9 +251,6 @@ export default function CameraDetail() {
                 />
               </Panel>
 
-              <Panel title="Photo evidence" icon={ScanLine}>
-                <EvidencePanel event={activeEvidence} dense />
-              </Panel>
             </div>
           </div>
         )}

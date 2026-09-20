@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
+from urllib.parse import quote
 
 from sqlalchemy import func
 
@@ -37,6 +38,10 @@ from .ws_manager import ws_manager
 # overlay when the picture has visibly cut/panned since the sampled frame.
 FRAME_SIGNATURE_SIZE = (16, 9)
 SCENE_CHANGE_MEAN_ERROR = 24.0
+# Photos are a bounded short-lived preview, not a write for every video frame.
+PHOTO_PREVIEW_SECONDS = 30.0
+MAX_PHOTO_BATCHES = 64
+MAX_PHOTO_BYTES = 16 * 1024 * 1024
 
 
 def frame_signature(frame) -> list[int]:
@@ -61,6 +66,18 @@ class LiveFrame:
     submitted_at: float
     discontinuity: bool = False
     signature: Optional[list[int]] = None
+    capture_id: str = field(default_factory=lambda: uuid4().hex)
+
+
+@dataclass
+class PhotoBatch:
+    submitted_at: float
+    photos: list[dict]
+    images: dict[tuple[int, str], bytes]
+
+    @property
+    def size(self) -> int:
+        return sum(len(image) for image in self.images.values())
 
 
 @dataclass
@@ -85,6 +102,7 @@ class CameraState:
     shape: tuple = ()
     result: dict = field(default_factory=dict)
     cancelled: bool = False
+    latest_capture_id: str = ""
 
 
 class LiveAnprService:
@@ -97,6 +115,8 @@ class LiveAnprService:
         self._busy: set[str] = set()
         self._threads: list[threading.Thread] = []
         self._shutdown = False
+        self._photo_batches: OrderedDict[tuple[str, str], PhotoBatch] = OrderedDict()
+        self._photo_bytes = 0
 
     @property
     def enabled(self) -> bool:
@@ -125,6 +145,8 @@ class LiveAnprService:
             thread.join(timeout=5)
         with self._condition:
             self._states.clear()
+            self._photo_batches.clear()
+            self._photo_bytes = 0
 
     def forget(self, camera_id: str) -> None:
         key = camera_id.strip().upper()
@@ -133,8 +155,11 @@ class LiveAnprService:
             state = self._states.pop(key, None)
             if state:
                 state.cancelled = True
+            for photo_key in [k for k in self._photo_batches if k[0] == key]:
+                self._photo_bytes -= self._photo_batches.pop(photo_key).size
 
     def _reap(self, now: float) -> None:
+        self._trim_photos(now)
         for key, state in list(self._states.items()):
             if key not in self._busy and now - state.last_submit > settings.LIVE_ANPR_IDLE_SECONDS:
                 self.forget(key)
@@ -222,8 +247,12 @@ class LiveAnprService:
                 status = "DISABLED"
                 result["detections"] = []
                 result["reason"] = "Live ANPR is disabled on the backend."
+            batch = self._photo_batches.get((key, state.latest_capture_id)) if state else None
+            photos = ([dict(photo) for photo in batch.photos]
+                      if batch and now - batch.submitted_at <= PHOTO_PREVIEW_SECONDS else [])
             return {
                 **result, "camera_id": key.lower(), "status": status,
+                "photos": photos,
                 "detections": result.get("detections", []),
                 "frame_width": result.get("frame_width", 0),
                 "frame_height": result.get("frame_height", 0),
@@ -268,6 +297,14 @@ class LiveAnprService:
             packet.signature = frame_signature(packet.frame)
         with self._condition:
             if not state.cancelled:
+                batch = self._photo_batches.get((packet.camera_id, packet.capture_id))
+                if batch:
+                    current = {d["track_id"]: d for d in detections}
+                    for photo in batch.photos:
+                        detection = current.get(photo["track_id"])
+                        if detection:
+                            for name in ("plate_number", "plate_status", "plate_confidence", "event_id"):
+                                photo[name] = detection[name]
                 state.result = {
                     "status": status, "reason": reason,
                     "source_id": packet.source_id, "media_time": packet.media_time,
@@ -333,6 +370,9 @@ class LiveAnprService:
             output.append(dict(x1=track.x1, y1=track.y1, x2=track.x2, y2=track.y2,
                                class_name=track.class_name, confidence=round(track.confidence, 4),
                                track_id=track.track_id, plate_box=None, **self._identity(ts)))
+        # Make the actual vehicle photos available BEFORE OCR or plate voting.
+        # Unreadable plates must not leave the Photo Evidence panel empty.
+        self._cache_photos(packet, state, output)
         # Show vehicle boxes during cold-start and preserve fresh, confirmed
         # identities during rechecks instead of flickering to UNKNOWN every second.
         self._publish(packet, state, output, "PROCESSING")
@@ -359,6 +399,7 @@ class LiveAnprService:
                 if read.plate_box:
                     b = read.plate_box
                     detection["plate_box"] = [b.x1, b.y1, b.x2, b.y2]
+                    self._cache_plate_photo(packet, track.track_id, b)
             # A contradictory read immediately clears the previously shown
             # identity; the replacement still needs two agreeing samples.
             detection.update(self._identity(ts))
@@ -376,6 +417,87 @@ class LiveAnprService:
         state.recent = {p: v for p, v in state.recent.items()
                         if packet.submitted_at - v[0] < settings.LIVE_ANPR_DEDUP_SECONDS}
         self._publish(packet, state, output)
+
+    def _trim_photos(self, now: float) -> None:
+        # Caller holds _condition. Limits are global, not multiplied by viewers.
+        for key, batch in list(self._photo_batches.items()):
+            if now - batch.submitted_at > PHOTO_PREVIEW_SECONDS:
+                self._photo_bytes -= self._photo_batches.pop(key).size
+        while self._photo_batches and (len(self._photo_batches) > MAX_PHOTO_BATCHES
+                                       or self._photo_bytes > MAX_PHOTO_BYTES):
+            _, batch = self._photo_batches.popitem(last=False)
+            self._photo_bytes -= batch.size
+
+    @staticmethod
+    def _photo_jpeg(frame, box, max_side=640) -> Optional[bytes]:
+        try:
+            h, w = frame.shape[:2]
+            x1, y1, x2, y2 = [int(v) for v in box]
+            crop = frame[max(0, y1):min(h, y2), max(0, x1):min(w, x2)]
+            if not crop.size:
+                return None
+            ch, cw = crop.shape[:2]
+            scale = min(1.0, max_side / max(ch, cw))
+            if scale < 1:
+                crop = cv2.resize(crop, (max(1, round(cw * scale)), max(1, round(ch * scale))))
+            ok, encoded = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+            return encoded.tobytes() if ok else None
+        except Exception:
+            logger.warning("[LIVE ANPR] Could not encode a detection preview")
+            return None
+
+    def _cache_photos(self, packet, state, detections) -> None:
+        photos, images = [], {}
+        for detection in detections:
+            track_id = detection["track_id"]
+            image = self._photo_jpeg(packet.frame, [detection[k] for k in ("x1", "y1", "x2", "y2")])
+            if image is None:
+                continue
+            path = f"/cameras/{quote(packet.camera_id.lower(), safe='')}/anpr/photos/{packet.capture_id}/{track_id}"
+            images[(track_id, "vehicle")] = image
+            photos.append(dict(
+                id=f"{packet.capture_id}:{track_id}", track_id=track_id,
+                class_name=detection["class_name"], image_path=f"{path}/vehicle.jpg",
+                plate_image_path=None, captured_at=packet.captured_at.isoformat(),
+                media_time=packet.media_time,
+                **{k: detection[k] for k in ("plate_number", "plate_status", "plate_confidence", "event_id")},
+            ))
+        if not photos:
+            return  # keep the last capture, labelled by its original timestamp
+        with self._condition:
+            if state.cancelled:
+                return
+            batch = PhotoBatch(packet.submitted_at, photos, images)
+            key = (packet.camera_id, packet.capture_id)
+            previous = self._photo_batches.pop(key, None)
+            if previous:
+                self._photo_bytes -= previous.size
+            self._photo_batches[key] = batch
+            self._photo_bytes += batch.size
+            state.latest_capture_id = packet.capture_id
+            self._trim_photos(self._clock())
+
+    def _cache_plate_photo(self, packet, track_id, box) -> None:
+        image = self._photo_jpeg(packet.frame, [box.x1, box.y1, box.x2, box.y2], max_side=320)
+        if image is None:
+            return
+        with self._condition:
+            batch = self._photo_batches.get((packet.camera_id, packet.capture_id))
+            if not batch:
+                return
+            previous = batch.images.get((track_id, "plate"), b"")
+            batch.images[(track_id, "plate")] = image
+            self._photo_bytes += len(image) - len(previous)
+            for photo in batch.photos:
+                if photo["track_id"] == track_id:
+                    photo["plate_image_path"] = photo["image_path"].replace("/vehicle.jpg", "/plate.jpg")
+            self._trim_photos(self._clock())
+
+    def photo(self, camera_id: str, capture_id: str, track_id: int, kind: str) -> Optional[bytes]:
+        with self._condition:
+            self._trim_photos(self._clock())
+            batch = self._photo_batches.get((camera_id.strip().upper(), capture_id))
+            return batch.images.get((track_id, kind)) if batch else None
 
     def _persist(self, packet, track, ts, read) -> Optional[int]:
         vote = ts.votes.best()

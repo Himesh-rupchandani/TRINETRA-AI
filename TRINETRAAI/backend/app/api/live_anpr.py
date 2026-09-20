@@ -1,8 +1,10 @@
 """Browser frame ingress for WHEP/HLS feeds; heavy inference stays off the API loop."""
 from io import BytesIO
-from typing import Optional
+from typing import Literal, Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -81,3 +83,18 @@ def anpr_status(camera_id: str, db: Session = Depends(get_db)):
     """Lightweight state/box poll for a backend-rendered MJPEG camera."""
     camera = registered_camera(camera_id, db)
     return live_anpr_service.snapshot(camera.camera_id)
+
+
+@router.get("/{camera_id}/anpr/photos/{capture_id}/{track_id}/{kind}.jpg", dependencies=[Depends(require_vision)])
+def detection_photo(
+    camera_id: str, capture_id: UUID, kind: Literal["vehicle", "plate"],
+    track_id: int = Path(..., ge=1), db: Session = Depends(get_db),
+):
+    """Short-lived actual detector crop; no filesystem path supplied by clients."""
+    camera = registered_camera(camera_id, db)
+    image = live_anpr_service.photo(camera.camera_id, capture_id.hex, track_id, kind)
+    if image is None:
+        raise HTTPException(404, "This temporary capture has expired; wait for the next detection. Saved evidence remains in the Vehicle Log.")
+    return Response(content=image, media_type="image/jpeg", headers={
+        "Cache-Control": "private, max-age=30", "X-Content-Type-Options": "nosniff",
+    })
