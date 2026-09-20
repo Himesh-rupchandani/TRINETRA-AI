@@ -205,6 +205,9 @@ class Settings(BaseSettings):
     # instance can only ever be demo data — nothing of the operator's is at
     # risk. A populated registry is never rewritten.
     AUTO_SEED_DEMO: bool = False
+    # Camera directory only: no example events, alerts or watchlist entries.
+    # The Render image enables this for the existing 30-camera Sentinel grid.
+    AUTO_REGISTER_SENTINEL_GRID: bool = False
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

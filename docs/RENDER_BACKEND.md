@@ -89,6 +89,7 @@ DEBUG=false
 DEMO_MODE=false
 DEMO_ALERTS_ENABLED=false
 AUTO_SEED_DEMO=false
+AUTO_REGISTER_SENTINEL_GRID=true
 AUTO_START_CAMERAS=false
 LIVE_ANPR_ENABLED=true
 LIVE_ANPR_MAX_VEHICLES=3
@@ -159,6 +160,16 @@ old API-only function is then unused by these frontend paths.
 **`BACKEND_ORIGIN` is a Vite development-server setting, not a production Vercel
 routing switch.** Setting only that variable on Vercel does not connect the
 production bundle to Render.
+
+## Camera list after switching backends
+
+If only the four fallback cameras and `CAMLIVE` appear, the updated Render image
+restores missing CAM01–CAM30 entries at startup independently of demo seeding.
+Existing data is preserved and streams are not all started. See
+[Camera-directory restoration](CAMERA_DIRECTORY_RESTORE.md) for provenance,
+manual restore and catalogue-login diagnostics. A count of 31 includes the
+30 grid entries plus the separate `CAMLIVE` slot; it is not proof of 31 playing
+videos.
 
 ## 5. Verify the actual Render service
 

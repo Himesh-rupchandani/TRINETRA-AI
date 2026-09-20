@@ -25,6 +25,7 @@ from .core.bootstrap import ensure_demo_dataset, get_demo_seed_report, storage_r
 from .core.bootstrap import _format_demo_data  # internal, but stable for health
 from .database.database import init_db, get_db, SessionLocal
 from .database.models import Camera
+from .database.camera_directory import restore_sentinel_directory
 from .database.schemas import HealthResponse
 from .camera.manager import camera_manager
 from .camera.live_source import sync_live_camera
@@ -57,9 +58,14 @@ from .api.reports import router as reports_router
 from .api.sentinel_proxy import router as sentinel_proxy_router
 
 
+_camera_registry_report = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for database initialization and camera streams."""
+    global _camera_registry_report
+    _camera_registry_report = None
     logger.info("Starting TRINETRA AI Surveillance Engine...")
 
     # 1. Ensure tables exist before we probe blank DB.  init_db() also does this,
@@ -120,6 +126,17 @@ async def lifespan(app: FastAPI):
             sync_live_camera(db)
         except Exception as e:
             logger.error(f"Error syncing live camera source: {e}")
+        restored_ids = set()
+        if settings.AUTO_REGISTER_SENTINEL_GRID:
+            try:
+                _camera_registry_report = restore_sentinel_directory(db)
+                db.commit()
+                restored_ids = set(_camera_registry_report.get("added_ids", []))
+                logger.info("[CAMERA DIRECTORY] %s", _camera_registry_report["message"])
+            except Exception:
+                db.rollback()
+                _camera_registry_report = {"status": "error", "message": "Camera directory restore failed; existing data was preserved."}
+                logger.exception("[CAMERA DIRECTORY] Could not restore missing camera entries")
         cameras = db.query(Camera).all()
         if not vision_available():
             # No OpenCV in this process: there is nothing to decode, so do not
@@ -137,6 +154,7 @@ async def lifespan(app: FastAPI):
             # 30-camera demo grid never spawns 30 decoder threads.
             auto_start = (
                 settings.AUTO_START_CAMERAS
+                and cam.camera_id.upper() not in restored_ids
                 and (cam.stream_url or "").strip() != ""
                 and (cam.stream_type or "").lower() != "file"
             )
@@ -257,6 +275,7 @@ def health_check(db: Session = Depends(get_db)):
         timestamp=datetime.now(timezone.utc),
         components=components,
         vision=vis,
+        camera_registry=_camera_registry_report,
     )
 
 

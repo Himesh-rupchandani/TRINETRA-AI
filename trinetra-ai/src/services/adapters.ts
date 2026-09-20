@@ -188,6 +188,10 @@ export interface CameraMeta {
 
 let directoryPromise: Promise<Map<string, CameraMeta>> | null = null;
 
+export function invalidateCameraDirectory(): void {
+  directoryPromise = null;
+}
+
 async function loadDirectory(): Promise<Map<string, CameraMeta>> {
   const list = await get<CameraItemDto[] | { data?: CameraItemDto[] }>('/cameras').then(
     (r) => (Array.isArray(r) ? r : (r?.data ?? [])),

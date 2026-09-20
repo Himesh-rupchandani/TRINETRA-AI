@@ -13,6 +13,7 @@ Key Responsibilities:
 - Strip credentials and sanitize metadata
 """
 import logging
+import re
 from typing import Dict, Any, List, Optional
 import httpx
 from sqlalchemy.orm import Session
@@ -106,6 +107,46 @@ def normalize_sentinel_camera(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+
+def catalogue_entries(payload: Any) -> List[Dict[str, Any]]:
+    """Do not turn a login/error object into a fabricated CAM_UNKNOWN entry."""
+    if isinstance(payload, list):
+        entries = payload
+    elif isinstance(payload, dict):
+        if "cameras" in payload:
+            entries = payload["cameras"]
+        elif "data" in payload:
+            entries = payload["data"]
+        elif payload.get("camera_id") or payload.get("id"):
+            entries = [payload]
+        else:
+            raise ValueError("Catalogue JSON did not contain a camera list.")
+    else:
+        raise ValueError("Catalogue response was not a camera list.")
+    if not isinstance(entries, list):
+        raise ValueError("Catalogue cameras/data must be a list.")
+    valid = [entry for entry in entries if isinstance(entry, dict) and
+             re.fullmatch(r"[A-Za-z0-9_-]{1,32}", str(entry.get("camera_id") or entry.get("id") or "").strip())]
+    if not valid:
+        raise ValueError("Catalogue did not contain any valid camera IDs; existing registry was kept.")
+    return valid
+
+
+def fetch_catalogue(url: str) -> List[Dict[str, Any]]:
+    # An admin sync should tolerate ordinary network latency. Do not scrape a
+    # sign-in form or send credentials to redirects; report an unusable source.
+    with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0), follow_redirects=True) as client:
+        response = client.get(url)
+        if response.status_code != 200:
+            raise ValueError(f"Catalogue returned HTTP {response.status_code}.")
+        if "text/html" in response.headers.get("content-type", "").lower():
+            raise ValueError("Catalogue returned a sign-in/web page instead of camera JSON. Use an authorized JSON catalogue or restore the bundled camera list.")
+        try:
+            payload = response.json()
+        except ValueError:
+            raise ValueError("Catalogue response is not camera JSON; existing registry was kept.") from None
+        return catalogue_entries(payload)
+
 def sync_sentinel_catalogue(
     db: Session,
     catalogue_url: Optional[str] = None,
@@ -123,28 +164,16 @@ def sync_sentinel_catalogue(
     fetch_success = False
     error_detail: Optional[str] = None
 
-    if raw_payload is not None:
-        camera_entries = raw_payload
+    try:
+        camera_entries = catalogue_entries(raw_payload) if raw_payload is not None else fetch_catalogue(url)
         fetch_success = True
-    else:
-        try:
-            logger.info(f"[SENTINEL SYNC] Fetching camera catalogue from {url}...")
-            with httpx.Client(timeout=2.0, follow_redirects=True) as client:
-                resp = client.get(url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if isinstance(data, list):
-                        camera_entries = data
-                    elif isinstance(data, dict):
-                        camera_entries = data.get("cameras") or data.get("data") or [data]
-                    fetch_success = True
-                    logger.info(f"[SENTINEL SYNC] Successfully retrieved {len(camera_entries)} cameras from Sentinel.")
-                else:
-                    error_detail = f"Sentinel returned HTTP {resp.status_code}"
-                    logger.warning(f"[SENTINEL SYNC] {error_detail}")
-        except Exception as exc:
-            error_detail = f"Catalogue fetch failed: {exc}"
-            logger.warning(f"[SENTINEL SYNC] {error_detail}. Proceeding with existing camera registry.")
+        logger.info("[SENTINEL SYNC] Received %d valid camera entries", len(camera_entries))
+    except ValueError as exc:
+        error_detail = str(exc)
+        logger.warning("[SENTINEL SYNC] %s", error_detail)
+    except Exception as exc:
+        error_detail = f"Catalogue request failed ({type(exc).__name__}); existing registry was kept."
+        logger.warning("[SENTINEL SYNC] %s", error_detail)
 
     # If fetch failed and we have no payload, fall back to existing database cameras
     if not fetch_success and not camera_entries:

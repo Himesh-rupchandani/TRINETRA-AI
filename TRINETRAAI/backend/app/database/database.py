@@ -156,7 +156,7 @@ def init_db():
             db.commit()
 
         # Check watchlist
-        if db.query(Watchlist).count() == 0:
+        if (settings.DEMO_MODE or settings.AUTO_SEED_DEMO) and db.query(Watchlist).count() == 0:
             logger.info("Seeding initial watchlist entries for demonstration...")
             initial_watchlist = [
                 Watchlist(
