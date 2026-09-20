@@ -28,6 +28,14 @@ export function Tour() {
   const firedActions = useRef<Set<string>>(new Set());
   const nextBtnRef = useRef<HTMLButtonElement>(null);
 
+  const handleFinish = () => {
+    tourStore.stop();
+    if (location.pathname !== '/') {
+      navigate('/');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   useEffect(() => {
     if (open && i === 0) {
       firedActions.current.clear();
@@ -143,12 +151,16 @@ export function Tour() {
       if (e.key === 'Escape') tourStore.stop();
       else if (e.key === 'Enter' || e.key === 'ArrowRight') {
         e.preventDefault();
-        tourStore.next(total);
+        if (i >= total - 1) {
+          handleFinish();
+        } else {
+          tourStore.next(total);
+        }
       } else if (e.key === 'ArrowLeft') tourStore.prev();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, total]);
+  }, [open, total, i, location.pathname, navigate]);
 
   useEffect(() => {
     if (open) nextBtnRef.current?.focus();
@@ -184,7 +196,13 @@ export function Tour() {
     <>
       <div
         className="fixed inset-0 z-[10040] cursor-pointer bg-slate-950/60 backdrop-blur-[1px]"
-        onClick={() => tourStore.next(total)}
+        onClick={() => {
+          if (i >= total - 1) {
+            handleFinish();
+          } else {
+            tourStore.next(total);
+          }
+        }}
         aria-hidden
       />
       {rect ? (
@@ -271,7 +289,13 @@ export function Tour() {
             <button
               ref={nextBtnRef}
               type="button"
-              onClick={() => tourStore.next(total)}
+              onClick={() => {
+                if (i >= total - 1) {
+                  handleFinish();
+                } else {
+                  tourStore.next(total);
+                }
+              }}
               className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-600 px-3.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
             >
               {i === total - 1 ? 'Finish Tour' : step.cta ?? 'Next'}
