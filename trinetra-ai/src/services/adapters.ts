@@ -90,6 +90,8 @@ export interface AlertDto {
   resolved_by?: string | null;
   /** Officer's free-text resolution note (kept out of `resolved_by`). */
   resolution_note?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface WatchlistDto {
@@ -384,8 +386,8 @@ export function toAlert(
     cameraId,
     cameraName: meta?.name ?? dto.camera_id.toUpperCase(),
     location: meta?.location ?? '—',
-    latitude: meta?.latitude,
-    longitude: meta?.longitude,
+    latitude: dto.latitude != null ? Number(dto.latitude) : meta?.latitude,
+    longitude: dto.longitude != null ? Number(dto.longitude) : meta?.longitude,
     severity: asSeverity(dto.severity),
     status: asAlertStatus(dto.status),
     category: dto.alert_type,

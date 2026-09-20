@@ -168,12 +168,7 @@ class Settings(BaseSettings):
     SENTINEL_HLS_ORIGIN: str = ""   # empty -> http://<WHEP host>
 
     # CORS
-    CORS_ORIGINS: Union[List[str], str] = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-    ]
+    CORS_ORIGINS: Union[List[str], str] = ["*"]
 
     # File uploads
     MAX_UPLOAD_SIZE_MB: int = 250

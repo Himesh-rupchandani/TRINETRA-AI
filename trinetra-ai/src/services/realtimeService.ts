@@ -2,9 +2,9 @@ import type { Alert, Camera, VehicleEvent } from '@/types';
 import { config } from '@/lib/config';
 import { isMockMode, realtimeUrl } from './api';
 import { mockCameras } from '@/mocks/cameras';
-import { watchlistByPlate } from '@/mocks/watchlist';
 import { pushMockEvent, setMockCameraStatus } from '@/mocks/mockBackend';
 import { syntheticFrame, syntheticPlateCrop } from '@/utils/syntheticEvidence';
+import { buildScheduledAlertPair } from '@/mocks/scheduledAlerts';
 import {
   asCameraStatus,
   cameraDirectory,
@@ -32,6 +32,19 @@ export interface RealtimeChannel {
 type Handler = (msg: RealtimeMessage) => void;
 type StateHandler = (state: ConnectionState) => void;
 
+const activeSimulatorHandlers = new Set<Handler>();
+
+/** Manually trigger the next unique alert in rotation across active handlers */
+export function triggerAlertNow(): { event: VehicleEvent; alert: Alert } {
+  const { event, alert } = buildScheduledAlertPair();
+  pushMockEvent(event, alert);
+  for (const handler of activeSimulatorHandlers) {
+    handler({ type: 'EVENT', payload: event });
+    handler({ type: 'ALERT', payload: alert });
+  }
+  return { event, alert };
+}
+
 /* --------------------------- mock event simulator --------------------------- */
 
 const RTO = ['GJ01', 'GJ03', 'GJ05', 'GJ06', 'GJ09', 'GJ12', 'GJ16', 'GJ18', 'GJ21', 'GJ27'];
@@ -45,33 +58,6 @@ const CLASSES: NonNullable<VehicleEvent['vehicleClass']>[] = [
   'VAN',
   'BUS',
 ];
-const WATCH_PLATES = ['GJ01AB1234', 'GJ05XY4321', 'GJ27CJ7788', 'GJ12PQ8899', 'GJ16TU9090'];
-
-/**
- * Watched plates are staked out: repeat sightings always come from the same
- * post (their last known camera), so the live feed never teleports a vehicle
- * across the state between ticks. Posts for new plates are picked once,
- * then sticky.
- */
-const STAKEOUTS: Record<string, string> = {
-  GJ01AB1234: 'cam07',
-  GJ05XY4321: 'cam30',
-  GJ12PQ8899: 'cam08',
-  GJ16TU9090: 'cam09',
-  GJ21RS3344: 'cam22',
-  GJ06KL2211: 'cam24',
-  GJ03DT5566: 'cam24',
-};
-const watchPosts = new Map<string, Camera>();
-function watchCamera(plate: string): Camera {
-  const known = watchPosts.get(plate);
-  if (known) return known;
-  const online = mockCameras.filter((c) => c.status === 'ONLINE');
-  const fixed = STAKEOUTS[plate];
-  const cam = (fixed && online.find((c) => c.id === fixed)) || rnd(online);
-  watchPosts.set(plate, cam);
-  return cam;
-}
 
 const rnd = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const randomPlate = () =>
@@ -79,11 +65,9 @@ const randomPlate = () =>
 
 let seq = 0;
 
-function makeEvent(): { event: VehicleEvent; alert?: Alert } {
-  const isWatch = Math.random() > 0.82;
-  const plate = isWatch ? rnd(WATCH_PLATES) : randomPlate();
-  const cam = isWatch ? watchCamera(plate) : rnd(mockCameras.filter((c) => c.status === 'ONLINE'));
-  const wl = isWatch ? watchlistByPlate(plate) : undefined;
+function makeNormalTrafficEvent(): { event: VehicleEvent } {
+  const plate = randomPlate();
+  const cam = rnd(mockCameras.filter((c) => c.status === 'ONLINE'));
   const confidence = Number((82 + Math.random() * 17).toFixed(1));
   const now = new Date().toISOString();
   const id = `evt-live-${Date.now()}-${seq++}`;
@@ -101,10 +85,10 @@ function makeEvent(): { event: VehicleEvent; alert?: Alert } {
     longitude: cam.longitude,
     location: cam.location,
     vehicleClass,
-    eventType: wl?.active ? 'WATCHLIST_MATCH' : 'ANPR_READ',
-    severity: wl?.active ? wl.severity : 'INFO',
-    watchlistMatch: Boolean(wl?.active),
-    speedKmph: Math.round(20 + Math.random() * 45),
+    eventType: 'ANPR_READ',
+    severity: 'INFO',
+    watchlistMatch: false,
+    speedKmph: Math.round(25 + Math.random() * 45),
     evidenceRef: ref,
     evidence: {
       ref,
@@ -121,38 +105,22 @@ function makeEvent(): { event: VehicleEvent; alert?: Alert } {
     },
   };
 
-  const alert: Alert | undefined = wl?.active
-    ? {
-        id: `alr-live-${Date.now()}`,
-        eventId: id,
-        plate,
-        cameraId: cam.id,
-        cameraName: cam.name,
-        location: cam.location,
-        latitude: cam.latitude,
-        longitude: cam.longitude,
-        severity: wl.severity,
-        status: 'NEW',
-        category: wl.category,
-        createdAt: now,
-        confidence,
-        evidenceRef: ref,
-      }
-    : undefined;
-
-  return { event, alert };
+  return { event };
 }
 
 /**
- * Mock realtime source. Emits detections on a jittered interval and
- * occasionally flips a camera offline/online, mirroring what the WebSocket
- * or SSE channel will deliver once the backend is live.
+ * Mock realtime source.
+ *  - Generates regular background traffic detections every 4-7 seconds.
+ *  - Generates a guaranteed DIFFERENT vehicle & DIFFERENT map location ALERT every 60 seconds!
  */
 function connectSimulator(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('SIMULATED');
-  let timer: number;
+  activeSimulatorHandlers.add(onMessage);
 
-  const tick = () => {
+  let trafficTimer: number;
+  let alertTimer: number;
+
+  const trafficTick = () => {
     const roll = Math.random();
     if (roll > 0.94) {
       const cam = rnd(mockCameras);
@@ -160,16 +128,31 @@ function connectSimulator(onMessage: Handler, onState: StateHandler): RealtimeCh
       setMockCameraStatus(cam.id, status);
       onMessage({ type: 'CAMERA_STATUS', payload: { cameraId: cam.id, status } });
     } else {
-      const { event, alert } = makeEvent();
-      pushMockEvent(event, alert);
+      const { event } = makeNormalTrafficEvent();
+      pushMockEvent(event);
       onMessage({ type: 'EVENT', payload: event });
-      if (alert) onMessage({ type: 'ALERT', payload: alert });
     }
-    timer = window.setTimeout(tick, 3200 + Math.random() * 3800);
+    trafficTimer = window.setTimeout(trafficTick, 4000 + Math.random() * 3500);
   };
 
-  timer = window.setTimeout(tick, 2200);
-  return { close: () => window.clearTimeout(timer) };
+  // Regular traffic starts after 2.5s
+  trafficTimer = window.setTimeout(trafficTick, 2500);
+
+  // 60-Second Alert Scheduler: exactly every 60s, a new alert with DIFFERENT vehicle and DIFFERENT location
+  alertTimer = window.setInterval(() => {
+    const { event, alert } = buildScheduledAlertPair();
+    pushMockEvent(event, alert);
+    onMessage({ type: 'EVENT', payload: event });
+    onMessage({ type: 'ALERT', payload: alert });
+  }, 60_000);
+
+  return {
+    close: () => {
+      activeSimulatorHandlers.delete(onMessage);
+      window.clearTimeout(trafficTimer);
+      window.clearInterval(alertTimer);
+    },
+  };
 }
 
 /* ------------------------------- SSE / WS ------------------------------- */
@@ -261,6 +244,8 @@ export function mapBackendMessages(raw: unknown): RealtimeMessage[] {
           (body.event_time as string | undefined) ??
           new Date().toISOString(),
         resolution_note: (body.resolution_note as string | null | undefined) ?? null,
+        latitude: body.latitude != null ? Number(body.latitude) : undefined,
+        longitude: body.longitude != null ? Number(body.longitude) : undefined,
       } satisfies AlertDto;
       const alert = toAlert(dto, liveCameraDir);
       return [
@@ -287,10 +272,29 @@ export function mapBackendMessages(raw: unknown): RealtimeMessage[] {
 
 function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('CONNECTING');
+  activeSimulatorHandlers.add(onMessage);
   primeCameraDir();
   let closed = false;
   let es: EventSource | null = null;
   let retryTimer: number | undefined;
+  let fallbackInterval: number | undefined;
+
+  const startFallback = () => {
+    if (fallbackInterval) return;
+    fallbackInterval = window.setInterval(() => {
+      const { event, alert } = buildScheduledAlertPair();
+      pushMockEvent(event, alert);
+      onMessage({ type: 'EVENT', payload: event });
+      onMessage({ type: 'ALERT', payload: alert });
+    }, 60_000);
+  };
+
+  const stopFallback = () => {
+    if (fallbackInterval) {
+      window.clearInterval(fallbackInterval);
+      fallbackInterval = undefined;
+    }
+  };
 
   const open = () => {
     if (closed) return;
@@ -298,10 +302,12 @@ function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel 
       es = new EventSource(realtimeUrl('/stream'), { withCredentials: false });
       es.onopen = () => {
         onState('LIVE');
+        stopFallback();
       };
       es.onerror = () => {
         es?.close();
         onState('OFFLINE');
+        startFallback();
         // Retry after 3s - SSE should reconnect automatically, but some proxies need explicit retry
         if (!closed) {
           retryTimer = window.setTimeout(() => {
@@ -321,6 +327,7 @@ function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel 
       };
     } catch {
       onState('OFFLINE');
+      startFallback();
       if (!closed) {
         retryTimer = window.setTimeout(open, 4000) as unknown as number;
       }
@@ -332,6 +339,8 @@ function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel 
   return {
     close: () => {
       closed = true;
+      activeSimulatorHandlers.delete(onMessage);
+      stopFallback();
       if (retryTimer) window.clearTimeout(retryTimer);
       es?.close();
     },

@@ -17,7 +17,7 @@ import type { Camera, RoutePoint, VehicleEvent } from '@/types';
 import { config, type BasemapId } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { useRoutePlayback } from '@/hooks/useRoutePlayback';
-import { cameraIcon, districtBubbleIcon, eventIcon, playbackIcon, routeIcon } from './mapIcons';
+import { cameraIcon, districtBubbleIcon, eventIcon, alertEventIcon, playbackIcon, routeIcon } from './mapIcons';
 import { GujaratFocus, type GujaratFocusProps } from './GujaratFocus';
 import { CameraPopup, EventPopup, RoutePopup } from './MapPopups';
 
@@ -468,20 +468,41 @@ export function MapView({
           ))
         )}
 
-        {mapZoom >= DETECTION_ZOOM &&
-          validEvents.map((e) => (
+        {/* Alert sightings are always rendered on the map with animated pulse ring */}
+        {validEvents
+          .filter((e) => e.watchlistMatch || e.eventType === 'WATCHLIST_MATCH')
+          .map((e) => (
             <Marker
-              key={e.id}
+              key={`alert-${e.id}`}
               position={[e.latitude, e.longitude]}
-              icon={eventIcon(e.watchlistMatch)}
+              icon={alertEventIcon()}
+              zIndexOffset={800}
               eventHandlers={{ click: () => onSelectEvent?.(e) }}
-              title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
+              title={`ALERT: ${e.plate} — ${e.cameraName ?? e.cameraId}`}
             >
               <Popup maxWidth={320} minWidth={240}>
                 <EventPopup event={e} />
               </Popup>
             </Marker>
           ))}
+
+        {/* Regular traffic sightings when zoomed in */}
+        {mapZoom >= DETECTION_ZOOM &&
+          validEvents
+            .filter((e) => !e.watchlistMatch && e.eventType !== 'WATCHLIST_MATCH')
+            .map((e) => (
+              <Marker
+                key={e.id}
+                position={[e.latitude, e.longitude]}
+                icon={eventIcon(false)}
+                eventHandlers={{ click: () => onSelectEvent?.(e) }}
+                title={`${e.plate} — ${e.cameraName ?? e.cameraId}`}
+              >
+                <Popup maxWidth={320} minWidth={240}>
+                  <EventPopup event={e} />
+                </Popup>
+              </Marker>
+            ))}
 
         {routeLine.length > 1 && (
           <>

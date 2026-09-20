@@ -188,3 +188,12 @@ def resolve_alert(
     db.commit()
     db.refresh(alert)
     return alert
+
+
+@router.post("/trigger", summary="Manually trigger the next scheduled 60s alert tick")
+async def trigger_alert():
+    """Immediately triggers the next unique vehicle alert from the 60s rotation."""
+    from ..services.alert_scheduler import run_alert_tick
+    res = await run_alert_tick()
+    return {"status": "success", "alert": res}
+

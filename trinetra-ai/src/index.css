@@ -39,6 +39,12 @@
     font-feature-settings: 'tnum' 1, 'cv05' 1;
   }
 
+  /* Guided walkthrough auto-scroll margin so highlighted section sits cleanly below sticky header */
+  [data-tour] {
+    scroll-margin-top: 155px;
+    scroll-margin-bottom: 50px;
+  }
+
   /* Visible focus everywhere — accessibility requirement */
   :focus-visible {
     outline: 2px solid rgb(var(--brand));
