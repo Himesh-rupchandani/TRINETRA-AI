@@ -22,6 +22,7 @@ from urllib.parse import quote
 from sqlalchemy import func
 
 from ..core.config import settings
+from ..core.resource_budget import inference_budget
 from ..core.logging_config import logger
 from ..core.paths import evidence_root
 from ..core.vision import cv2, np
@@ -183,6 +184,8 @@ class LiveAnprService:
         """
         if not self.enabled or frame is None or getattr(frame, "size", 0) == 0:
             return False
+        if not inference_budget()["allowed"]:
+            return False
         if media_time is not None and (not math.isfinite(media_time) or media_time < 0):
             return False
         key = camera_id.strip().upper()
@@ -225,6 +228,19 @@ class LiveAnprService:
             self._condition.notify_all()
             return True
 
+    def admission_delay(self, camera_id: str, source_id: str) -> int:
+        with self._condition:
+            key = camera_id.strip().upper()
+            state = self._states.get(key)
+            if state is None:
+                return 1000 if len(self._states) >= settings.LIVE_ANPR_MAX_CAMERAS else 0
+            elapsed = self._clock() - state.last_submit
+            if state.source_id != source_id and elapsed < max(3, settings.LIVE_ANPR_SAMPLE_SECONDS * 3):
+                return 1500
+            if key in self._busy and key in self._pending:
+                return 1000
+            return max(0, round((settings.LIVE_ANPR_SAMPLE_SECONDS - elapsed) * 1000))
+
     def submit_packet(self, packet) -> bool:
         # CameraStream can generate clearly labelled demo frames on a failed
         # source in DEMO_MODE. They must NEVER enter the real sighting log.
@@ -257,6 +273,11 @@ class LiveAnprService:
                 status = "DISABLED"
                 result["detections"] = []
                 result["reason"] = "Live ANPR is disabled on the backend."
+            budget = inference_budget()
+            if self.enabled and not budget["allowed"]:
+                status = "UNAVAILABLE"
+                result["reason"] = budget["reason"]
+                result["detections"] = []
             batch = self._photo_batches.get((key, state.latest_capture_id)) if state else None
             photos = ([dict(photo) for photo in batch.photos]
                       if batch and now - batch.submitted_at <= PHOTO_PREVIEW_SECONDS else [])
@@ -271,6 +292,8 @@ class LiveAnprService:
                 "sample_interval_ms": round(settings.LIVE_ANPR_SAMPLE_SECONDS * 1000),
                 "max_vehicles": settings.LIVE_ANPR_MAX_VEHICLES,
                 "pending": key in self._pending or key in self._busy,
+                "resource_budget": budget,
+                "retry_after_ms": budget["retry_after_ms"],
             }
 
     def _worker(self) -> None:
@@ -342,6 +365,10 @@ class LiveAnprService:
 
     def _process(self, packet: LiveFrame, state: CameraState) -> None:
         if state.cancelled:
+            return
+        budget = inference_budget()
+        if not budget["allowed"]:
+            self._publish(packet, state, [], "UNAVAILABLE", budget["reason"])
             return
         # Track/read expiry must scale with the configured cadence. A supported
         # 6s sampling interval must not reset every vote at a hardcoded 5s gap.

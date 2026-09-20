@@ -53,7 +53,7 @@ test('isMjpeg is part of the dependency array', () => {
   includes(player, 'setMjpegSrc(isMjpeg ? (ticket?.streamUrl || `/cvfeed/${camera.id}`) : null);');
   includes(
     player,
-    '}, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id, isMjpeg]);',
+    '}, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, managedMjpeg, camera.id, isMjpeg, viewerId]);',
     'a stale dependency array leaves the player black after an MJPEG fallback',
   );
   excludes(player, "setMjpegSrc(ticket?.streamType === 'MJPEG' ? `/cvfeed/${camera.id}` : null);\n  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id]);");

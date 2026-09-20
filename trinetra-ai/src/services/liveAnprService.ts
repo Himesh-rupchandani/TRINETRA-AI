@@ -1,4 +1,4 @@
-import { get, post } from './api';
+import { get, post, put } from './api';
 import type { TrafficSnapshot } from './trafficService';
 
 export type OcrStage = 'QUEUED' | 'READING' | 'CONFIRMING' | 'CONFIRMED' | 'RECENT_READ' |
@@ -52,6 +52,8 @@ export interface LiveAnprSnapshot {
   sample_interval_ms: number;
   max_vehicles: number;
   pending: boolean;
+  retry_after_ms?: number;
+  resource_budget?: { allowed: boolean; state: string; reason: string | null; limit_mb: number | null; working_set_mb: number | null };
   accepted?: boolean;
   detections: LiveDetection[];
   photos?: LivePhoto[];
@@ -60,6 +62,9 @@ export interface LiveAnprSnapshot {
 }
 
 export const liveAnprService = {
+  setViewDetection(cameraId: string, viewerId: string, enabled: boolean, sequence: number, signal?: AbortSignal) {
+    return put(`/cameras/${encodeURIComponent(cameraId)}/live/detection`, { viewer_id: viewerId, enabled, sequence }, { signal });
+  },
   sample(cameraId: string, jpeg: Blob, clientId: string, mediaTime: number, signal: AbortSignal) {
     return post<LiveAnprSnapshot>(`/cameras/${encodeURIComponent(cameraId)}/detect-frame`, jpeg, {
       headers: { 'Content-Type': 'image/jpeg' },

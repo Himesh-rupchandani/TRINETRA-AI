@@ -20,7 +20,8 @@ from sqlalchemy import text
 
 from .core.config import settings
 from .core.logging_config import logger
-from .core.vision import vision_available, vision_status, warn_once
+from .core.vision import cv2, vision_available, vision_status, warn_once
+from .core.resource_budget import inference_budget
 from .core.bootstrap import ensure_demo_dataset, get_demo_seed_report, storage_report
 from .core.bootstrap import _format_demo_data  # internal, but stable for health
 from .database.database import init_db, get_db, SessionLocal
@@ -116,6 +117,7 @@ async def lifespan(app: FastAPI):
     # Resident streams submit samples to the same bounded pipeline as browser
     # WHEP/HLS frames. Inference never runs inside the camera acquisition loop.
     if vision_available():
+        cv2.setNumThreads(settings.CV_CPU_THREADS)
         live_anpr_service.start()
         camera_manager.set_pipeline_callback(live_anpr_service.submit_packet)
 
@@ -247,6 +249,7 @@ def health_check(db: Session = Depends(get_db)):
         db_total = len(cam_list)
 
     vis = vision_status()
+    budget = inference_budget()
     storage = storage_report()
     demo_report = get_demo_seed_report()
     components = {
@@ -259,7 +262,7 @@ def health_check(db: Session = Depends(get_db)):
         "realtime_channel": "HEALTHY",
         # Reported honestly instead of assumed: on a vision-less host these
         # features are genuinely off, and the control room should say so.
-        "cv_pipeline": "HEALTHY" if vis["available"] else "DISABLED (vision unavailable; see vision diagnostics)",
+        "cv_pipeline": ("HEALTHY" if budget["allowed"] else "DEGRADED") if vis["available"] else "DISABLED (vision unavailable; see vision diagnostics)",
         "storage": storage["mode"],
         "demo_data": _format_demo_data(demo_report),
     }
@@ -278,6 +281,7 @@ def health_check(db: Session = Depends(get_db)):
         vision=vis,
         camera_registry=_camera_registry_report,
         ocr=ocr_service.runtime_status(),
+        resource_budget=budget,
     )
 
 

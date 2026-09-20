@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     PROCESS_EVERY_N_FRAMES: int = 3
     # Bound native inference thread pools too, leaving CPU for video decoding.
     CV_CPU_THREADS: int = Field(2, ge=1, le=16)
+    CV_MEMORY_GUARD_ENABLED: bool = True
+    # Admission policy for this combined Torch + detector + OCR stack, not a
+    # universal model requirement or throughput guarantee.
+    CV_MIN_MEMORY_MB: int = Field(1024, ge=0, le=65536)
+    CV_MEMORY_RESERVE_MB: int = Field(160, ge=32, le=4096)
     OCR_ENABLED: bool = True
     OCR_MIN_CONFIDENCE: float = 0.60
     # Above this the plate is trusted (HIGH); between OCR_MIN_CONFIDENCE and

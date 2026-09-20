@@ -8,6 +8,7 @@ import { useHlsStream, whepUrlToHls } from '@/hooks/useHlsStream';
 import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
 import { config } from '@/lib/config';
+import { controlledMjpegUrl } from '@/lib/anprScheduling';
 import { anprStatusLabel } from '@/lib/liveDetections';
 import { CountingOverlay } from './CountingOverlay';
 import type { CountingPreview } from '@/services/trafficService';
@@ -91,6 +92,11 @@ export function CameraPlayer({
   // failure of the detection view silently falls back to the raw feed.
   const [aiBoxes, setAiBoxes] = useState(true);
   const [detectionFailed, setDetectionFailed] = useState(false);
+  const [viewerId] = useState(() => crypto.randomUUID());
+  const initialDetection = useRef(aiBoxes);
+  const detectionSequence = useRef(0);
+  useLayoutEffect(() => { initialDetection.current = aiBoxes; }, [aiBoxes]);
+  const managedMjpeg = isMjpeg && !detectionFailed && Boolean(ticket?.detectionUrl);
   // Keep WHEP/HLS on the native video decoder; switching them to MJPEG for
   // AI tied playback to inference speed. Only file/MJPEG cameras use that view.
   const detectionActive = isMjpeg && aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
@@ -205,22 +211,25 @@ export function CameraPlayer({
     }
   }, [transport, useImg, wanted, hlsUrl, whepPhase, whepAttempt]);
 
-  // Prefer the CV engine's annotated live view; fall back to the backend's
-  // own MJPEG mirror of the same source when the CV engine is not running.
-  // With the backend detection view available, that view comes first.
+  // A detection toggle updates this viewer's processing flag. It must NOT
+  // reconnect MJPEG (or rewind a recording) just to hide/show AI annotations.
   useEffect(() => {
     setMjpegAlive(false);
-    if (detectionActive && ticket?.detectionUrl) {
-      setMjpegSrc(ticket.detectionUrl);
+    if (managedMjpeg && ticket?.detectionUrl) {
+      setMjpegSrc(controlledMjpegUrl(ticket.detectionUrl, viewerId, initialDetection.current));
       return;
     }
     setMjpegSrc(isMjpeg ? (ticket?.streamUrl || `/cvfeed/${camera.id}`) : null);
-    // `isMjpeg` (i.e. ticket.streamType) MUST be a dependency: the body reads
-    // it, and it is also what flips the player into <img> mode. Omitting it let
-    // a ticket that changed transport (e.g. an MJPEG fallback issued for the
-    // same camera/URL) leave mjpegSrc null while useImg was already true — a
-    // permanently black player with no fallback.
-  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id, isMjpeg]);
+  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, managedMjpeg, camera.id, isMjpeg, viewerId]);
+
+  useEffect(() => {
+    if (!managedMjpeg || !wanted || config.useMocks) return;
+    const abort = new AbortController();
+    void liveAnprService.setViewDetection(camera.id, viewerId, aiBoxes, ++detectionSequence.current, abort.signal).catch(error => {
+      if (!abort.signal.aborted) setAnprError(error instanceof Error ? error.message : 'Detection toggle failed; video continues.');
+    });
+    return () => abort.abort();
+  }, [managedMjpeg, wanted, camera.id, viewerId, aiBoxes]);
 
   const requestStream = async () => {
     setRequesting(true);
@@ -419,7 +428,7 @@ export function CameraPlayer({
             decoding="async"
             onLoad={() => setMjpegAlive(true)}
             onError={() => {
-              if (detectionActive && mjpegSrc === ticket?.detectionUrl) {
+              if (managedMjpeg && mjpegSrc?.startsWith(ticket?.detectionUrl ?? '')) {
                 setDetectionFailed(true); // detection view unavailable -> raw feed
               } else if (mjpegSrc !== ticket?.streamUrl && ticket?.streamUrl) {
                 setMjpegSrc(ticket.streamUrl); // CV engine not running -> backend view

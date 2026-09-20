@@ -1,5 +1,7 @@
 """Browser frame ingress for WHEP/HLS feeds; heavy inference stays off the API loop."""
 from io import BytesIO
+import asyncio
+from weakref import WeakKeyDictionary
 from typing import Literal, Optional
 from uuid import UUID
 
@@ -9,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from ..core.resource_budget import inference_budget
 from ..core.vision import cv2, np, require_vision
 from ..database.database import get_db
 from ..database.models import Camera
@@ -17,6 +20,17 @@ from ..services.live_anpr_service import live_anpr_service
 router = APIRouter(prefix="/cameras", tags=["Live ANPR"])
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 MAX_FRAME_PIXELS = 1920 * 1920
+# Serialize image decompression per ASGI loop without occupying all threadpool
+# slots needed by MJPEG playback. Queued JPEG bodies remain compressed.
+_decode_gates = WeakKeyDictionary()
+
+
+def decode_gate():
+    loop = asyncio.get_running_loop()
+    gate = _decode_gates.get(loop)
+    if gate is None:
+        gate = _decode_gates[loop] = asyncio.Semaphore(1)
+    return gate
 
 
 def registered_camera(camera_id: str, db: Session) -> Camera:
@@ -64,13 +78,24 @@ async def detect_frame(
         raise HTTPException(503, "Live ANPR is disabled on the backend.")
     if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "image/jpeg":
         raise HTTPException(415, "Send the sampled frame as image/jpeg.")
+    source_id = f"browser:{client_id}"
+    budget = inference_budget()
+    delay = live_anpr_service.admission_delay(camera.camera_id, source_id)
+    if not budget["allowed"] or delay:
+        result = live_anpr_service.snapshot(camera.camera_id, source_id=source_id)
+        if delay and result["status"] == "IDLE":
+            result.update(status="BUSY", reason="ANPR is at capacity; video continues.")
+        return {**result, "accepted": False, "retry_after_ms": max(delay, budget["retry_after_ms"])}
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > MAX_FRAME_BYTES:
             raise HTTPException(413, "Frame exceeds the 2 MB limit.")
         body.extend(chunk)
-    frame = await run_in_threadpool(decode_frame, bytes(body))
-    source_id = f"browser:{client_id}"
+    async with decode_gate():
+        # Resource pressure may have changed while waiting for the decode slot.
+        if not inference_budget()["allowed"]:
+            return {**live_anpr_service.snapshot(camera.camera_id, source_id=source_id), "accepted": False}
+        frame = await run_in_threadpool(decode_frame, bytes(body))
     accepted = live_anpr_service.submit(camera.camera_id, frame, source_id=source_id, media_time=media_time)
     result = live_anpr_service.snapshot(camera.camera_id, source_id=source_id)
     if not accepted and result["status"] == "IDLE":

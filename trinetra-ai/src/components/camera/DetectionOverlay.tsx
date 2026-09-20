@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { liveAnprService, type LiveAnprSnapshot } from '@/services/liveAnprService';
+import { FrameEncoder } from '@/services/frameEncoder';
+import { frameAdmissionDelay, nextSampleDelay } from '@/lib/anprScheduling';
 import { canDrawSnapshot, containedBox, matchesSceneSignature } from '@/lib/liveDetections';
 
 /** Browser playback stays native. Only sampled JPEGs visit the ANPR worker. */
@@ -19,7 +21,7 @@ export function DetectionOverlay({ videoRef, cameraId, active, onStatus, onError
     clear();
     if (!active) return;
 
-    const capture = document.createElement('canvas');
+    const capture = new FrameEncoder(() => new Worker(new URL('./frameCapture.worker.ts', import.meta.url), { type: 'module' }));
     const scene = document.createElement('canvas');
     scene.width = 16;
     scene.height = 9;
@@ -34,14 +36,21 @@ export function DetectionOverlay({ videoRef, cameraId, active, onStatus, onError
     let lastMediaTime = -1;
     let snapshot: LiveAnprSnapshot | null = null;
     let receivedAt = 0;
+    let lastPaintTime = -1;
+    let lastPaintSnapshot: LiveAnprSnapshot | null = null;
+    let lastDropped = 0;
+    let lastFrames = 0;
 
     const draw = () => {
       const video = videoRef.current;
-      clear();
-      if (!video || !snapshot || video.paused || video.seeking || video.readyState < 2 || document.hidden) return;
+      if (!video || !snapshot || !snapshot.detections.length || video.paused || video.seeking || video.readyState < 2 || document.hidden) { clear(); return; }
       // Include network/render time in the expiry, not just the server's age.
       const current = { ...snapshot, result_age_ms: (snapshot.result_age_ms ?? Infinity) + performance.now() - receivedAt };
-      if (!canDrawSnapshot(current, `browser:${clientId}`, video.currentTime)) return;
+      if (!canDrawSnapshot(current, `browser:${clientId}`, video.currentTime)) { clear(); return; }
+      if (lastPaintTime === video.currentTime && lastPaintSnapshot === snapshot && canvas.width === video.clientWidth && canvas.height === video.clientHeight) return;
+      lastPaintTime = video.currentTime;
+      lastPaintSnapshot = snapshot;
+      clear();
       if (snapshot.frame_signature) {
         if (!sceneContext) return;
         try {
@@ -72,16 +81,23 @@ export function DetectionOverlay({ videoRef, cameraId, active, onStatus, onError
           clear();
           return;
         }
-        const mediaTime = video.currentTime;
+        // A tiny status request is cheaper than encoding/uploading JPEGs that
+        // the busy, shared or memory-limited backend cannot accept anyway.
+        const preflight = await liveAnprService.status(cameraId, controller.signal);
+        if (stopped) return;
+        const wait = frameAdmissionDelay(preflight, `browser:${clientId}`);
+        if (wait) {
+          snapshot = preflight; receivedAt = performance.now();
+          onStatus(preflight); onError(null); draw();
+          delay = wait;
+          return;
+        }
+        // Encoding uses a Web Worker where supported; playback remains native.
+        // Keep the same 1280px / .9 quality rather than discarding plate pixels.
+        const captured = await capture.capture(video);
+        if (stopped || !captured || video.paused || document.hidden) return;
+        const { blob: jpeg, mediaTime } = captured;
         lastMediaTime = mediaTime;
-        // 640px JPEGs discarded most plate detail. Keep 1280px at high quality,
-        // but send one sample/second instead of slowing the video to inference FPS.
-        const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
-        capture.width = Math.round(video.videoWidth * scale);
-        capture.height = Math.round(video.videoHeight * scale);
-        capture.getContext('2d')?.drawImage(video, 0, 0, capture.width, capture.height);
-        const jpeg = await new Promise<Blob | null>((resolve) => capture.toBlob(resolve, 'image/jpeg', 0.9));
-        if (stopped || !jpeg) return;
         const result = await liveAnprService.sample(cameraId, jpeg, clientId, mediaTime, controller.signal);
         if (stopped) return;
         snapshot = result;
@@ -91,8 +107,12 @@ export function DetectionOverlay({ videoRef, cameraId, active, onStatus, onError
         draw();
         clearTimeout(expiry);
         expiry = setTimeout(clear, Math.max(0, result.overlay_ttl_ms - (result.result_age_ms ?? result.overlay_ttl_ms)));
-        delay = Math.max(750, result.sample_interval_ms);
-        if (result.status === 'UNAVAILABLE' || result.status === 'ERROR') delay = 5000;
+        const quality = video.getVideoPlaybackQuality?.();
+        const dropped = quality ? Math.max(0, quality.droppedVideoFrames-lastDropped) : 0;
+        const frames = quality ? Math.max(0, quality.totalVideoFrames-lastFrames) : 0;
+        if (quality) { lastDropped = quality.droppedVideoFrames; lastFrames = quality.totalVideoFrames; }
+        delay = nextSampleDelay(result, captured.costMs, dropped, frames);
+        if (result.status === 'UNAVAILABLE' || result.status === 'ERROR') delay = Math.max(delay, 5000);
       } catch (error) {
         clear();
         if (!stopped) onError(error instanceof Error ? error.message : 'Plate scanning unavailable. Video is unaffected.');
@@ -109,6 +129,7 @@ export function DetectionOverlay({ videoRef, cameraId, active, onStatus, onError
     return () => {
       stopped = true;
       controller.abort();
+      capture.dispose();
       clearTimeout(timer);
       clearTimeout(expiry);
       clearTimeout(paintTimer);

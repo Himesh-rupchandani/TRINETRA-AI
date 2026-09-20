@@ -58,6 +58,16 @@ def main(argv=None):
     if os.environ.get("TRINETRA_API_ONLY", "").strip().lower() in {"1", "true", "yes", "on"}:
         print("ERROR: TRINETRA_API_ONLY disables the vision stack. Unset it or set 0 in Render Environment, then redeploy.", file=sys.stderr)
         return 1
+    if not args.imports_only:
+        sys.path.insert(0, str(ROOT / "TRINETRAAI/backend"))
+        from app.core.resource_budget import inference_budget
+        budget = inference_budget()
+        if not budget["allowed"]:
+            # Avoid importing Torch during preflight and OOM-restarting the API
+            # before its live-inference guard can report the resource warning.
+            print(json.dumps({"resource_budget": budget}, indent=2))
+            print("Starting the API/player with live AI paused for resources. This does not make a small instance a full ML backend.")
+            return 0
     checks, failures = import_checks()
     print(json.dumps({"python": sys.version.split()[0], "vision_imports": checks}, indent=2))
     if failures:

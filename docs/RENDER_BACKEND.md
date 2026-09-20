@@ -198,3 +198,17 @@ runtime, Root Directory, Build Command, Start Command and instance type. Do not
 share API keys, database passwords, camera passwords or environment-variable
 secret values. Live dashboard edits require access to that Render account; no
 such access is established by a GitHub connection alone.
+
+
+## Detection-on stutter / memory-limit restart
+
+If Render reports an OOM restart, the temporary API-unreachable banner is not
+fixed by changing CORS or the API URL again. This release moves browser capture
+work off the UI thread, avoids MJPEG reconnects on toggles, and applies live-AI
+backpressure. See [playback protection](LIVE_ANPR.md#playback-protection-and-memory-admission).
+
+On a known container below the configured 1024 MB admission floor, startup skips
+heavy preflight imports and the API/player remains available with live AI paused
+for memory. This is an explicit capability reduction, not a claim that full
+YOLO/OCR now fits a Free instance. Increase the service's compute memory or use a
+larger ML host for full detection. No paid service change is made automatically.

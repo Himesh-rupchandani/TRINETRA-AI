@@ -29,6 +29,7 @@ from typing import Dict, List, Optional
 from ..core.vision import cv2, np
 
 from ..core.config import settings
+from ..core.resource_budget import inference_budget
 from ..core.logging_config import logger
 
 # COCO class id -> label, restricted to road vehicles.
@@ -64,7 +65,7 @@ class VehicleDetectionService:
     # ------------------------------------------------------------------ model
     @property
     def enabled(self) -> bool:
-        return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", True)) and self._disabled_reason is None
+        return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", True)) and self._disabled_reason is None and inference_budget()["allowed"]
 
     def _resolve_model_path(self) -> str:
         """Find the weights: configured path (relative to backend root), the
@@ -89,12 +90,18 @@ class VehicleDetectionService:
         return os.path.basename(configured) or "yolo11s.pt"
 
     def _ensure_model(self):
+        budget = inference_budget()
+        if not budget["allowed"]:
+            self.last_error = budget["reason"]
+            return None
         if self._model is not None or self._disabled_reason is not None:
             return self._model
         with self._model_lock:
             if self._model is not None or self._disabled_reason is not None:
                 return self._model
             try:
+                import torch
+                torch.set_num_threads(settings.CV_CPU_THREADS)
                 from ultralytics import YOLO  # lazy: heavy import
 
                 path = self._resolve_model_path()

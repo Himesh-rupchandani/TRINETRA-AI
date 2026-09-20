@@ -45,6 +45,7 @@ export class PlateNotificationGate {
 
 /** Playback can recover onto a raw stream without pretending ANPR recovered too. */
 export function anprStatusLabel(snapshot: LiveAnprSnapshot | null, error: string | null, rawFallback = false) {
+  if (snapshot?.resource_budget?.allowed === false) return 'AI PAUSED · MEMORY';
   if (rawFallback || error || snapshot?.status === 'UNAVAILABLE' || snapshot?.status === 'ERROR') return 'ANPR UNAVAILABLE';
   if (snapshot?.status === 'DISABLED') return 'ANPR OFF';
   if (snapshot?.status === 'SHARED') return 'ANPR · SHARED';

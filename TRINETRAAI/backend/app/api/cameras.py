@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # Allow running this file directly as a script
 if __name__ == "__main__" and not __package__:
@@ -12,7 +12,8 @@ if __name__ == "__main__" and not __package__:
             sys.path.insert(0, str(p))
     __package__ = "backend.app.api"
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -450,7 +451,9 @@ def live_signal_status(camera_id: str):
 
 
 @router.get("/{camera_id}/live/detect", dependencies=[Depends(require_vision)])
-def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
+def live_detection_stream(camera_id: str, db: Session = Depends(get_db),
+                          viewer_id: Optional[str] = Query(None, max_length=80, pattern=r"^[A-Za-z0-9_-]+$"),
+                          analysis: bool = Query(True)):
     """
     Live MJPEG stream with real-time OpenCV vehicle detection (green boxes).
 
@@ -496,7 +499,26 @@ def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
         existing.source_type = source_type
 
     return StreamingResponse(
-        camera_manager.generate_mjpeg_stream(cam.camera_id, detect_vehicles=True),
+        camera_manager.generate_mjpeg_stream(cam.camera_id, detect_vehicles=True,
+                                             viewer_id=viewer_id, initial_detection=analysis),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+class LiveViewDetectionRequest(BaseModel):
+    viewer_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    enabled: bool
+    sequence: int = Field(0, ge=0)
+
+
+@router.put("/{camera_id}/live/detection", dependencies=[Depends(require_vision)])
+def set_live_view_detection(camera_id: str, payload: LiveViewDetectionRequest, db: Session = Depends(get_db)):
+    camera = db.query(Camera).filter(func.upper(Camera.camera_id) == camera_id.strip().upper()).first()
+    if not camera:
+        raise HTTPException(404, "Camera not found")
+    try:
+        enabled = camera_manager.set_view_detection(camera.camera_id, payload.viewer_id, payload.enabled, payload.sequence)
+    except ValueError:
+        raise HTTPException(429, "Live viewer capacity reached; close unused viewers and retry")
+    return {"camera_id": camera.camera_id.lower(), "enabled": enabled}

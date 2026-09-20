@@ -35,6 +35,7 @@ from typing import List, Optional, Sequence
 from ..core.vision import cv2, np
 
 from ..core.config import settings
+from ..core.resource_budget import inference_budget
 from ..core.logging_config import logger
 
 
@@ -105,6 +106,8 @@ class PlateDetectorService:
         return bundled if os.path.isfile(bundled) else None
 
     def _ensure_model(self):
+        if not inference_budget()["allowed"]:
+            return None
         # ``_model_attempted`` flips only after the load finishes (see the same
         # note in ocr_service): parallel analysis workers must not take the
         # fast path while the model is still being constructed.
@@ -123,6 +126,8 @@ class PlateDetectorService:
                     )
                     return None
                 try:
+                    import torch
+                    torch.set_num_threads(settings.CV_CPU_THREADS)
                     from ultralytics import YOLO  # lazy heavy import
 
                     logger.info(f"[PLATE] Loading fine-tuned plate detector: {path}")

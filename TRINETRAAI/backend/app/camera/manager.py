@@ -5,7 +5,7 @@ import threading
 import time
 from typing import Dict, List, Optional, Callable
 from uuid import uuid4
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 # Allow running this file directly as a script
 if __name__ == "__main__" and not __package__:
@@ -24,6 +24,14 @@ from ..core.config import settings
 from ..core.logging_config import logger
 from .stream import CameraStream
 from .packet import FramePacket
+
+
+@dataclass
+class LiveViewControl:
+    enabled: bool
+    touched_at: float
+    readers: int = 0
+    sequence: int = 0
 
 
 class CameraManager:
@@ -50,6 +58,7 @@ class CameraManager:
         self._live_signal: Dict[str, float] = {}
         self._lock = threading.RLock()
         self._pipeline_callback: Optional[Callable[[FramePacket], None]] = None
+        self._view_controls: dict[tuple[str, str], LiveViewControl] = {}
 
     def _note_live_signal(self, camera_id: str) -> None:
         key = (camera_id or "").lower()
@@ -352,7 +361,31 @@ class CameraManager:
             frame = cv2.resize(frame, (1280, int(round(h * scale))), interpolation=cv2.INTER_AREA)
         return frame
 
-    def generate_mjpeg_stream(self, camera_id: str, detect_vehicles: bool = False):
+    def _view_control(self, camera_id: str, viewer_id: str, initial: bool) -> LiveViewControl:
+        # Caller holds the manager lock. Bound abandoned control requests;
+        # live readers release their entry when their HTTP stream closes.
+        now = time.monotonic()
+        for key, control in list(self._view_controls.items()):
+            if not control.readers and now-control.touched_at > 15:
+                self._view_controls.pop(key, None)
+        key = (camera_id.strip().upper(), viewer_id)
+        control = self._view_controls.get(key)
+        if control is None:
+            if len(self._view_controls) >= 128:
+                raise ValueError("Live viewer capacity reached")
+            control = self._view_controls[key] = LiveViewControl(initial, now)
+        control.touched_at = now
+        return control
+
+    def set_view_detection(self, camera_id: str, viewer_id: str, enabled: bool, sequence: int = 0) -> bool:
+        with self._lock:
+            control = self._view_control(camera_id, viewer_id, enabled)
+            if sequence >= control.sequence:
+                control.enabled, control.sequence = enabled, sequence
+            return control.enabled
+
+    def generate_mjpeg_stream(self, camera_id: str, detect_vehicles: bool = False,
+                              viewer_id: Optional[str] = None, initial_detection: bool = True):
         """Yield multipart MJPEG stream frames for HTTP live view.
 
         When no resident worker is running for the camera (e.g. file-backed
@@ -368,6 +401,11 @@ class CameraManager:
         ondemand_candidates = None
         ondemand_failures = 0
         detector = None
+        control = None
+        if viewer_id:
+            with self._lock:
+                control = self._view_control(camera_id, viewer_id, initial_detection)
+                control.readers += 1
         source_id = f"mjpeg:{uuid4().hex}"
         if detect_vehicles:
             from ..services.live_anpr_service import live_anpr_service
@@ -416,7 +454,7 @@ class CameraManager:
                             ondemand_cap = None
                             ondemand_source = None
                 if frame is not None:
-                    if detector is not None:
+                    if detector is not None and (control is None or control.enabled):
                         media_time = None
                         if not resident:
                             pts = float(ondemand_cap.get(cv2.CAP_PROP_POS_MSEC) or 0) / 1000.0
@@ -460,6 +498,11 @@ class CameraManager:
                 fps = float(ondemand_cap.get(cv2.CAP_PROP_FPS) or 25) if ondemand_cap else 25.0
                 time.sleep(max(0.001, 1.0 / max(1.0, fps) - (time.monotonic() - started)))
         finally:
+            if control is not None:
+                with self._lock:
+                    control.readers -= 1
+                    if control.readers <= 0:
+                        self._view_controls.pop((camera_id.strip().upper(), viewer_id), None)
             if ondemand_cap is not None:
                 try:
                     ondemand_cap.release()

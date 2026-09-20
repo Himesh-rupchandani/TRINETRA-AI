@@ -24,6 +24,7 @@ from typing import List, Optional
 from ..core.vision import cv2, np
 
 from ..core.config import settings
+from ..core.resource_budget import inference_budget
 from ..core.logging_config import logger
 from ..utils.plate_normalizer import INDIAN_PLATE_RE, normalize_plate
 
@@ -177,12 +178,14 @@ class OcrService:
 
     @property
     def available(self) -> bool:
-        if not bool(getattr(settings, "OCR_ENABLED", True)):
+        if not bool(getattr(settings, "OCR_ENABLED", True)) or not inference_budget()["allowed"]:
             return False
         self._ensure_engine()
         return self._engine is not None
 
     def _ensure_engine(self):
+        if not inference_budget()["allowed"]:
+            return None
         # NOTE: ``_attempted`` is flipped only *after* the engine has finished
         # loading, and always inside the lock. Setting it first would let a
         # second thread (the analysis workers run several videos in parallel)

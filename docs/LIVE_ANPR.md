@@ -289,3 +289,39 @@ thumbnail cannot establish the engine's original input quality or output.
 Exact false negatives need the original captured photo/video plus camera/sample
 context. Repository crop checks are integration checks, not a claim that the
 operator's specific plate has been recognized correctly.
+
+
+## Playback protection and memory admission
+
+- Browser JPEG capture retains 1280px / quality 0.9 but uses an OffscreenCanvas
+  worker where supported. The compatibility path reuses canvas buffers. Each
+  player has at most one capture in flight; workers/bitmaps are released on stop.
+- Sampling checks lightweight status first. Busy/shared/memory-limited backends
+  do not receive another unnecessary JPEG; dropped video frames or costly
+  capture reduce sampling cadence, not the native video's frame rate.
+- MJPEG detection toggles are per-viewer commands with ordering protection.
+  They no longer replace the image URL, reopen the decoder or rewind a file.
+  An already-running OCR sample can finish after switching off.
+- JPEG decompression is serialized per API event loop without blocking the
+  MJPEG threadpool, and native OpenCV/Torch threads are capped before warmup.
+
+A known small container should not repeatedly die loading the combined Torch,
+vehicle detector, plate detector and OCR stack. `CV_MEMORY_GUARD_ENABLED=true`
+checks cgroup v1/v2 capacity/working set. The **configured admission floor** is
+`CV_MIN_MEMORY_MB=1024`, with `CV_MEMORY_RESERVE_MB=160` for transient headroom.
+This is a conservative policy for this implementation, **not a universal model
+requirement or an assurance that 1 GB is sufficient for every workload**.
+
+Below the floor or under pressure, live AI returns **AI PAUSED · MEMORY** and
+backs off while API/native playback can continue. Startup avoids loading Torch
+just for preflight on an undersized container. Health and ANPR snapshots expose
+`resource_budget` so operators can see the policy/capacity/reason. Unknown
+cgroup limits are explicitly reported as unknown; the guard cannot promise to
+prevent every OOM (decoders, uploads and other processes also consume memory).
+
+Do not lower/disable the guard to make an underprovisioned instance look healthy.
+A Free/small Render service may play video but cannot be promised full ANPR.
+Use adequate RAM/CPU or a separate ML host and benchmark a few authorized feeds.
+More worker processes or replicas are not a safe workaround for the current
+in-memory scheduler. Saved readings, two-frame confirmation and unknown/Verify
+labels remain unchanged; no synthetic events fill a paused inference stream.
