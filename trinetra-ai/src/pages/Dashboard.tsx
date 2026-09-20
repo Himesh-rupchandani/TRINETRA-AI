@@ -19,6 +19,7 @@ import { LazyMap } from '@/components/gis/LazyMap';
 import { Panel, EmptyState } from '@/components/common/Panel';
 import { useCameras } from '@/hooks/useCameras';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useLiveEvents } from '@/hooks/useLiveEvents';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
 import { systemService } from '@/services/systemService';
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { cameras, stats } = useCameras();
   const { active: activeAlerts, acknowledge, resolve } = useAlerts();
+  const { events: liveEvents } = useLiveEvents();
   const recent = useAsync(() => eventService.recent(120), []);
   const kpis = useAsync(() => systemService.kpis(), []);
 
@@ -64,10 +66,18 @@ export default function Dashboard() {
   }, []);
 
   const recentEvents = useMemo(() => recent.data ?? [], [recent.data]);
-  const detectionPoints = useMemo(
-    () => recentEvents.filter((e) => e.watchlistMatch).slice(0, 25),
-    [recentEvents],
-  );
+  const detectionPoints = useMemo(() => {
+    const combined = [...liveEvents, ...recentEvents];
+    const seen = new Set<string>();
+    const unique = [];
+    for (const e of combined) {
+      if (!seen.has(e.id)) {
+        seen.add(e.id);
+        unique.push(e);
+      }
+    }
+    return unique.filter((e) => e.watchlistMatch).slice(0, 30);
+  }, [liveEvents, recentEvents]);
   const sevCounts = useMemo(() => {
     const c: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
     activeAlerts.forEach((a) => {

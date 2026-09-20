@@ -142,10 +142,16 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    # 2b. Start automated 60-second alert scheduler (unique vehicle & different location on map)
+    from .services.alert_scheduler import start_alert_scheduler, stop_alert_scheduler
+    alert_task = asyncio.create_task(start_alert_scheduler(interval_seconds=60))
+
     yield
 
-    # 3. Clean shutdown - release all camera resources
+    # 3. Clean shutdown - release all camera resources and scheduler
     logger.info("Shutting down TRINETRA AI Surveillance Engine...")
+    stop_alert_scheduler()
+    alert_task.cancel()
     ws_manager.detach_loop()
     active_cams = camera_manager.list_cameras()
     for cam in active_cams:

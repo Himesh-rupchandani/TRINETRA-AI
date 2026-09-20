@@ -11,6 +11,7 @@ import { MovementTimeline } from '@/components/vehicle/MovementTimeline';
 import { useCameras } from '@/hooks/useCameras';
 import { aggregateByDistrict, districtAt } from '@/lib/geo/districtIndex';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
+import { useAlerts } from '@/hooks/useAlerts';
 import { useVehicleSearch } from '@/hooks/useVehicleSearch';
 import { useAsync } from '@/hooks/useAsync';
 import { eventService } from '@/services/eventService';
@@ -25,6 +26,7 @@ export default function GIS() {
   const { result, trace, loading, reset } = useVehicleSearch();
   const recent = useAsync(() => eventService.recent(150), []);
   const { events: liveEvents } = useLiveEvents();
+  const { latestAlert } = useAlerts();
 
   const [plateInput, setPlateInput] = useState(params.get('plate') ?? '');
   const [showCameras, setShowCameras] = useState(true);
@@ -66,6 +68,19 @@ export default function GIS() {
     const cam = cameras.find((c) => c.id === focusCamera);
     if (cam) setPanTo([cam.latitude, cam.longitude]);
   }, [focusCamera, cameras]);
+
+  // When a new 60s notification arrives, automatically pan map to the new different location
+  useEffect(() => {
+    if (!latestAlert) return;
+    const lat = latestAlert.latitude;
+    const lng = latestAlert.longitude;
+    if (lat && lng && isValidCoord(lat, lng)) {
+      setPanTo([lat, lng]);
+      if (latestAlert.cameraId) {
+        setLiveCameraId(latestAlert.cameraId.toLowerCase());
+      }
+    }
+  }, [latestAlert]);
 
   const points = useMemo(() => result?.route?.points ?? [], [result]);
 

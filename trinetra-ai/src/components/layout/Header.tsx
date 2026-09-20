@@ -4,6 +4,7 @@ import { Activity, ArrowLeft, Bell, LayoutDashboard, ScrollText, Search, ShieldC
 import { cn, isValidPlate, normalisePlate } from '@/lib/utils';
 import { useAlerts } from '@/hooks/useAlerts';
 import { useLiveEvents } from '@/hooks/useLiveEvents';
+import { useLive } from '@/features/alerts/LiveProvider';
 import { config } from '@/lib/config';
 import { useOfficer } from '@/features/officer/OfficerProvider';
 import { tourStore } from '@/features/tour/tourStore';
@@ -40,6 +41,7 @@ export function Header() {
   const location = useLocation();
   const { counts } = useAlerts();
   const { connection } = useLiveEvents();
+  const { secondsUntilNextAlert, triggerNextAlert } = useLive();
   const { current: officer } = useOfficer();
   const [quick, setQuick] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
@@ -221,6 +223,17 @@ export function Header() {
                 ? 'Connecting'
                 : 'Offline'}
         </span>
+
+        <button
+          type="button"
+          onClick={() => void triggerNextAlert()}
+          className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-1 px-2.5 py-1.5 text-2xs font-semibold text-ink-muted hover:border-brand/40 hover:bg-brand/10 hover:text-brand transition-colors"
+          title="60s notification loop active. Every 60s a new vehicle & different location alert arrives. Click to trigger now."
+          aria-label="60s Alert Loop status"
+        >
+          <span className="h-2 w-2 rounded-full bg-critical animate-pulse" aria-hidden />
+          <span>60s Alert: <span className="font-mono font-bold text-ink">{secondsUntilNextAlert}s</span></span>
+        </button>
 
         <button
           type="button"

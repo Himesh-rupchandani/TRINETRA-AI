@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useLive } from '@/features/alerts/LiveProvider';
 import { useToast } from '@/features/system/ToastProvider';
 import type { Severity } from '@/types';
@@ -22,22 +22,22 @@ export function LiveAlertToaster() {
   const { latestAlert } = useLive();
   const toast = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
   const toasted = useRef(new Set<string>());
-  const pathRef = useRef(location.pathname);
-  pathRef.current = location.pathname;
 
   useEffect(() => {
     if (!latestAlert || toasted.current.has(latestAlert.id)) return;
     toasted.current.add(latestAlert.id);
-    if (pathRef.current.startsWith('/alerts')) return;
     const a = latestAlert;
+    const cat = a.category ? `${a.category}` : 'Watchlist match';
     const detail =
-      `${a.cameraName ?? a.cameraId} · ${a.location}` +
-      (a.confidence != null ? ` · ${a.confidence.toFixed(1)}% match` : '');
-    toast.push(KIND[a.severity] ?? 'info', `Watchlist match · ${a.plate}`, detail, {
-      durationMs: 10_000,
-      action: { label: 'View alert', onClick: () => navigate(`/alerts?highlight=${a.id}`) },
+      `${cat} • ${a.cameraName ?? a.cameraId} • ${a.location}` +
+      (a.confidence != null ? ` (${a.confidence.toFixed(1)}% match)` : '');
+    toast.push(KIND[a.severity] ?? 'info', `🚨 Alert · ${a.plate}`, detail, {
+      durationMs: 12_000,
+      action: {
+        label: '📍 View on Map',
+        onClick: () => navigate(`/gis?focus=${a.cameraId.toLowerCase()}`),
+      },
     });
   }, [latestAlert, toast, navigate]);
 

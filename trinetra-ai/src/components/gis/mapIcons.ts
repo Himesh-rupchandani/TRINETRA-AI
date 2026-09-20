@@ -101,6 +101,29 @@ export function eventIcon(watchlist = false): L.DivIcon {
   }
 }
 
+export function alertEventIcon(): L.DivIcon {
+  try {
+    return L.divIcon({
+      className: 'trinetra-alert-marker',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14],
+      html: `<div style="position:relative;width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
+        <span style="position:absolute;width:100%;height:100%;border-radius:50%;background:rgba(239,68,68,0.45);animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></span>
+        <span style="position:absolute;width:22px;height:22px;border-radius:50%;background:rgba(239,68,68,0.25);"></span>
+        <div style="position:relative;width:14px;height:14px;border-radius:50%;background:#dc2626;border:2.5px solid #ffffff;box-shadow:0 0 10px rgba(220,38,38,0.9);"></div>
+      </div>`,
+    });
+  } catch {
+    return L.divIcon({
+      className: 'trinetra-marker',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+      html: `<div style="width:16px;height:16px;border-radius:50%;background:#dc2626;border:2px solid #fff"></div>`,
+    });
+  }
+}
+
 export function districtBubbleIcon(
   cameras: number,
   offline: number,

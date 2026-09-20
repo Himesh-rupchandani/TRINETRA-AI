@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Alert, AlertStatus, VehicleEvent } from '@/types';
-import { connectRealtime, type ConnectionState, type RealtimeMessage } from '@/services/realtimeService';
+import { connectRealtime, triggerAlertNow, type ConnectionState, type RealtimeMessage } from '@/services/realtimeService';
 import { alertService } from '@/services/alertService';
 import { subscribeToStore } from '@/mocks/mockBackend';
 import { isMockMode } from '@/services/api';
@@ -32,6 +32,10 @@ interface LiveContextValue {
   refreshAlerts: () => void;
   counts: Record<AlertStatus | 'ACTIVE', number>;
   eventsSeen: number;
+  /** Seconds remaining until the next 60s automated alert notification */
+  secondsUntilNextAlert: number;
+  /** Immediately trigger the next unique vehicle alert in the rotation */
+  triggerNextAlert: () => Promise<void>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -43,10 +47,38 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const [paused, setPaused] = useState(false);
   const [latestAlert, setLatestAlert] = useState<Alert | null>(null);
   const [eventsSeen, setEventsSeen] = useState(0);
+  const [secondsUntilNextAlert, setSecondsUntilNextAlert] = useState(60);
   const pausedRef = useRef(paused);
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  // 60-second alert countdown
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSecondsUntilNextAlert((s) => (s <= 1 ? 60 : s - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const triggerNextAlert = useCallback(async () => {
+    if (!isMockMode) {
+      try {
+        const res = await fetch('/api/alerts/trigger', { method: 'POST' });
+        if (res.ok) {
+          setSecondsUntilNextAlert(60);
+          return;
+        }
+      } catch {
+        // Fall back to client simulation if backend trigger fails
+      }
+    }
+    const { event, alert } = triggerAlertNow();
+    setLiveEvents((prev) => [event, ...prev].slice(0, MAX_LIVE_EVENTS));
+    setAlerts((prev) => [alert, ...prev]);
+    setLatestAlert(alert);
+    setSecondsUntilNextAlert(60);
+  }, []);
 
   const loadAlerts = useCallback(() => {
     alertService
@@ -77,6 +109,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         }
       } else if (msg.type === 'ALERT') {
         const incoming = msg.payload;
+        setSecondsUntilNextAlert(60);
         setAlerts((prev) => {
           const idx = prev.findIndex((a) => a.id === incoming.id);
           if (idx === -1) return [incoming, ...prev];
@@ -141,8 +174,23 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       refreshAlerts: loadAlerts,
       counts,
       eventsSeen,
+      secondsUntilNextAlert,
+      triggerNextAlert,
     }),
-    [liveEvents, alerts, connection, paused, latestAlert, acknowledge, resolve, loadAlerts, counts, eventsSeen],
+    [
+      liveEvents,
+      alerts,
+      connection,
+      paused,
+      latestAlert,
+      acknowledge,
+      resolve,
+      loadAlerts,
+      counts,
+      eventsSeen,
+      secondsUntilNextAlert,
+      triggerNextAlert,
+    ],
   );
 
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;

@@ -49,14 +49,16 @@ if [ ! -d "$FRONTEND/node_modules" ]; then
   (cd "$FRONTEND" && npm install)
 fi
 
-if [ ! -d "$BACKEND/.venv" ] && ! python3 -c "import fastapi" 2>/dev/null; then
+if [ ! -d "$BACKEND/.venv" ] && [ ! -d "$BACKEND/venv" ] && ! python3 -c "import fastapi" 2>/dev/null; then
   echo "📦 Installing backend deps..."
   (cd "$BACKEND" && pip install -r requirements-ml.txt || pip3 install -r requirements-ml.txt)
 fi
 
 # ultralytics may pull GUI OpenCV after the headless wheel. Repair cv2 with the
 # same interpreter that will run the backend, without printing any credentials.
-if [ -x "$BACKEND/.venv/bin/python" ]; then
+if [ -x "$BACKEND/venv/bin/python" ]; then
+  OPENCV_PYTHON="$BACKEND/venv/bin/python"
+elif [ -x "$BACKEND/.venv/bin/python" ]; then
   OPENCV_PYTHON="$BACKEND/.venv/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
   OPENCV_PYTHON="$(command -v python3)"
@@ -71,9 +73,27 @@ if [ -n "$OPENCV_PYTHON" ]; then
 fi
 
 # --- Seed DB if empty ---
+if [ -x "$BACKEND/venv/bin/python" ]; then
+  PYTHON_BIN="$BACKEND/venv/bin/python"
+elif [ -x "$BACKEND/.venv/bin/python" ]; then
+  PYTHON_BIN="$BACKEND/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+else
+  PYTHON_BIN="python"
+fi
+
+if [ -x "$BACKEND/venv/bin/uvicorn" ]; then
+  UVICORN_BIN="$BACKEND/venv/bin/uvicorn"
+elif [ -x "$BACKEND/.venv/bin/uvicorn" ]; then
+  UVICORN_BIN="$BACKEND/.venv/bin/uvicorn"
+else
+  UVICORN_BIN="uvicorn"
+fi
+
 if [ ! -f "$ROOT/TRINETRAAI/trinetra.db" ] && [ ! -f "$BACKEND/trinetra.db" ]; then
   echo "🌱 Seeding demo DB..."
-  (cd "$BACKEND" && python -m scripts.seed_demo || python3 -m scripts.seed_demo || true)
+  (cd "$BACKEND" && "$PYTHON_BIN" -m scripts.seed_demo || true)
 fi
 
 echo ""
@@ -82,7 +102,7 @@ echo "   Open: http://localhost:5173"
 echo ""
 
 # Run backend in background
-(cd "$BACKEND" && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload) &
+(cd "$BACKEND" && "$UVICORN_BIN" app.main:app --host 0.0.0.0 --port 8000 --reload) &
 BACKEND_PID=$!
 
 # Wait a bit for backend
