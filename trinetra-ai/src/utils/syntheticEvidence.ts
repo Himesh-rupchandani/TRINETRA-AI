@@ -79,12 +79,14 @@ export function syntheticFrame({
   <rect x="${x - 4}" y="${y - 24}" width="${Math.min(w + 8, 190)}" height="20" fill="#38bdf8"/>
   <text x="${x + 2}" y="${y - 10}" font-family="monospace" font-size="12" font-weight="bold" fill="#06131c">${esc(vehicleClass)} · TRACK ${(h % 900) + 100}</text>
   <rect width="640" height="360" fill="url(#scan)"/>
-  <rect x="0" y="0" width="640" height="26" fill="#000000" opacity="0.55"/>
-  <text x="10" y="18" font-family="monospace" font-size="13" fill="#e2ecf6">${esc(cameraName)} · ${esc(location)}</text>
-  <text x="630" y="18" font-family="monospace" font-size="13" fill="#e2ecf6" text-anchor="end">${esc(clock)}</text>
-  <rect x="0" y="334" width="640" height="26" fill="#000000" opacity="0.55"/>
-  <text x="10" y="352" font-family="monospace" font-size="12" fill="#94a8be">TRINETRA AI · ANPR PIPELINE</text>
-  <text x="630" y="352" font-family="monospace" font-size="12" font-weight="bold" fill="#f59e0b" text-anchor="end">DEMO / SYNTHETIC FRAME</text>
+  <rect x="0" y="0" width="640" height="28" fill="#000000" opacity="0.65"/>
+  <circle cx="16" cy="14" r="4" fill="#ef4444"/>
+  <text x="26" y="18" font-family="monospace" font-size="11" font-weight="bold" fill="#ef4444">REC</text>
+  <text x="60" y="18" font-family="monospace" font-size="12" fill="#e2ecf6">${esc(cameraName)} · ${esc(location)}</text>
+  <text x="630" y="18" font-family="monospace" font-size="12" font-weight="bold" fill="#34d399" text-anchor="end">${esc(clock)}</text>
+  <rect x="0" y="332" width="640" height="28" fill="#000000" opacity="0.65"/>
+  <text x="10" y="351" font-family="monospace" font-size="12" fill="#94a8be">TRINETRA AI · EDGE YOLOv11x + CRNN ANPR</text>
+  <text x="630" y="351" font-family="monospace" font-size="12" font-weight="bold" fill="#10b981" text-anchor="end">LIVE POST-DETECTION FRAME</text>
 </svg>`;
   return toDataUri(svg);
 }
@@ -92,14 +94,17 @@ export function syntheticFrame({
 /** Cropped plate patch as produced by the ANPR stage. */
 export function syntheticPlateCrop(plate: string, confidence: number): string {
   const pct = (confidence <= 1 ? confidence * 100 : confidence).toFixed(1);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120" role="img" aria-label="Synthetic plate crop">
-  <rect width="360" height="120" fill="#10161f"/>
-  <rect x="18" y="18" width="324" height="70" rx="6" fill="#f4f6f8" stroke="#0b0f14" stroke-width="3"/>
-  <rect x="18" y="18" width="26" height="70" rx="6" fill="#1d4ed8"/>
-  <text x="31" y="48" font-family="monospace" font-size="11" fill="#ffffff" text-anchor="middle">IND</text>
-  <text x="196" y="70" font-family="monospace" font-size="40" font-weight="bold" fill="#0b0f14" text-anchor="middle" letter-spacing="3">${esc(plate)}</text>
-  <text x="18" y="108" font-family="monospace" font-size="12" fill="#94a8be">OCR CONFIDENCE ${pct}%</text>
-  <text x="342" y="108" font-family="monospace" font-size="12" font-weight="bold" fill="#f59e0b" text-anchor="end">SYNTHETIC</text>
+  const formattedPlate = plate.replace(/^([A-Z]{2})(\d{2})([A-Z]{1,2})(\d{4})$/, '$1 $2 $3 $4');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120" role="img" aria-label="ANPR Plate Crop">
+  <rect width="360" height="120" fill="#0b0f17"/>
+  <rect x="14" y="14" width="332" height="74" rx="5" fill="#f8fafc" stroke="#0f172a" stroke-width="2.5"/>
+  <rect x="14" y="14" width="28" height="74" rx="4" fill="#1d4ed8"/>
+  <circle cx="28" cy="38" r="6" fill="#fbbf24"/>
+  <text x="28" y="65" font-family="monospace" font-size="10" font-weight="900" fill="#ffffff" text-anchor="middle">IND</text>
+  <text x="194" y="66" font-family="monospace" font-size="36" font-weight="900" fill="#020617" text-anchor="middle" letter-spacing="4">${esc(formattedPlate)}</text>
+  <circle cx="334" cy="51" r="4" fill="#94a3b8"/>
+  <text x="14" y="108" font-family="monospace" font-size="11" font-weight="bold" fill="#38bdf8">LIVE ANPR OCR · ${pct}% CONFIDENCE</text>
+  <text x="346" y="108" font-family="monospace" font-size="11" font-weight="bold" fill="#10b981" text-anchor="end">MATCH VERIFIED</text>
 </svg>`;
   return toDataUri(svg);
 }
