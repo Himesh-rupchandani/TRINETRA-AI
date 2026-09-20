@@ -111,6 +111,12 @@ export async function post<T>(url: string, body?: unknown, cfg?: AxiosRequestCon
   return res.data;
 }
 
+export async function put<T>(url: string, body?: unknown, cfg?: AxiosRequestConfig): Promise<T> {
+  const res = await http.put<T>(url, body, cfg);
+  assertJsonBody(url, res.data);
+  return res.data;
+}
+
 /** True when the app is running against synthetic data. */
 export const isMockMode = config.useMocks;
 

@@ -45,6 +45,7 @@ from .api.chunked_uploads import router as chunked_uploads_router
 from .api.video_analysis import router as video_analysis_router
 from .api.evidence import router as evidence_router
 from .api.stats import router as stats_router
+from .api.traffic import router as traffic_router
 from .api.stream import router as sse_router
 from .api.websocket import router as ws_router
 from .api.ingest import router as ingest_router
@@ -281,6 +282,7 @@ for prefix in ["/api", "/api/v1"]:
     r.include_router(events_router)
     r.include_router(vehicles_router)
     r.include_router(stats_router)
+    r.include_router(traffic_router)
     r.include_router(internal_router)
     r.include_router(officers_router)
     r.include_router(uploads_router)

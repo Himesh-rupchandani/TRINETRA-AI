@@ -250,3 +250,11 @@ auto-refresh, same-route notification navigation and evidence delivery. This
 is a functional check on that fixture, not a claim of general OCR accuracy or
 smooth multi-camera performance on an operator's real feeds. Its rapid image
 changes also exercise hiding asynchronous boxes belonging to a different scene.
+
+
+## Optional traffic observations
+
+The same detector also supports motion-aware tracking and per-camera normalized
+line/zone counts; see [Traffic counting](TRAFFIC_COUNTING.md). Counting has a
+separate bounded tracking budget and does not increase the OCR/photo budget.
+Plate sightings and observation-session counters are deliberately separate.

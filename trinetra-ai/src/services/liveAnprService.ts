@@ -1,4 +1,5 @@
 import { get, post } from './api';
+import type { TrafficSnapshot } from './trafficService';
 
 export interface LiveDetection {
   x1: number; y1: number; x2: number; y2: number;
@@ -44,6 +45,7 @@ export interface LiveAnprSnapshot {
   accepted?: boolean;
   detections: LiveDetection[];
   photos?: LivePhoto[];
+  traffic?: TrafficSnapshot | null;
 }
 
 export const liveAnprService = {

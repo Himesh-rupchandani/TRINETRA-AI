@@ -1,7 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import List, Union
+from typing import List, Union, Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     # a bounded worker pool, and at most 3 vehicles OCR'd in a sampled frame.
     LIVE_ANPR_ENABLED: bool = True
     LIVE_ANPR_MAX_VEHICLES: int = Field(3, ge=1, le=10)
+    LIVE_ANPR_TRACKER: Literal["motion", "iou"] = "motion"
+    LIVE_ANPR_MAX_TRACKED_VEHICLES: int = Field(32, ge=3, le=128)
     LIVE_ANPR_SAMPLE_SECONDS: float = Field(1.0, ge=0.25, le=30)
     LIVE_ANPR_WORKERS: int = Field(1, ge=1, le=4)
     LIVE_ANPR_MAX_CAMERAS: int = Field(32, ge=1, le=128)

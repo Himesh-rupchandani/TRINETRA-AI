@@ -16,5 +16,6 @@ await import('./source-contracts.test.mjs');
 await import('./live-anpr.test.mjs');
 await import('./event-refresh.test.mjs');
 await import('./evidence.test.mjs');
+await import('./traffic.test.mjs');
 
 process.exit(await runAll());

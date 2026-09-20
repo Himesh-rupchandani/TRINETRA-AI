@@ -8,6 +8,7 @@ remain unknown. All viewers of a camera share its tracker and dedup window.
 from __future__ import annotations
 
 import re
+import math
 import threading
 import time
 from collections import OrderedDict
@@ -25,11 +26,12 @@ from ..core.logging_config import logger
 from ..core.paths import evidence_root
 from ..core.vision import cv2, np
 from ..database.database import SessionLocal
-from ..database.models import Camera, VehicleEvent
+from ..database.models import Camera, CameraTrafficConfig, VehicleEvent
 from .anpr_pipeline import PlateRead, TrackPlateAccumulator, read_plate_for_vehicle
 from .event_service import event_message, store_event
 from .ocr_service import ocr_service
-from .simple_tracker import SimpleTracker
+from .live_tracker import LiveTracker
+from .traffic_counting import TrafficConfig, TrafficCounter
 from .vehicle_detection_service import vehicle_detection_service
 from .ws_manager import ws_manager
 
@@ -90,7 +92,13 @@ class TrackState:
 
 @dataclass
 class CameraState:
-    tracker: SimpleTracker = field(default_factory=lambda: SimpleTracker(max_misses=3))
+    tracker: LiveTracker = field(default_factory=LiveTracker)
+    traffic: Optional[TrafficCounter] = None
+    traffic_config: Optional[TrafficConfig] = None
+    traffic_revision: str = "default"
+    pending_traffic_config: Optional[tuple] = None
+    reset_traffic: bool = False
+    traffic_config_error: Optional[str] = None
     tracks: dict[int, TrackState] = field(default_factory=dict)
     # plate -> (last time actually seen, persisted event id). Sliding cooldown
     # means a parked vehicle does NOT produce a notification every 60 seconds.
@@ -174,6 +182,8 @@ class LiveAnprService:
         The next viewer takes over when the old source stops submitting frames.
         """
         if not self.enabled or frame is None or getattr(frame, "size", 0) == 0:
+            return False
+        if media_time is not None and (not math.isfinite(media_time) or media_time < 0):
             return False
         key = camera_id.strip().upper()
         now = self._clock()
@@ -313,6 +323,11 @@ class LiveAnprService:
                     "submitted_at": packet.submitted_at,
                     "detections": [dict(d) for d in detections],
                     "processing_ms": round((self._clock() - packet.submitted_at) * 1000),
+                    "traffic": ({**state.traffic.snapshot(), "tracker": state.tracker.name,
+                                 "max_tracked_vehicles": settings.LIVE_ANPR_MAX_TRACKED_VEHICLES,
+                                 "ocr_budget": settings.LIVE_ANPR_MAX_VEHICLES,
+                                 "configuration_error": state.traffic_config_error}
+                                if state.traffic else None),
                 }
 
     @staticmethod
@@ -334,10 +349,14 @@ class LiveAnprService:
         previous_time = state.result.get("media_time")
         backwards = (packet.media_time is not None and previous_time is not None
                      and packet.media_time < previous_time)
-        if (packet.discontinuity or backwards or scene_cut or state.shape != packet.frame.shape
-                or packet.submitted_at - state.last_processed > max_gap):
-            state.tracker = SimpleTracker(max_misses=3)
+        reset_reason = ("source changed/reconnected" if packet.discontinuity else
+                        "video seek/loop" if backwards else "scene changed" if scene_cut else
+                        "resolution changed" if state.shape and state.shape != packet.frame.shape else
+                        "sampling gap" if packet.submitted_at - state.last_processed > max_gap else None)
+        if reset_reason or not state.shape:
+            state.tracker = LiveTracker()
             state.tracks.clear()
+        self._prepare_traffic(packet, state, reset_reason)
         state.shape = packet.frame.shape
         state.last_processed = packet.submitted_at
         dets = vehicle_detection_service.detect(packet.frame)
@@ -349,14 +368,18 @@ class LiveAnprService:
             return
         # Larger vehicles provide more plate pixels. Keep OCR cost bounded.
         dets = sorted(dets, key=lambda d: (d.x2-d.x1)*(d.y2-d.y1), reverse=True)
-        dets = dets[:settings.LIVE_ANPR_MAX_VEHICLES]
+        input_limited = len(dets) > settings.LIVE_ANPR_MAX_TRACKED_VEHICLES
+        dets = dets[:settings.LIVE_ANPR_MAX_TRACKED_VEHICLES]
         h, w = packet.frame.shape[:2]
         boxes = [(max(0, d.x1), max(0, d.y1), min(w, d.x2), min(h, d.y2), d.class_name, d.confidence)
                  for d in dets if min(w, d.x2) > max(0, d.x1) and min(h, d.y2) > max(0, d.y1)]
-        live, retired = state.tracker.update(boxes)
+        time_s = packet.media_time if packet.media_time is not None else packet.submitted_at
+        live, retired = state.tracker.update(boxes, time_s)
+        state.traffic.update(live, time_s, w, h, max_gap=max_gap, input_limited=input_limited)
         for track in retired:
             state.tracks.pop(track.track_id, None)
-        shown = [t for t in live if t.misses == 0]
+        shown = sorted((t for t in live if t.misses == 0),
+                       key=lambda t: (t.x2-t.x1)*(t.y2-t.y1), reverse=True)[:settings.LIVE_ANPR_MAX_VEHICLES]
         output = []
         for track in shown:
             ts = state.tracks.setdefault(track.track_id, TrackState())
@@ -417,6 +440,47 @@ class LiveAnprService:
         state.recent = {p: v for p, v in state.recent.items()
                         if packet.submitted_at - v[0] < settings.LIVE_ANPR_DEDUP_SECONDS}
         self._publish(packet, state, output)
+
+    def configure_traffic(self, camera_id: str, config: TrafficConfig, revision: str) -> None:
+        # Applied by the inference owner at a sample boundary. Never mutate a
+        # tracker/counter while another thread is using it, or reset OCR votes.
+        with self._condition:
+            state = self._states.get(camera_id.strip().upper())
+            if state:
+                state.pending_traffic_config = (config, revision)
+
+    def reset_traffic(self, camera_id: str) -> None:
+        with self._condition:
+            state = self._states.get(camera_id.strip().upper())
+            if state:
+                state.reset_traffic = True
+
+    def _prepare_traffic(self, packet, state, tracking_reset):
+        if state.traffic_config is None:
+            config, revision = TrafficConfig(), "default"
+            try:
+                with self._session_factory() as db:
+                    row = db.query(CameraTrafficConfig).filter(func.upper(CameraTrafficConfig.camera_id) == packet.camera_id).first()
+                    if row:
+                        config, revision = TrafficConfig.model_validate_json(row.config_json), row.revision
+            except Exception:
+                # Ancillary settings must not take down plate/photo inference.
+                logger.warning("[LIVE ANPR:%s] Traffic configuration unavailable", packet.camera_id)
+                state.traffic_config_error = "Traffic settings unavailable; crossing rules are off."
+            state.traffic_config, state.traffic_revision = config, revision
+        reason = tracking_reset
+        with self._condition:
+            if state.pending_traffic_config:
+                state.traffic_config, state.traffic_revision = state.pending_traffic_config
+                state.pending_traffic_config = None
+                state.traffic_config_error = None
+                reason = "counting settings changed"
+            if state.reset_traffic:
+                state.reset_traffic = False
+                reason = "operator reset"
+        if state.traffic is None or reason:
+            state.traffic = TrafficCounter(state.traffic_config, started_at=packet.captured_at.isoformat(),
+                                           reason=reason or "started", revision=state.traffic_revision)
 
     def _trim_photos(self, now: float) -> None:
         # Caller holds _condition. Limits are global, not multiplied by viewers.

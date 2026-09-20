@@ -9,6 +9,8 @@ import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
 import { config } from '@/lib/config';
 import { anprStatusLabel } from '@/lib/liveDetections';
+import { CountingOverlay } from './CountingOverlay';
+import type { CountingPreview } from '@/services/trafficService';
 import { StatusChip } from '@/components/common/Chips';
 import { DetectionOverlay } from './DetectionOverlay';
 import { liveAnprService, type LiveAnprSnapshot } from '@/services/liveAnprService';
@@ -61,6 +63,7 @@ export function CameraPlayer({
   embedded = false,
   className,
   onDetectionSnapshot,
+  countingPreview,
 }: {
   camera: Camera;
   poster?: string;
@@ -69,6 +72,7 @@ export function CameraPlayer({
   embedded?: boolean;
   className?: string;
   onDetectionSnapshot?: (snapshot: LiveAnprSnapshot | null) => void;
+  countingPreview?: CountingPreview | null;
 }) {
   const [ticket, setTicket] = useState<CameraStreamTicket | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -446,6 +450,10 @@ export function CameraPlayer({
             active={aiBoxes && phase === 'LIVE'} onStatus={onAnprStatus} onError={setAnprError} />
         )}
 
+        {showVideo && onAir && anprStatus && (countingPreview || anprStatus.traffic) && (
+          <CountingOverlay preview={countingPreview ?? { config: anprStatus.traffic!.config, draft: false }}
+            width={anprStatus.frame_width} height={anprStatus.frame_height} />
+        )}
         <div className="scanline pointer-events-none absolute inset-0" aria-hidden />
 
         {/* On-screen display */}

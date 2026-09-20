@@ -8,6 +8,8 @@ import { LivePhotoEvidence } from '@/components/camera/LivePhotoEvidence';
 import { useLive } from '@/features/alerts/LiveProvider';
 import { latestCameraEvidence } from '@/lib/evidence';
 import type { LiveAnprSnapshot } from '@/services/liveAnprService';
+import type { CountingPreview } from '@/services/trafficService';
+import { TrafficCountingPanel } from '@/components/camera/TrafficCountingPanel';
 import { LazyMap } from '@/components/gis/LazyMap';
 import { Panel, AsyncBoundary, KeyValue, ErrorState } from '@/components/common/Panel';
 import { StatusChip } from '@/components/common/Chips';
@@ -29,6 +31,7 @@ function CameraDetailView({ cameraId }: { cameraId: string }) {
   const [selected, setSelected] = useState<VehicleEvent | null>(null);
   const [watchlistOnly, setWatchlistOnly] = useState(false);
   const [snapshot, setSnapshot] = useState<LiveAnprSnapshot | null>(null);
+  const [countingPreview, setCountingPreview] = useState<CountingPreview | null>(null);
   const { plateNotifications } = useLive();
 
   const all = useMemo(() => events.data?.items ?? [], [events.data]);
@@ -90,8 +93,9 @@ function CameraDetailView({ cameraId }: { cameraId: string }) {
       <AsyncBoundary loading={loading || !camera} error={error} onRetry={refresh} loadingLabel="Loading camera">
         {camera && (
           <div className="grid gap-3 p-4 sm:gap-4 sm:p-5 xl:grid-cols-12">
-            <div className="min-w-0 xl:col-span-8">
-              <CameraPlayer camera={camera} autoRequest onDetectionSnapshot={setSnapshot} />
+            <div id="camera-live-player" className="min-w-0 xl:col-span-8">
+              <CameraPlayer camera={camera} autoRequest onDetectionSnapshot={setSnapshot} countingPreview={countingPreview} />
+
             </div>
 
             {/* Beside the player on desktop; directly below it on mobile. */}
@@ -105,6 +109,7 @@ function CameraDetailView({ cameraId }: { cameraId: string }) {
             </div>
 
             <div className="flex min-w-0 flex-col gap-3 sm:gap-4 xl:col-span-8">
+              <TrafficCountingPanel cameraId={camera.id} traffic={snapshot?.traffic} onPreview={setCountingPreview} />
               {camera.streamType === 'FILE' && <UploadedVideoPanel cameraId={camera.id} />}
 
               <Panel
