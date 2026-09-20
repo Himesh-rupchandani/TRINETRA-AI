@@ -28,12 +28,16 @@ def arguments():
     parser.add_argument("--chromium-binary", help="Optional system Chromium/headless-shell executable")
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--photos-only", action="store_true", help="Verify direct vehicle photos without waiting for a plate read/event")
+    parser.add_argument("--mobile", action="store_true", help="Check the 390px mobile layout")
+    parser.add_argument("--empty-camera-id", help="Optional registered, unconfigured slot for a same-page camera-switch regression")
     parser.add_argument("--output", type=Path, default=Path(".cache/live-anpr-browser"))
     args = parser.parse_args()
     if not 1 <= args.timeout <= 300:
         parser.error("--timeout must be 1–300 seconds")
     if not re.fullmatch(r"[A-Za-z0-9_-]{2,50}", args.camera_id):
         parser.error("Use a registered camera ID (letters, numbers, hyphens or underscores)")
+    if args.empty_camera_id and not re.fullmatch(r"[A-Za-z0-9_-]{2,50}", args.empty_camera_id):
+        parser.error("--empty-camera-id must be a registered camera ID")
     origin = urlparse(args.app_url)
     if origin.scheme not in ("http", "https") or not origin.netloc or origin.username or origin.password:
         parser.error("--app-url must be an HTTP(S) application URL without embedded credentials")
@@ -56,7 +60,10 @@ def run(args):
             headless=not args.headed, executable_path=args.chromium_binary,
             args=["--disable-gpu", "--no-zygote"],
         )
-        context = browser.new_context(viewport={"width": 1440, "height": 1100})
+        context = browser.new_context(
+            viewport={"width": 390, "height": 844} if args.mobile else {"width": 1440, "height": 1100},
+            is_mobile=args.mobile, has_touch=args.mobile,
+        )
         context.on("page", lambda page: page.on("pageerror", lambda error: report["javascript_errors"].append(str(error))))
         try:
             def get_json(path):
@@ -68,6 +75,12 @@ def run(args):
             assert cam.get("stream_type", "").upper() == "FILE", "This smoke only opens a recorded FILE camera, never an unverified live source."
             if Path(cam.get("stream_url", "")).name == "demo_cam04.mp4":
                 report["fixture_note"] = "Bundled demo alternates sample photographs; not continuous live traffic footage."
+            if args.empty_camera_id:
+                empty = get_json(f"/cameras/{args.empty_camera_id.lower()}")
+                assert not (empty.get("stream_url") or "").strip(), "Camera-switch check only opens an unconfigured slot; it will not access another live source."
+                assert empty["camera_id"].lower() != camera_id
+                empty_events = get_json(f"/events?camera_id={quote(empty['camera_id'], safe='')}&size=1")
+                assert empty_events["total"] == 0, "Choose an unconfigured slot without saved events for the empty-camera check."
             canonical = quote(cam["camera_id"], safe="")
             event_path = f"/events?camera_id={canonical}&size=100"
             before = {event["id"] for event in get_json(event_path)["items"]}
@@ -144,6 +157,39 @@ def run(args):
                 assert evidence.ok and evidence.headers.get("content-type", "").startswith("image/")
                 assert len(evidence.body()) > 100
                 report["evidence_served"] = True
+            if args.mobile:
+                layout = camera.evaluate("""() => {
+                    const video = document.querySelector('img[src*="/live/detect"]');
+                    const evidence = document.querySelector('#camera-photo-evidence');
+                    return {viewport: innerWidth, width: document.documentElement.scrollWidth,
+                            photos_below_video: evidence.getBoundingClientRect().top >= video.getBoundingClientRect().bottom};
+                }""")
+                assert layout["width"] <= layout["viewport"] + 2, "Mobile page overflows horizontally"
+                assert layout["photos_below_video"], "Mobile photos must follow the player"
+                report["mobile_layout"] = layout
+
+            if args.empty_camera_id:
+                # Exercise a mounted SPA route change, not a clean document load.
+                camera.evaluate("""id => {
+                    window.__anprSameDocument = true;
+                    history.pushState({}, '', `/cameras/${id}`);
+                    dispatchEvent(new PopStateEvent('popstate'));
+                }""", args.empty_camera_id.lower())
+                camera.get_by_text("Waiting for a vehicle", exact=True).wait_for(timeout=15000)
+                assert camera.evaluate("window.__anprSameDocument")
+                assert camera.locator('#camera-photo-evidence img').count() == 0, "Old camera evidence leaked into another camera"
+                camera.evaluate("""id => {
+                    history.pushState({}, '', `/cameras/${id}`);
+                    dispatchEvent(new PopStateEvent('popstate'));
+                }""", camera_id)
+                resumed = camera.get_by_test_id("live-photo-evidence")
+                resumed.wait_for(timeout=30000)
+                previous = resumed.locator("article").first.get_attribute("data-capture-id")
+                camera.wait_for_function("""old => document.querySelector('[data-capture-id]')?.getAttribute('data-capture-id') !== old""",
+                                         arg=previous, timeout=15000)
+                report["camera_switch_clears_old_photos"] = True
+                report["return_to_camera_resumes_photos"] = True
+
             assert not report["javascript_errors"], "Browser JavaScript errors occurred"
             report["passed"] = True
         except Exception as exc:

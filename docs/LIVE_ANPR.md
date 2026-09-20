@@ -227,7 +227,12 @@ With that backend and the real-mode frontend running:
 To check the immediate photo gallery without requiring a readable plate or
 waiting for a notification, add `--photos-only`. This verifies loaded vehicle
 images and automatic capture updates using the real model, without selecting
-an existing Vehicle Log entry.
+an existing Vehicle Log entry. Add `--mobile` to check the 390px layout.
+Optionally pass `--empty-camera-id CAMLIVE` to verify that switching to an
+**unconfigured** registry slot with no saved events clears the previous camera's
+photos and that returning resumes the gallery, without a page reload. The script refuses this
+switch check if that slot has a source, so it cannot accidentally open another
+live feed.
 
 `--chromium-binary /path/to/chromium` supports an existing Chromium install.
 The script writes its JSON report and screenshots into the ignored
