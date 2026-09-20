@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Zap, Activity, Cctv, MapPin, Lock } from 'lucide-react';
+import { Zap, Activity, Cctv, MapPin, Lock } from 'lucide-react';
 import { useAsync } from '@/hooks/useAsync';
 
 interface ThreatLevel {
@@ -59,8 +59,12 @@ export function CommandCenterHero() {
       <div className="relative z-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="grid h-12 w-12 place-items-center rounded-xl bg-white text-blue-700 shadow-md">
-              <Shield size={24} />
+            <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-xl border border-white/20 bg-slate-950 p-1 shadow-lg ring-1 ring-blue-500/30">
+              <img
+                src="/trinetra-logo.png"
+                alt="TRINETRA AI Logo"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <h1 className="text-[20px] font-bold tracking-tight">TRINETRA AI</h1>
