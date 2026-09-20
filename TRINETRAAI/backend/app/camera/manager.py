@@ -4,6 +4,8 @@ from pathlib import Path
 import threading
 import time
 from typing import Dict, List, Optional, Callable
+from uuid import uuid4
+from dataclasses import replace
 
 # Allow running this file directly as a script
 if __name__ == "__main__" and not __package__:
@@ -60,7 +62,7 @@ class CameraManager:
         last = self._live_signal.get((camera_id or "").lower())
         return bool(last is not None and (time.monotonic() - last) <= window_sec)
 
-    def set_pipeline_callback(self, callback: Callable[[FramePacket], None]):
+    def set_pipeline_callback(self, callback: Optional[Callable[[FramePacket], None]]):
         """Set callback to receive FramePacket objects for AI processing."""
         with self._lock:
             self._pipeline_callback = callback
@@ -165,6 +167,12 @@ class CameraManager:
                 if camera_id in self._stop_events:
                     del self._stop_events[camera_id]
 
+        with self._lock:
+            self._latest_packets.pop(camera_id, None)
+            self._latest_annotated_frames.pop(camera_id, None)
+            self._live_signal.pop(camera_id.lower(), None)
+        from ..services.live_anpr_service import live_anpr_service
+        live_anpr_service.forget(camera_id)
         logger.info(f"[{camera_id}] Stopped and resources released.")
         return True
 
@@ -265,7 +273,7 @@ class CameraManager:
         never be mistaken for a real camera; real network streams are
         marked LIVE.
         """
-        label = "RECORDED DEMO FOOTAGE - NOT LIVE" if is_file else "LIVE SOURCE"
+        label = "RECORDED FOOTAGE - NOT LIVE" if is_file else "LIVE SOURCE"
         h, w = frame.shape[:2]
         (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
         x2, y2 = w - 10, h - 12
@@ -351,8 +359,8 @@ class CameraManager:
         demo cameras with AUTO_START_CAMERAS off), the source file is decoded
         on demand for the lifetime of this HTTP connection only.
 
-        With ``detect_vehicles=True`` every real frame passes through the
-        OpenCV + YOLO vehicle detector and gets green bounding boxes.
+        With ``detect_vehicles=True`` frames are submitted without waiting for
+        inference. Only fresh cached ANPR boxes/numbers are drawn on playback.
         """
         ondemand_cap = None
         ondemand_source = None
@@ -360,16 +368,21 @@ class CameraManager:
         ondemand_candidates = None
         ondemand_failures = 0
         detector = None
+        source_id = f"mjpeg:{uuid4().hex}"
         if detect_vehicles:
-            from ..services.vehicle_detection_service import vehicle_detection_service
-            detector = vehicle_detection_service
+            from ..services.live_anpr_service import live_anpr_service
+            detector = live_anpr_service
         try:
             while True:
-                frame = self.get_latest_frame(camera_id, annotated=True)
+                started = time.monotonic()
+                frame = self.get_latest_frame(camera_id, annotated=False)
                 if frame is None:
-                    frame = self.get_latest_frame(camera_id.upper(), annotated=True)
-                if frame is not None:
-                    self._note_live_signal(camera_id)  # real frame from the resident worker
+                    frame = self.get_latest_frame(camera_id.upper(), annotated=False)
+                # A cached frame is not a live signal. The worker updates this
+                # timestamp only when it actually receives a new source frame.
+                if frame is not None and not self.has_live_signal(camera_id):
+                    frame = None
+                resident = frame is not None
                 if frame is None and ondemand_source is None and ondemand_cap is None:
                     if ondemand_candidates is None:
                         ondemand_candidates = self._ondemand_candidates(camera_id)
@@ -387,7 +400,6 @@ class CameraManager:
                     if frame is not None:
                         ondemand_failures = 0
                         self._note_live_signal(camera_id)  # real frame from on-demand decode
-                        frame = self._stamp_source_osd(frame, ondemand_is_file)
                     elif not ondemand_is_file:
                         # Network source not delivering: after a few misses, move
                         # on to the next candidate (e.g. RTSP blocked -> HLS).
@@ -403,9 +415,22 @@ class CameraManager:
                                 pass
                             ondemand_cap = None
                             ondemand_source = None
-                if frame is not None and detector is not None:
-                    # Real detections only: boxes come straight from the model.
-                    frame = detector.annotate(camera_id.lower(), frame)
+                if frame is not None:
+                    if detector is not None:
+                        media_time = None
+                        if not resident:
+                            pts = float(ondemand_cap.get(cv2.CAP_PROP_POS_MSEC) or 0) / 1000.0
+                            media_time = pts if ondemand_is_file else None
+                            detector.submit(camera_id, frame, source_id=source_id, media_time=media_time)
+                        else:
+                            packet = self.get_latest_packet(camera_id) or self.get_latest_packet(camera_id.upper())
+                            if packet is not None:
+                                media_time = packet.pts_ms / 1000.0
+                        frame = detector.annotate(camera_id, frame,
+                                                  source_id="resident" if resident else source_id,
+                                                  media_time=media_time)
+                    if not resident:
+                        frame = self._stamp_source_osd(frame, ondemand_is_file)
                 if frame is None:
                     placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
                     placeholder[:] = (20, 24, 30)
@@ -430,15 +455,18 @@ class CameraManager:
                     b"--frame\r\n"
                     b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
                 )
-                time.sleep(0.08)  # ~12 FPS on-demand live preview pacing
+                # Preserve file playback speed instead of decoding a 25 fps
+                # recording at half speed. AI sampling has its own clock.
+                fps = float(ondemand_cap.get(cv2.CAP_PROP_FPS) or 25) if ondemand_cap else 25.0
+                time.sleep(max(0.001, 1.0 / max(1.0, fps) - (time.monotonic() - started)))
         finally:
             if ondemand_cap is not None:
                 try:
                     ondemand_cap.release()
                 except Exception:
                     pass
-            if detector is not None:
-                detector.forget(camera_id.lower())
+            # Do not forget shared ANPR state when just one viewer disconnects.
+            # Idle eviction / camera stop releases it, preserving duplicate suppression.
 
     def _camera_worker(self, camera_id: str, stream: CameraStream, stop_event: threading.Event):
         """
@@ -446,7 +474,8 @@ class CameraManager:
         Conforms to Rule 13 (camera isolation) and Rule 14 (subsampled frame dispatching).
         """
         logger.info(f"[{camera_id}] Ingestion worker active.")
-        process_every_n = getattr(settings, "PROCESS_EVERY_N_FRAMES", 1)
+        process_every_n = max(1, getattr(settings, "PROCESS_EVERY_N_FRAMES", 1))
+        pending_discontinuity = False
 
         while not stop_event.is_set():
             try:
@@ -457,16 +486,21 @@ class CameraManager:
                     with self._lock:
                         self._latest_packets[camera_id] = packet
 
-                        # If no annotated frame is present yet, mirror raw frame
-                        if camera_id not in self._latest_annotated_frames:
-                            self._latest_annotated_frames[camera_id] = packet.frame
+                        # get_latest_frame already falls back to this raw packet.
+                        # Caching the FIRST raw frame as "annotated" froze playback.
+                        if packet.source_type != "demo":
+                            self._note_live_signal(camera_id)
+                    pending_discontinuity = pending_discontinuity or packet.is_discontinuity
 
                     # Rule 14: Subsample frames while strictly preserving packet PTS
                     if packet.sequence_number % process_every_n == 0:
                         callback = self._pipeline_callback
                         if callback is not None:
                             try:
-                                callback(packet)
+                                # A reconnect/loop may fall on a skipped frame;
+                                # carry its reset signal onto the next sample.
+                                callback(replace(packet, is_discontinuity=pending_discontinuity))
+                                pending_discontinuity = False
                             except Exception as cb_err:
                                 logger.error(f"[{camera_id}] Error in AI pipeline callback: {cb_err}")
 

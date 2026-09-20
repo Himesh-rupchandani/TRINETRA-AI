@@ -213,8 +213,10 @@ test('the player schedules a fresh ticket when a transport dead-ends', () => {
   includes(playerSrc, 'void requestStream()', 'the scheduled action re-requests the ticket');
 });
 
-test('a re-fetched ticket restarts the ladder from WebRTC', () => {
-  includes(playerSrc, "setTransport('whep');\n      setWanted(true);", 'every fresh ticket must re-probe WebRTC before stepping down');
+test('a fresh ticket prefers WebRTC without overriding a required HLS fallback', () => {
+  includes(playerSrc, "if ((!rtcOk || !decodable) && hls)");
+  includes(playerSrc, "setTransport('hls');");
+  includes(playerSrc, "} else {\n        setTransport('whep');\n      }\n      setWanted(true);");
 });
 
 test('the reconnecting UI covers both the hooks and the ticket scheduler', () => {

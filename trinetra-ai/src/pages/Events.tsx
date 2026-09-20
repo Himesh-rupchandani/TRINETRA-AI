@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FileImage, ListTree, RefreshCcw, X } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -40,6 +40,13 @@ export default function Events() {
   const [watchlistOnly, setWatchlistOnly] = useState(params.get('watchlist') === 'true');
   const [page, setPage] = useState(1);
   const [evidence, setEvidence] = useState<VehicleEvent | null>(null);
+
+  // Notification links can target a new plate while this same route is open.
+  useEffect(() => {
+    setPlate(params.get('plate') ?? '');
+    setCameraId(params.get('cameraId') ?? 'ALL');
+    setWatchlistOnly(params.get('watchlist') === 'true');
+  }, [params]);
 
   const debouncedPlate = useDebounced(plate, 300);
 
@@ -92,7 +99,7 @@ export default function Events() {
         title="Vehicle Log"
         icon={ListTree}
         tone="purple"
-        subtitle={`Every vehicle the cameras have seen. ${(data?.total ?? 0).toLocaleString('en-IN')} match your filters.`}
+        subtitle={`Auto-updating camera sightings. ${(data?.total ?? 0).toLocaleString('en-IN')} match your filters. Uncertain plates are marked for verification.`}
         actions={
           <button type="button" className="btn-ghost" onClick={refresh}>
             <RefreshCcw size={12} aria-hidden /> Refresh
@@ -234,7 +241,7 @@ export default function Events() {
                 </thead>
                 <tbody>
                   {items.map((e) => (
-                    <tr key={e.id}>
+                    <tr key={e.id} data-event-id={e.id}>
                       <td className="font-mono text-2xs text-ink-faint">{formatDate(e.timestamp)}</td>
                       <td className="font-mono tabular-nums text-ink">{formatTime(e.timestamp)}</td>
                       <td>
@@ -243,6 +250,8 @@ export default function Events() {
                       <td className="max-w-[190px] truncate text-ink-muted">{e.location}</td>
                       <td>
                         <PlateLink plate={e.plate} size="xs" />
+                        {e.plateStatus === 'LOW_CONFIDENCE' && <span className="ml-2 text-2xs text-degraded">Verify read</span>}
+                        {e.plateStatus === 'SIMULATED' && <span className="ml-2 text-2xs text-degraded">Demo</span>}
                       </td>
                       <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>
                       <td>{e.plateConfidence ? <ConfidenceBar value={e.plateConfidence} /> : '—'}</td>

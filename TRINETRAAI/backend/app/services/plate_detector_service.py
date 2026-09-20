@@ -82,6 +82,8 @@ class PlateDetectorService:
     def __init__(self) -> None:
         self._model = None
         self._model_lock = threading.Lock()
+        self._infer_lock = threading.Lock()
+        self._plate_class_ids: Optional[List[int]] = None
         self._model_attempted = False
         self._model_path: Optional[str] = None
 
@@ -94,7 +96,13 @@ class PlateDetectorService:
             return configured
         backend_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         candidate = os.path.join(backend_root, configured)
-        return candidate if os.path.isfile(candidate) else None
+        if os.path.isfile(candidate):
+            return candidate
+        # The standalone module already bundles a vehicle + number_plate
+        # model. Reuse its PLATE class when no site-trained model is supplied;
+        # otherwise readable plates were missed by the classical proposer.
+        bundled = os.path.abspath(os.path.join(backend_root, "..", "..", "trinetra_detection", "models", "best.pt"))
+        return bundled if os.path.isfile(bundled) else None
 
     def _ensure_model(self):
         # ``_model_attempted`` flips only after the load finishes (see the same
@@ -119,11 +127,24 @@ class PlateDetectorService:
 
                     logger.info(f"[PLATE] Loading fine-tuned plate detector: {path}")
                     model = YOLO(path)
+                    names = model.names
+                    if isinstance(names, list):
+                        names = dict(enumerate(names))
+                    plate_ids = [int(k) for k, name in names.items()
+                                 if "plate" in str(name).lower()]
+                    if not plate_ids and len(names) == 1:
+                        plate_ids = [int(next(iter(names)))]  # a single-class site-trained plate model
+                    if not plate_ids:
+                        logger.warning("[PLATE] Model has no plate class; using classical proposer.")
+                        return None
+                    self._plate_class_ids = plate_ids
                     imgsz = int(getattr(settings, "PLATE_DETECTION_IMGSZ", 320))
                     model.predict(
                         np.zeros((imgsz, imgsz, 3), dtype=np.uint8),
                         verbose=False, imgsz=imgsz, device="cpu",
                     )
+                    import torch
+                    torch.set_num_threads(settings.CV_CPU_THREADS)
                     self._model = model
                     self._model_path = path
                 except Exception as exc:
@@ -176,7 +197,9 @@ class PlateDetectorService:
         conf = float(getattr(settings, "PLATE_CONF_THRESHOLD", 0.25))
         imgsz = int(getattr(settings, "PLATE_DETECTION_IMGSZ", 320))
         try:
-            results = model.predict(crop, verbose=False, conf=conf, imgsz=imgsz, device="cpu")
+            with self._infer_lock:
+                results = model.predict(crop, verbose=False, conf=conf, imgsz=imgsz, device="cpu",
+                                        classes=self._plate_class_ids)
         except Exception as exc:
             logger.error(f"[PLATE] Plate model inference failed: {exc}")
             return []
@@ -184,7 +207,13 @@ class PlateDetectorService:
         if not results or results[0].boxes is None:
             return out
         b = results[0].boxes
-        for xyxy, c in zip(b.xyxy.cpu().numpy(), b.conf.cpu().numpy()):
+        for xyxy, c, cls in zip(b.xyxy.cpu().numpy(), b.conf.cpu().numpy(), b.cls.cpu().numpy()):
+            if self._plate_class_ids is not None and int(cls) not in self._plate_class_ids:
+                continue
+            clipped = _clip(*xyxy, crop.shape[1], crop.shape[0])
+            if clipped is None:
+                continue
+            xyxy = clipped
             out.append(
                 PlateBox(
                     x1=int(xyxy[0]) + ox, y1=int(xyxy[1]) + oy,

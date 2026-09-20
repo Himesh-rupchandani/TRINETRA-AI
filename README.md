@@ -47,6 +47,14 @@ Sentinel CCTV → Frame (PTS) → Vehicle Detection (YOLO11) → Tracking
 → Frontend → Vehicle Search → GIS Route
 ```
 
+## Live number plates → notification → Vehicle Log
+
+Live players now sample up to **3 vehicles per frame** for ANPR without waiting
+for inference to play video. Agreeing plate reads produce camera overlays,
+in-app notifications and auto-updating camera history / Vehicle Log entries.
+Duplicate sightings are suppressed and uncertain reads are marked for review.
+See [Live ANPR setup, performance limits and verification](docs/LIVE_ANPR.md).
+
 ## Quick start — Backend + Frontend Only (recommended for local dev)
 
 No cv-engine, no heavy ML models needed. 2 terminals.

@@ -13,5 +13,7 @@ await import('./adapters.test.mjs');
 await import('./env-setup.test.mjs');
 await import('./backend-status.test.mjs');
 await import('./source-contracts.test.mjs');
+await import('./live-anpr.test.mjs');
+await import('./event-refresh.test.mjs');
 
 process.exit(await runAll());

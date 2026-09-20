@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Union
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # app/core/config.py -> parents[2] == TRINETRAAI/backend. Mirrors the anchor
@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     YOLO_MODEL_PATH: str = "models/yolo11s.pt"
     CONFIDENCE_THRESHOLD: float = 0.45
     PROCESS_EVERY_N_FRAMES: int = 3
+    # Bound native inference thread pools too, leaving CPU for video decoding.
+    CV_CPU_THREADS: int = Field(2, ge=1, le=16)
     OCR_ENABLED: bool = True
     OCR_MIN_CONFIDENCE: float = 0.60
     # Above this the plate is trusted (HIGH); between OCR_MIN_CONFIDENCE and
@@ -90,6 +92,17 @@ class Settings(BaseSettings):
     # matching the reference look where the whole vehicle reads as green.
     # 0.0 = outline only (old look); 1.0 = solid green.
     DETECTION_BOX_FILL_ALPHA: float = 0.55
+
+    # Live ANPR is independent of playback: one latest-frame mailbox per camera,
+    # a bounded worker pool, and at most 3 vehicles OCR'd in a sampled frame.
+    LIVE_ANPR_ENABLED: bool = True
+    LIVE_ANPR_MAX_VEHICLES: int = Field(3, ge=1, le=10)
+    LIVE_ANPR_SAMPLE_SECONDS: float = Field(1.0, ge=0.25, le=30)
+    LIVE_ANPR_WORKERS: int = Field(1, ge=1, le=4)
+    LIVE_ANPR_MAX_CAMERAS: int = Field(32, ge=1, le=128)
+    LIVE_ANPR_DEDUP_SECONDS: int = Field(60, ge=1, le=3600)
+    LIVE_ANPR_OVERLAY_TTL_SECONDS: float = Field(3.0, ge=0.5, le=10)
+    LIVE_ANPR_IDLE_SECONDS: int = Field(60, ge=10, le=600)
 
     # ---- Number-plate detection (new pipeline stage) ----
     # A fine-tuned plate detector produced by training/train_plate_detector.py.
@@ -114,6 +127,9 @@ class Settings(BaseSettings):
 
     # Demo Mode
     DEMO_MODE: bool = True
+    # Synthetic scheduled alerts require a separate, explicit opt-in. Never
+    # generate invented sightings merely because real cameras are unavailable.
+    DEMO_ALERTS_ENABLED: bool = False
     # Start stream ingestion for every registered camera at boot? Off by
     # default: a control room opens the streams it is actually looking at
     # (POST /cameras/{id}/start). Set true to ingest the whole grid.

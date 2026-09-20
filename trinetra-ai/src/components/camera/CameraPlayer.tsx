@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { backoffDelay } from '@/services/whepClient';
 import { CircleDot, Loader2, Play, RotateCw, ScanSearch, ShieldAlert, Square } from 'lucide-react';
 import type { Camera, CameraStreamTicket } from '@/types';
@@ -8,7 +8,10 @@ import { useHlsStream, whepUrlToHls } from '@/hooks/useHlsStream';
 import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
 import { config } from '@/lib/config';
+import { anprStatusLabel } from '@/lib/liveDetections';
 import { StatusChip } from '@/components/common/Chips';
+import { DetectionOverlay } from './DetectionOverlay';
+import { liveAnprService, type LiveAnprSnapshot } from '@/services/liveAnprService';
 
 /**
  * Live camera player (WebRTC / WHEP).
@@ -82,8 +85,37 @@ export function CameraPlayer({
   // failure of the detection view silently falls back to the raw feed.
   const [aiBoxes, setAiBoxes] = useState(true);
   const [detectionFailed, setDetectionFailed] = useState(false);
-  const detectionActive = aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
+  // Keep WHEP/HLS on the native video decoder; switching them to MJPEG for
+  // AI tied playback to inference speed. Only file/MJPEG cameras use that view.
+  const detectionActive = isMjpeg && aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
+  const [anprStatus, setAnprStatus] = useState<LiveAnprSnapshot | null>(null);
+  const [anprError, setAnprError] = useState<string | null>(null);
+  const onAnprStatus = useCallback((value: LiveAnprSnapshot) => {
+    setAnprStatus(value);
+    setAnprError(null);
+  }, []);
   const useImg = isMjpeg || detectionActive;
+
+  useEffect(() => {
+    setAnprStatus(null);
+    setAnprError(null);
+    if (!detectionActive || !wanted || config.useMocks) return;
+    const abort = new AbortController();
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const value = await liveAnprService.status(camera.id, abort.signal);
+        if (!stopped) onAnprStatus(value);
+      } catch (error) {
+        if (!stopped) setAnprError(error instanceof Error ? error.message : 'Plate scanning unavailable.');
+      } finally {
+        if (!stopped) timer = setTimeout(poll, 1500);
+      }
+    };
+    void poll();
+    return () => { stopped = true; abort.abort(); clearTimeout(timer); };
+  }, [detectionActive, wanted, camera.id, onAnprStatus]);
 
   // The MJPEG views (file feed / AI detection view) can also serve an honest
   // "NO SIGNAL" placeholder when the camera source is unreachable from this
@@ -193,16 +225,15 @@ export function CameraPlayer({
       // straight onto the HLS compatibility stream instead of failing.
       if ((!rtcOk || !decodable) && hls) {
         setTransport('hls');
-      } else if (!rtcOk) {
+      } else if (!rtcOk && t.streamType !== 'MJPEG') {
         setTicketError(NO_RTC_ERROR);
         return;
-      } else if (!decodable) {
+      } else if (!decodable && t.streamType !== 'MJPEG') {
         setTicketError(NO_CODEC_ERROR);
         return;
+      } else {
+        setTransport('whep');
       }
-      // A re-fetched ticket always restarts the ladder from the top (WebRTC),
-      // so a permanent auto-retry loop re-probes both transports.
-      setTransport('whep');
       setWanted(true);
     } catch (e) {
       setTicketError(e instanceof Error ? e.message : 'Could not connect to this camera.');
@@ -228,6 +259,7 @@ export function CameraPlayer({
     setTicket(null);
     setTransport('whep');
     setTicketError(null);
+    setDetectionFailed(false);
     setAutoRetryAt(null);
     pendingRetryRef.current = null;
     roundRef.current = 0;
@@ -405,20 +437,26 @@ export function CameraPlayer({
           />
         )}
 
+        {showVideo && !useImg && !config.useMocks && (
+          <DetectionOverlay videoRef={videoRef} cameraId={camera.id}
+            active={aiBoxes && phase === 'LIVE'} onStatus={onAnprStatus} onError={setAnprError} />
+        )}
+
         <div className="scanline pointer-events-none absolute inset-0" aria-hidden />
 
         {/* On-screen display */}
         {/* Chips only: the source burns its own timestamp into the top-left corner. */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-end gap-2 bg-gradient-to-b from-black/60 to-transparent px-2.5 py-1.5">
           <span className="flex items-center gap-1.5">
-            {(phase === 'LIVE' || (detectionActive && mjpegAlive && mjpegSignal)) && (
+            {(phase === 'LIVE' || (useImg && mjpegAlive && mjpegSignal)) && (
               <span className="chip border-critical/60 bg-critical/25 text-white">
-                <CircleDot size={9} className="animate-pulse" aria-hidden /> LIVE
+                <CircleDot size={9} className="animate-pulse" aria-hidden /> {camera.streamType === 'FILE' ? 'RECORDED' : 'LIVE'}
               </span>
             )}
-            {detectionActive && mjpegAlive && mjpegSignal && (
-              <span className="chip border-online/60 bg-online/25 text-white">
-                <ScanSearch size={9} aria-hidden /> AI DETECTION
+            {aiBoxes && onAir && !config.useMocks && (
+              <span className="chip border-online/60 bg-black/70 text-white" title={detectionFailed ? 'Detection stream unavailable; showing raw video.' : anprError ?? anprStatus?.reason ?? 'Sampled plate recognition; playback stays independent'}>
+                <ScanSearch size={9} aria-hidden />
+                {anprStatusLabel(anprStatus, anprError, detectionFailed)}
               </span>
             )}
             {useImg && mjpegAlive && !mjpegSignal && (
@@ -615,15 +653,15 @@ export function CameraPlayer({
               <span>Watching for {Math.round(stats.mediaTime)}s</span>
             </span>
             <span className="flex items-center gap-1.5">
-              {ticket?.detectionUrl && !detectionFailed && (
+              {!config.useMocks && (
                 <button
                   type="button"
                   className="btn-ghost btn-xs"
                   onClick={() => setAiBoxes((v) => !v)}
                   aria-pressed={aiBoxes}
-                  title="Real-time vehicle detection (green boxes) rendered by the backend"
+                  title="Read plates, notify and save to Vehicle Log. Up to 3 vehicles per sampled frame by default."
                 >
-                  <ScanSearch size={11} aria-hidden /> Vehicle detection: {aiBoxes ? 'On' : 'Off'}
+                  <ScanSearch size={11} aria-hidden /> Plate detection: {aiBoxes ? 'On' : 'Off'}
                 </button>
               )}
               <button
@@ -639,6 +677,12 @@ export function CameraPlayer({
               </button>
             </span>
           </div>
+
+          {aiBoxes && !config.useMocks && (
+            <p className="mt-1.5 text-2xs text-ink-muted" role="status">
+              {anprError ?? anprStatus?.reason ?? 'Readable plates → notification + Vehicle Log. Repeated sightings are deduplicated; unclear reads need verification.'}
+            </p>
+          )}
 
           {showTechnical && (
             <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-2 font-mono text-2xs text-ink-faint sm:grid-cols-4">

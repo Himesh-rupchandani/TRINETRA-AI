@@ -116,7 +116,7 @@ def create_watchlist_alert(
 # Full Event Ingestion Pipeline
 # ---------------------------------------------------------------------------
 
-async def ingest_event(
+def store_event(
     db: Session,
     camera_id: str,
     vehicle_track_id: Optional[int],
@@ -129,6 +129,11 @@ async def ingest_event(
     evidence_ref: Optional[str],
     plate: Optional[str] = None,
     timestamp_pts: Optional[float] = None,
+    plate_status: Optional[str] = None,
+    vehicle_confidence: Optional[float] = None,
+    bbox: Optional[list] = None,
+    video_file: Optional[str] = None,
+    video_offset_sec: Optional[float] = None,
 ) -> Tuple[VehicleEvent, Optional[Watchlist], Optional[Alert]]:
     """
     Full event ingestion pipeline.
@@ -182,7 +187,12 @@ async def ingest_event(
         longitude=event_longitude,
         evidence_ref=evidence_ref,
         watchlist_match=False,
+        plate_status=plate_status,
+        vehicle_confidence=vehicle_confidence,
+        video_file=video_file,
+        video_offset_sec=video_offset_sec,
     )
+    event.bbox = bbox
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -196,7 +206,9 @@ async def ingest_event(
     watchlist_entry = None
     alert = None
 
-    if plate_number:
+    # Legacy external engines omit a tier; new ANPR callers supply it. A
+    # provisional read must never become a watchlist accusation.
+    if plate_number and plate_status in (None, "HIGH"):
         watchlist_entry = match_watchlist(db, plate_number)
         if watchlist_entry:
             event.watchlist_match = True
@@ -218,7 +230,11 @@ async def ingest_event(
         db.rollback()
         logger.error(f"[EVIDENCE] seal failed for event #{event.id}: {exc}")
 
-    # --- Step 7: Broadcast to WebSocket ---
+    return event, watchlist_entry, alert
+
+
+def event_message(event: VehicleEvent, watchlist_entry=None, alert=None) -> tuple[str, dict]:
+    """One REST-compatible realtime payload, shared by API and CV workers."""
     ws_payload = {
         "event_id": event.id,
         "camera_id": event.camera_id,
@@ -231,10 +247,18 @@ async def ingest_event(
         "latitude": event.latitude,
         "longitude": event.longitude,
         "watchlist_match": event.watchlist_match,
+        "vehicle_track_id": event.vehicle_track_id,
+        "plate_confidence": event.plate_confidence,
+        "plate_status": event.plate_status,
+        "evidence_ref": event.evidence_ref,
+        "vehicle_confidence": event.vehicle_confidence,
+        "bbox": event.bbox,
+        "video_file": event.video_file,
+        "video_offset_sec": event.video_offset_sec,
     }
 
     if watchlist_entry and alert:
-        await ws_manager.broadcast("ALERT_CREATED", {
+        return "ALERT_CREATED", {
             **ws_payload,
             # Numeric alert id, exactly like REST (AlertResponse.id /
             # EventCreateResponse.alert_id). This used to be the display ref
@@ -248,10 +272,31 @@ async def ingest_event(
             "message": alert.message,
             "status": alert.status,
             "timestamp": iso_utc(alert.timestamp) if alert.timestamp else None,
-        })
-    elif watchlist_entry:
-        await ws_manager.broadcast("WATCHLIST_MATCH", ws_payload)
-    else:
-        await ws_manager.broadcast("VEHICLE_DETECTED", ws_payload)
+        }
+    if watchlist_entry:
+        return "WATCHLIST_MATCH", ws_payload
+    return "VEHICLE_DETECTED", ws_payload
 
-    return event, watchlist_entry, alert
+
+async def ingest_event(
+    db: Session,
+    camera_id: str,
+    vehicle_track_id: Optional[int],
+    plate_raw: Optional[str],
+    plate_confidence: Optional[float],
+    vehicle_class: Optional[str],
+    event_time: Optional[datetime],
+    latitude: Optional[float],
+    longitude: Optional[float],
+    evidence_ref: Optional[str],
+    plate: Optional[str] = None,
+    timestamp_pts: Optional[float] = None,
+) -> Tuple[VehicleEvent, Optional[Watchlist], Optional[Alert]]:
+    """Public async ingestion contract; thread workers use store_event instead."""
+    result = store_event(
+        db, camera_id, vehicle_track_id, plate_raw, plate_confidence,
+        vehicle_class, event_time, latitude, longitude, evidence_ref,
+        plate=plate, timestamp_pts=timestamp_pts,
+    )
+    await ws_manager.broadcast(*event_message(*result))
+    return result

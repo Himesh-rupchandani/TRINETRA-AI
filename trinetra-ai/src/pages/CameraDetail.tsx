@@ -10,8 +10,7 @@ import { Panel, AsyncBoundary, KeyValue, ErrorState } from '@/components/common/
 import { StatusChip } from '@/components/common/Chips';
 import { PlateLink, ConfidenceBar } from '@/components/common/Links';
 import { useCamera } from '@/hooks/useCameras';
-import { useAsync } from '@/hooks/useAsync';
-import { eventService } from '@/services/eventService';
+import { useEventSearch } from '@/hooks/useEvents';
 import type { VehicleEvent } from '@/types';
 import { formatDateTime, formatTime, formatVideoOffset, relativeTime, prettyEventType, prettyVehicleClass } from '@/lib/utils';
 
@@ -19,11 +18,11 @@ export default function CameraDetail() {
   const { cameraId = '' } = useParams();
   const navigate = useNavigate();
   const { data: camera, loading, error, refresh } = useCamera(cameraId);
-  const events = useAsync<VehicleEvent[]>(() => eventService.byCamera(cameraId, 30), [cameraId]);
+  const events = useEventSearch({ cameraId }, 1, 30);
   const [selected, setSelected] = useState<VehicleEvent | null>(null);
   const [watchlistOnly, setWatchlistOnly] = useState(false);
 
-  const all = useMemo(() => events.data ?? [], [events.data]);
+  const all = useMemo(() => events.data?.items ?? [], [events.data]);
   const list = useMemo(
     () => (watchlistOnly ? all.filter((e) => e.watchlistMatch) : all),
     [all, watchlistOnly],
@@ -54,7 +53,7 @@ export default function CameraDetail() {
         camera && (
           <>
             <span className="text-2xs text-ink-faint">
-              {camera.eventCount24h ?? 0} vehicles seen today
+              {events.data?.total ?? '—'} logged sightings
             </span>
             <span className="text-2xs text-ink-faint">
               Picture quality{' '}
@@ -136,7 +135,7 @@ export default function CameraDetail() {
                       </thead>
                       <tbody>
                         {list.map((e) => (
-                          <tr key={e.id} className={activeEvidence?.id === e.id ? 'bg-brand/10' : undefined}>
+                          <tr key={e.id} data-event-id={e.id} className={activeEvidence?.id === e.id ? 'bg-brand/10' : undefined}>
                             <td className="font-mono tabular-nums text-ink">
                               {formatTime(e.timestamp)}
                               {e.videoOffsetSec != null && (
@@ -147,6 +146,8 @@ export default function CameraDetail() {
                             </td>
                             <td>
                               <PlateLink plate={e.plate} size="xs" />
+                              {e.plateStatus === 'LOW_CONFIDENCE' && <span className="ml-2 text-2xs text-degraded">Verify read</span>}
+                              {e.plateStatus === 'SIMULATED' && <span className="ml-2 text-2xs text-degraded">Demo</span>}
                             </td>
                             <td className="text-ink-muted">{prettyVehicleClass(e.vehicleClass)}</td>
                             <td>

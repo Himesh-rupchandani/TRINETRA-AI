@@ -1,210 +1,149 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { liveAnprService, type LiveAnprSnapshot } from '@/services/liveAnprService';
+import { canDrawSnapshot, containedBox, matchesSceneSignature } from '@/lib/liveDetections';
 
-interface Detection {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  class_name: string;
-  confidence: number;
-}
-
-/**
- * Overlays real-time YOLO vehicle detection boxes on a live <video> element.
- *
- * Captures frames from the video, sends them to the backend detection API,
- * and draws green bounding boxes on a transparent canvas overlay.  This
- * enables AI detection on WebRTC/HLS cameras where the backend cannot
- * independently open the camera stream (e.g. Sentinel cameras requiring
- * WHEP authentication that only the Vite dev proxy injects).
- */
-export function DetectionOverlay({
-  videoRef,
-  cameraId,
-  active,
-  onDetecting,
-}: {
+/** Browser playback stays native. Only sampled JPEGs visit the ANPR worker. */
+export function DetectionOverlay({ videoRef, cameraId, active, onStatus, onError }: {
   videoRef: { current: HTMLVideoElement | null };
   cameraId: string;
   active: boolean;
-  onDetecting?: (detecting: boolean) => void;
+  onStatus: (status: LiveAnprSnapshot) => void;
+  onError: (reason: string | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [, setHasDetected] = useState(false);
-
-  const getCaptureCanvas = useCallback(() => {
-    if (!captureCanvasRef.current) {
-      captureCanvasRef.current = document.createElement('canvas');
-    }
-    return captureCanvasRef.current;
-  }, []);
 
   useEffect(() => {
-    if (!active) {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        ctx?.clearRect(0, 0, canvas.width, canvas.height);
-      }
-      setHasDetected(false);
-      onDetecting?.(false);
-      return;
-    }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const clear = () => canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    clear();
+    if (!active) return;
 
-    let running = true;
-    let failCount = 0;
+    const capture = document.createElement('canvas');
+    const scene = document.createElement('canvas');
+    scene.width = 16;
+    scene.height = 9;
+    const sceneContext = scene.getContext('2d', { willReadFrequently: true });
+    if (sceneContext) sceneContext.imageSmoothingQuality = 'high';
+    const clientId = crypto.randomUUID();
+    const controller = new AbortController();
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let expiry: ReturnType<typeof setTimeout>;
+    let paintTimer: ReturnType<typeof setTimeout>;
+    let lastMediaTime = -1;
+    let snapshot: LiveAnprSnapshot | null = null;
+    let receivedAt = 0;
 
-    async function loop() {
-      while (running) {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (!video || !canvas || video.readyState < 2 || video.paused) {
-          await sleep(400);
-          continue;
-        }
-
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
-        if (!vw || !vh) {
-          await sleep(400);
-          continue;
-        }
-
-        // Capture frame to off-screen canvas (downscaled to max 640px wide
-        // to reduce bandwidth and match the YOLO default imgsz)
-        const capture = getCaptureCanvas();
-        const captureScale = Math.min(1, 640 / vw);
-        const cw = Math.round(vw * captureScale);
-        const ch = Math.round(vh * captureScale);
-        capture.width = cw;
-        capture.height = ch;
-        const cctx = capture.getContext('2d');
-        if (!cctx) { await sleep(400); continue; }
-
+    const draw = () => {
+      const video = videoRef.current;
+      clear();
+      if (!video || !snapshot || video.paused || video.seeking || video.readyState < 2 || document.hidden) return;
+      // Include network/render time in the expiry, not just the server's age.
+      const current = { ...snapshot, result_age_ms: (snapshot.result_age_ms ?? Infinity) + performance.now() - receivedAt };
+      if (!canDrawSnapshot(current, `browser:${clientId}`, video.currentTime)) return;
+      if (snapshot.frame_signature) {
+        if (!sceneContext) return;
         try {
-          cctx.drawImage(video, 0, 0, cw, ch);
-        } catch {
-          // CORS or tainted canvas — wait and retry
-          await sleep(2000);
-          continue;
-        }
-
-        try {
-          const blob = await new Promise<Blob | null>((resolve) =>
-            capture.toBlob(resolve, 'image/jpeg', 0.65),
-          );
-          if (!blob || !running) break;
-
-          const res = await fetch(`/api/cameras/${cameraId}/detect-frame`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'image/jpeg' },
-            body: blob,
-          });
-
-          if (!running) break;
-          if (!res.ok) {
-            failCount++;
-            if (failCount > 8) {
-              onDetecting?.(false);
-              break;
-            }
-            await sleep(1200);
-            continue;
-          }
-
-          failCount = 0;
-          const detections: Detection[] = await res.json();
-
-          drawDetections(canvas, video, detections, vw, vh, captureScale);
-
-          if (detections.length > 0) {
-            setHasDetected(true);
-            onDetecting?.(true);
-          }
-        } catch {
-          failCount++;
-          if (failCount > 8) break;
-        }
-
-        // Pace: short gap between rounds (inference is the bottleneck)
-        await sleep(200);
+          sceneContext.drawImage(video, 0, 0, scene.width, scene.height);
+          if (!matchesSceneSignature(snapshot.frame_signature, sceneContext.getImageData(0, 0, scene.width, scene.height).data)) return;
+        } catch { return; } // tainted/cross-origin video: never guess an overlay
       }
-    }
-
-    loop();
-
-    return () => {
-      running = false;
+      drawDetections(canvas, video, snapshot);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, cameraId]);
+    // Cheap visual checks between OCR requests catch seeks/cuts without ever
+    // waiting for inference or making another network request.
+    const paint = () => {
+      if (stopped) return;
+      draw();
+      paintTimer = setTimeout(paint, 200);
+    };
+    paint();
+    const resize = new ResizeObserver(draw);
+    resize.observe(canvas);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 z-[5] pointer-events-none"
-      style={{ width: '100%', height: '100%' }}
-    />
-  );
+    const sample = async () => {
+      if (stopped) return;
+      const video = videoRef.current;
+      let delay = 1000;
+      try {
+        if (!video || document.hidden || video.paused || video.readyState < 2 ||
+            !video.videoWidth || video.currentTime === lastMediaTime) {
+          clear();
+          return;
+        }
+        const mediaTime = video.currentTime;
+        lastMediaTime = mediaTime;
+        // 640px JPEGs discarded most plate detail. Keep 1280px at high quality,
+        // but send one sample/second instead of slowing the video to inference FPS.
+        const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+        capture.width = Math.round(video.videoWidth * scale);
+        capture.height = Math.round(video.videoHeight * scale);
+        capture.getContext('2d')?.drawImage(video, 0, 0, capture.width, capture.height);
+        const jpeg = await new Promise<Blob | null>((resolve) => capture.toBlob(resolve, 'image/jpeg', 0.9));
+        if (stopped || !jpeg) return;
+        const result = await liveAnprService.sample(cameraId, jpeg, clientId, mediaTime, controller.signal);
+        if (stopped) return;
+        snapshot = result;
+        receivedAt = performance.now();
+        onError(null);
+        onStatus(result);
+        draw();
+        clearTimeout(expiry);
+        expiry = setTimeout(clear, Math.max(0, result.overlay_ttl_ms - (result.result_age_ms ?? result.overlay_ttl_ms)));
+        delay = Math.max(750, result.sample_interval_ms);
+        if (result.status === 'UNAVAILABLE' || result.status === 'ERROR') delay = 5000;
+      } catch (error) {
+        clear();
+        if (!stopped) onError(error instanceof Error ? error.message : 'Plate scanning unavailable. Video is unaffected.');
+        delay = 5000;
+      } finally {
+        // Recursive timer: never more than one request per player in flight.
+        if (!stopped) timer = setTimeout(sample, delay);
+      }
+    };
+
+    const visibility = () => { if (document.hidden) clear(); };
+    document.addEventListener('visibilitychange', visibility);
+    void sample();
+    return () => {
+      stopped = true;
+      controller.abort();
+      clearTimeout(timer);
+      clearTimeout(expiry);
+      clearTimeout(paintTimer);
+      resize.disconnect();
+      document.removeEventListener('visibilitychange', visibility);
+      clear();
+    };
+  }, [active, cameraId, videoRef, onStatus, onError]);
+
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-[5] h-full w-full" aria-hidden />;
 }
 
-/* ------------------------------------------------------------------ */
-
-function drawDetections(
-  canvas: HTMLCanvasElement,
-  video: HTMLVideoElement,
-  detections: Detection[],
-  videoW: number,
-  videoH: number,
-  captureScale: number,
-) {
-  const containerW = video.clientWidth;
-  const containerH = video.clientHeight;
-  canvas.width = containerW;
-  canvas.height = containerH;
-
+function drawDetections(canvas: HTMLCanvasElement, video: HTMLVideoElement, result: LiveAnprSnapshot) {
+  if (canvas.width !== video.clientWidth) canvas.width = video.clientWidth;
+  if (canvas.height !== video.clientHeight) canvas.height = video.clientHeight;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  ctx.clearRect(0, 0, containerW, containerH);
-
-  // Calculate how object-contain positions the video inside the container
-  const displayScale = Math.min(containerW / videoW, containerH / videoH);
-  const renderW = videoW * displayScale;
-  const renderH = videoH * displayScale;
-  const offsetX = (containerW - renderW) / 2;
-  const offsetY = (containerH - renderH) / 2;
-
-  // Detection coordinates are in the capture canvas pixel space (downscaled).
-  // Map: capture coords -> original video coords -> display coords
-  const invScale = 1 / captureScale;
-
-  for (const d of detections) {
-    const x1 = d.x1 * invScale * displayScale + offsetX;
-    const y1 = d.y1 * invScale * displayScale + offsetY;
-    const x2 = d.x2 * invScale * displayScale + offsetX;
-    const y2 = d.y2 * invScale * displayScale + offsetY;
-    const w = x2 - x1;
-    const h = y2 - y1;
-
-    // Green bounding box
-    ctx.strokeStyle = '#00ff00';
+  for (const detection of result.detections) {
+    const color = detection.plate_status === 'LOW_CONFIDENCE' ? '#fbbf24' : '#22ff88';
+    const map = (box: readonly number[]) => containedBox(box, result.frame_width, result.frame_height, canvas.width, canvas.height);
+    const [x, y, w, h] = map([detection.x1, detection.y1, detection.x2, detection.y2]);
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2;
-    ctx.strokeRect(x1, y1, w, h);
-
-    // Label background + text
-    const label = `${d.class_name} ${Math.round(d.confidence * 100)}%`;
-    ctx.font = 'bold 11px monospace';
-    const tm = ctx.measureText(label);
-    const lh = 14;
-    const ly = y1 > lh + 6 ? y1 - lh - 2 : y1 + h + 2;
-    ctx.fillStyle = '#00ff00';
-    ctx.fillRect(x1, ly, tm.width + 8, lh + 4);
-    ctx.fillStyle = '#000000';
-    ctx.fillText(label, x1 + 4, ly + lh);
+    ctx.strokeRect(x, y, w, h);
+    if (detection.plate_box) ctx.strokeRect(...map(detection.plate_box));
+    const label = detection.plate_number
+      ? `${detection.plate_number}${detection.plate_status === 'LOW_CONFIDENCE' ? ' · verify' : ''}`
+      : `${detection.class_name} · reading plate`;
+    ctx.font = 'bold 12px monospace';
+    const labelWidth = ctx.measureText(label).width + 12;
+    const labelX = Math.max(0, Math.min(x, canvas.width - labelWidth));
+    const labelY = Math.max(0, y - 22);
+    ctx.fillStyle = '#07130fee';
+    ctx.fillRect(labelX, labelY, labelWidth, 21);
+    ctx.fillStyle = color;
+    ctx.fillText(label, labelX + 6, labelY + 15);
   }
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
 }

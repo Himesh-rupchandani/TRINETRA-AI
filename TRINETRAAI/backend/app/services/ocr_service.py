@@ -77,7 +77,7 @@ def preprocess_for_ocr(crop: np.ndarray, target_width: int = 320) -> np.ndarray:
     gray = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
-def upscale_plate(crop: np.ndarray, target_height: int = 64, max_scale: float = 6.0) -> np.ndarray:
+def upscale_plate(crop: np.ndarray, target_height: int = 128, max_scale: float = 6.0) -> np.ndarray:
     """
     Super-resolution for small/far plates.
 
@@ -186,7 +186,15 @@ class OcrService:
                     from rapidocr_onnxruntime import RapidOCR
 
                     logger.info("[ANPR] Initializing RapidOCR (bundled ONNX models, offline)")
-                    self._engine = RapidOCR()
+                    self._engine = RapidOCR(
+                        intra_op_num_threads=settings.CV_CPU_THREADS,
+                        inter_op_num_threads=1,
+                        # Inputs here are already cropped/upscaled plates. The
+                        # engine's default MIN side of 736 enlarged each tiny
+                        # crop into a multi-megapixel image, stalling live ANPR.
+                        det_limit_type="max",
+                        det_limit_side_len=640,
+                    )
                     self._engine_name = "rapidocr"
                     return self._engine
                 except Exception as exc:

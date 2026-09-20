@@ -260,7 +260,20 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         else None
     )
 
-    if playable and (cam.stream_type or "").lower() == "file":
+    source_type = (cam.stream_type or "").lower()
+    use_backend_view = source_type == "file" or (
+        source_type in ("rtsp", "hls") and not is_sentinel_camera(cam.stream_url)
+    )
+    if playable and use_backend_view:
+        if not vision_available():
+            return CameraStreamTicket(
+                camera_id=slug, stream_type="MJPEG", stream_url="",
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+                playable=False, reason="This camera needs the backend ML/video requirements for playback.",
+            )
+        # Arbitrary authorized RTSP/HLS sources are not Sentinel camera IDs.
+        # Keep credentials server-side and play the backend mirror instead of
+        # constructing a nonexistent /sentinel/stream/<id>/whep path.
         return CameraStreamTicket(
             camera_id=slug,
             stream_type="MJPEG",
@@ -347,7 +360,7 @@ def delete_camera(camera_id: str, db: Session = Depends(get_db)):
 @router.post("/{camera_id}/start", dependencies=[Depends(require_vision)])
 def start_camera(camera_id: str, db: Session = Depends(get_db)):
     """Start ingestion worker for a camera."""
-    cam = db.query(Camera).filter(Camera.camera_id == camera_id).first()
+    cam = db.query(Camera).filter(func.upper(Camera.camera_id) == camera_id.strip().upper()).first()
     if not cam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -359,8 +372,8 @@ def start_camera(camera_id: str, db: Session = Depends(get_db)):
     from ..services.sentinel_stream_service import resolve_ingest_source
 
     source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
-    stream = camera_manager.get_camera(camera_id)
-    if not stream:
+    stream = camera_manager.get_camera(cam.camera_id)
+    if not stream or (not stream.is_alive() and stream.source != source):
         camera_manager.add_camera(
             camera_id=cam.camera_id,
             source=source,
@@ -368,9 +381,9 @@ def start_camera(camera_id: str, db: Session = Depends(get_db)):
             auto_start=True,
         )
     else:
-        camera_manager.start_camera(camera_id)
+        camera_manager.start_camera(cam.camera_id)
 
-    return {"status": "started", "camera_id": camera_id}
+    return {"status": "started", "camera_id": cam.camera_id}
 
 
 @router.post("/{camera_id}/stop", dependencies=[Depends(require_vision)])

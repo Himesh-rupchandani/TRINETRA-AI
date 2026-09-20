@@ -59,6 +59,7 @@ class VehicleDetectionService:
         self._frame_counter: Dict[str, int] = {}
         self._last_detections: Dict[str, List[VehicleDetection]] = {}
         self.last_inference_ms: Optional[float] = None
+        self.last_error: Optional[str] = None
 
     # ------------------------------------------------------------------ model
     @property
@@ -106,6 +107,11 @@ class VehicleDetectionService:
                     np.zeros((imgsz, imgsz, 3), dtype=np.uint8),
                     verbose=False, imgsz=imgsz, device="cpu",
                 )
+                # Ultralytics creates its predictor/thread pool at warm-up.
+                # Limit it afterwards so inference cannot monopolise a small
+                # machine while several cameras are decoding/streaming.
+                import torch
+                torch.set_num_threads(settings.CV_CPU_THREADS)
                 self._model = model
                 logger.info(f"[DETECTION] Model ready in {time.perf_counter() - t0:.1f}s")
             except Exception as exc:  # missing ultralytics/torch, no weights, no network…
@@ -138,8 +144,10 @@ class VehicleDetectionService:
                     classes=list(VEHICLE_CLASS_IDS.keys()),
                 )
         except Exception as exc:
+            self.last_error = "Vehicle inference failed."
             logger.error(f"[DETECTION] Inference failed: {exc}")
             return []
+        self.last_error = None
         self.last_inference_ms = (time.perf_counter() - t0) * 1000.0
 
         detections: List[VehicleDetection] = []

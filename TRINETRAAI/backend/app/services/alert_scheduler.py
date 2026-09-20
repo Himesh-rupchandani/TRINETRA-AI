@@ -17,6 +17,7 @@ from ..database.models import Camera, Watchlist, VehicleEvent, Alert
 from ..services.ws_manager import ws_manager
 from ..utils.timestamps import iso_utc
 from ..core.logging_config import logger
+from ..core.config import settings
 
 ALERT_ROTATION_ITEMS: List[Dict[str, Any]] = [
     {
@@ -293,6 +294,8 @@ async def run_alert_tick() -> Dict[str, Any]:
       - Creates VehicleEvent & Alert in the DB
       - Broadcasts ALERT_CREATED and EVENT over SSE & WebSocket
     """
+    if not (settings.DEMO_MODE and settings.DEMO_ALERTS_ENABLED):
+        return {"disabled": True, "reason": "Synthetic demo alerts are disabled."}
     global _rotation_index
     item = ALERT_ROTATION_ITEMS[_rotation_index % len(ALERT_ROTATION_ITEMS)]
     _rotation_index += 1
@@ -329,6 +332,7 @@ async def run_alert_tick() -> Dict[str, Any]:
             plate_raw=item["plate"],
             plate_number=item["plate"],
             plate_confidence=0.96,
+            plate_status="SIMULATED",
             vehicle_class=item["vehicle_class"].lower(),
             event_time=now,
             latitude=lat,
@@ -371,6 +375,7 @@ async def run_alert_tick() -> Dict[str, Any]:
             "plate": item["plate"],
             "plate_number": item["plate"],
             "plate_raw": item["plate"],
+            "plate_status": "SIMULATED",
             "vehicle_class": item["vehicle_class"].upper(),
             "confidence": 96.0,
             "plate_confidence": 0.96,

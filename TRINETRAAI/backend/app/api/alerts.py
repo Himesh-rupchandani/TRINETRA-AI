@@ -193,6 +193,9 @@ def resolve_alert(
 @router.post("/trigger", summary="Manually trigger the next scheduled 60s alert tick")
 async def trigger_alert():
     """Immediately triggers the next unique vehicle alert from the 60s rotation."""
+    from ..core.config import settings
+    if not (settings.DEMO_MODE and settings.DEMO_ALERTS_ENABLED):
+        raise HTTPException(409, "Synthetic alerts are disabled. Live alerts come from real detections.")
     from ..services.alert_scheduler import run_alert_tick
     res = await run_alert_tick()
     return {"status": "success", "alert": res}

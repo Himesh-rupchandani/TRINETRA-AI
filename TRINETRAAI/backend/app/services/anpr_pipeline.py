@@ -66,6 +66,25 @@ def format_score(normalized: str) -> float:
         return 0.7
     return 0.45
 
+def plate_text_candidates(lines: Sequence[tuple], *, join_lines: bool = False) -> List[tuple]:
+    """Preserve individual OCR strings; also read two-/three-line bike plates.
+
+    Joining is allowed only INSIDE a localized plate region, never across a
+    whole vehicle/scene. Use the weakest line's score; concatenation cannot
+    manufacture confidence. The normal format/rejection gate still applies.
+    """
+    candidates = list(lines)
+    if join_lines:
+        for count in (2, 3):
+            for start in range(len(lines) - count + 1):
+                group = lines[start:start + count]
+                text = "\n".join(str(line[0]) for line in group)
+                normalized = candidate_from_text(text)
+                if normalized and (INDIAN_PLATE_RE.match(normalized) or LOOSE_PLATE_RE.match(normalized)):
+                    candidates.append((text, min(float(line[1]) for line in group)))
+    return candidates
+
+
 def read_plate_for_vehicle(
     frame: np.ndarray,
     vehicle_bbox: Sequence[float],
@@ -95,7 +114,8 @@ def read_plate_for_vehicle(
         if crop.shape[1] < 24 or crop.shape[0] < 8:
             continue
         for variant in preprocess_variants(crop):
-            for text, ocr_conf in ocr_service.read_lines(variant):
+            lines = ocr_service.read_lines(variant)
+            for text, ocr_conf in plate_text_candidates(lines, join_lines=region.source != "heuristic"):
                 norm = candidate_from_text(text)
                 if norm is None:
                     continue

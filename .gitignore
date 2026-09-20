@@ -15,3 +15,6 @@ trinetra_detection.zip
 .env.*
 !.env.example
 !**/.env.example
+
+# Local verification scratch (models, traces, reports stay out of Git)
+.cache/

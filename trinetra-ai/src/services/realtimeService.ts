@@ -199,6 +199,10 @@ function mapBackendEventPayload(raw: Record<string, unknown>): VehicleEvent {
     latitude: raw.latitude as number | undefined,
     longitude: raw.longitude as number | undefined,
     watchlist_match: Boolean(raw.watchlist_match),
+    plate_status: raw.plate_status as VehicleEventDto['plate_status'],
+    evidence_ref: raw.evidence_ref as string | undefined,
+    video_file: raw.video_file as string | undefined,
+    video_offset_sec: raw.video_offset_sec as number | undefined,
   } satisfies VehicleEventDto;
   return toVehicleEvent(dto, liveCameraDir);
 }
@@ -272,42 +276,20 @@ export function mapBackendMessages(raw: unknown): RealtimeMessage[] {
 
 function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel {
   onState('CONNECTING');
-  activeSimulatorHandlers.add(onMessage);
   primeCameraDir();
   let closed = false;
   let es: EventSource | null = null;
   let retryTimer: number | undefined;
-  let fallbackInterval: number | undefined;
-
-  const startFallback = () => {
-    if (fallbackInterval) return;
-    fallbackInterval = window.setInterval(() => {
-      const { event, alert } = buildScheduledAlertPair();
-      pushMockEvent(event, alert);
-      onMessage({ type: 'EVENT', payload: event });
-      onMessage({ type: 'ALERT', payload: alert });
-    }, 60_000);
-  };
-
-  const stopFallback = () => {
-    if (fallbackInterval) {
-      window.clearInterval(fallbackInterval);
-      fallbackInterval = undefined;
-    }
-  };
-
   const open = () => {
     if (closed) return;
     try {
       es = new EventSource(realtimeUrl('/stream'), { withCredentials: false });
       es.onopen = () => {
         onState('LIVE');
-        stopFallback();
       };
       es.onerror = () => {
         es?.close();
         onState('OFFLINE');
-        startFallback();
         // Retry after 3s - SSE should reconnect automatically, but some proxies need explicit retry
         if (!closed) {
           retryTimer = window.setTimeout(() => {
@@ -327,7 +309,6 @@ function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel 
       };
     } catch {
       onState('OFFLINE');
-      startFallback();
       if (!closed) {
         retryTimer = window.setTimeout(open, 4000) as unknown as number;
       }
@@ -339,8 +320,6 @@ function connectSse(onMessage: Handler, onState: StateHandler): RealtimeChannel 
   return {
     close: () => {
       closed = true;
-      activeSimulatorHandlers.delete(onMessage);
-      stopFallback();
       if (retryTimer) window.clearTimeout(retryTimer);
       es?.close();
     },

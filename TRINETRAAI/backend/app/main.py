@@ -30,7 +30,9 @@ from .camera.manager import camera_manager
 from .camera.live_source import sync_live_camera
 from .core.paths import evidence_root
 from .services.ws_manager import ws_manager
+from .services.live_anpr_service import live_anpr_service
 from .api.cameras import router as cameras_router
+from .api.live_anpr import router as live_anpr_router
 from .api.watchlist import router as watchlist_router
 from .api.alerts import router as alerts_router
 from .api.detections import router as detections_router
@@ -103,6 +105,12 @@ async def lifespan(app: FastAPI):
     # that can never reach the SSE queues or WebSocket transports.
     ws_manager.attach_loop(asyncio.get_running_loop())
 
+    # Resident streams submit samples to the same bounded pipeline as browser
+    # WHEP/HLS frames. Inference never runs inside the camera acquisition loop.
+    if vision_available():
+        live_anpr_service.start()
+        camera_manager.set_pipeline_callback(live_anpr_service.submit_packet)
+
     # 2. Sync the env-configured REAL live camera (.env -> registry), then
     # register existing cameras into CameraManager
     db = SessionLocal()
@@ -131,31 +139,42 @@ async def lifespan(app: FastAPI):
                 and (cam.stream_url or "").strip() != ""
                 and (cam.stream_type or "").lower() != "file"
             )
+            source = cam.stream_url
+            source_type = cam.stream_type
+            if auto_start:
+                from .services.sentinel_stream_service import resolve_ingest_source
+                source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
+                if source != cam.stream_url:
+                    source_type = "rtsp"
             camera_manager.add_camera(
-                camera_id=cam.camera_id,
-                source=cam.stream_url,
-                source_type=cam.stream_type,
-                auto_start=auto_start,
+                camera_id=cam.camera_id, source=source,
+                source_type=source_type, auto_start=auto_start,
             )
     except Exception as e:
         logger.error(f"Error initializing cameras from DB: {e}")
     finally:
         db.close()
 
-    # 2b. Start automated 60-second alert scheduler (unique vehicle & different location on map)
+    # Scripted alerts are for an explicitly opted-in demo only, never a
+    # replacement for real detections when cameras/ML are unavailable.
     from .services.alert_scheduler import start_alert_scheduler, stop_alert_scheduler
-    alert_task = asyncio.create_task(start_alert_scheduler(interval_seconds=60))
+    alert_task = None
+    if settings.DEMO_MODE and settings.DEMO_ALERTS_ENABLED:
+        alert_task = asyncio.create_task(start_alert_scheduler(interval_seconds=60))
 
     yield
 
     # 3. Clean shutdown - release all camera resources and scheduler
     logger.info("Shutting down TRINETRA AI Surveillance Engine...")
     stop_alert_scheduler()
-    alert_task.cancel()
-    ws_manager.detach_loop()
+    if alert_task is not None:
+        alert_task.cancel()
+    camera_manager.set_pipeline_callback(None)
     active_cams = camera_manager.list_cameras()
     for cam in active_cams:
         camera_manager.stop_camera(cam["camera_id"])
+    await asyncio.to_thread(live_anpr_service.stop)
+    ws_manager.detach_loop()
     logger.info("All camera streams and resources cleanly released.")
 
 
@@ -255,6 +274,7 @@ def root():
 for prefix in ["/api", "/api/v1"]:
     r = APIRouter(prefix=prefix)
     r.include_router(cameras_router)
+    r.include_router(live_anpr_router)
     r.include_router(watchlist_router)
     r.include_router(alerts_router)
     r.include_router(detections_router)

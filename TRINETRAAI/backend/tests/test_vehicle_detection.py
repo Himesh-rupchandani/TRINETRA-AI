@@ -294,6 +294,20 @@ class TestStreamTicketDetectionUrl:
             db.commit()
             db.close()
 
+    def test_authorized_generic_rtsp_uses_backend_not_sentinel_gateway(self, client):
+        with client.session_factory() as db:
+            db.add(Camera(camera_id="GENERIC", name="Authorized camera", stream_type="rtsp",
+                          stream_url="rtsp://private.invalid/authorized", status="ONLINE"))
+            db.commit()
+            try:
+                ticket = client.get("/api/cameras/generic/stream").json()
+                assert ticket["stream_type"] == "MJPEG"
+                assert ticket["stream_url"] == "/api/cameras/generic/live"
+                assert "rtsp://" not in str(ticket)
+            finally:
+                db.query(Camera).filter(Camera.camera_id == "GENERIC").delete()
+                db.commit()
+
     def test_ticket_unknown_camera_404(self, client):
         assert client.get("/api/cameras/nope-does-not-exist/stream").status_code == 404
 
@@ -335,6 +349,13 @@ class TestLiveDetectEndpoint:
 
         video = _make_tmp_video(tmp_path / "feed3.mp4", frames=30)
         cam_id = "CAMDETECTLIVE"
+        from app.services import live_anpr_service as live_anpr
+        # The pipeline is now asynchronous and lifespan-owned. Isolate its
+        # lifecycle from other TestClients and never warm a real OCR model in
+        # this drawing/streaming contract test.
+        pipeline = live_anpr.LiveAnprService()
+        monkeypatch.setattr(live_anpr, "live_anpr_service", pipeline)
+        monkeypatch.setattr(type(live_anpr.ocr_service), "available", property(lambda self: False))
         monkeypatch.setattr(vehicle_detection_service, "detect", lambda frame: _dets())
         try:
             camera_manager.add_camera(
@@ -364,6 +385,7 @@ class TestLiveDetectEndpoint:
         finally:
             camera_manager.remove_camera(cam_id)
             vehicle_detection_service.forget(cam_id.lower())
+            pipeline.stop()
 
 
 # ============================================================================

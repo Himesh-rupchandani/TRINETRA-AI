@@ -12,13 +12,16 @@ import type { Alert, AlertStatus, VehicleEvent } from '@/types';
 import { connectRealtime, triggerAlertNow, type ConnectionState, type RealtimeMessage } from '@/services/realtimeService';
 import { alertService } from '@/services/alertService';
 import { subscribeToStore } from '@/mocks/mockBackend';
-import { isMockMode } from '@/services/api';
+import { isMockMode, post } from '@/services/api';
+import { mergeLiveEvent } from '@/lib/liveDetections';
 
 const MAX_LIVE_EVENTS = 60;
 
 interface LiveContextValue {
   /** Rolling buffer of the most recent detections (newest first). */
   liveEvents: VehicleEvent[];
+  /** Persisted sightings for notifications, independent of the feed pause button. */
+  plateNotifications: VehicleEvent[];
   /** Every alert known to the session — live + historical. */
   alerts: Alert[];
   connection: ConnectionState;
@@ -42,19 +45,22 @@ const LiveContext = createContext<LiveContextValue | null>(null);
 
 export function LiveProvider({ children }: { children: ReactNode }) {
   const [liveEvents, setLiveEvents] = useState<VehicleEvent[]>([]);
+  const [plateNotifications, setPlateNotifications] = useState<VehicleEvent[]>([]);
+  const seenEvents = useRef(new Set<string>());
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [connection, setConnection] = useState<ConnectionState>('CONNECTING');
   const [paused, setPaused] = useState(false);
   const [latestAlert, setLatestAlert] = useState<Alert | null>(null);
   const [eventsSeen, setEventsSeen] = useState(0);
-  const [secondsUntilNextAlert, setSecondsUntilNextAlert] = useState(60);
+  const [secondsUntilNextAlert, setSecondsUntilNextAlert] = useState(isMockMode ? 60 : 0);
   const pausedRef = useRef(paused);
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
 
-  // 60-second alert countdown
+  // Only the explicit simulator promises scheduled (not detected) traffic.
   useEffect(() => {
+    if (!isMockMode) return;
     const timer = window.setInterval(() => {
       setSecondsUntilNextAlert((s) => (s <= 1 ? 60 : s - 1));
     }, 1000);
@@ -63,20 +69,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
   const triggerNextAlert = useCallback(async () => {
     if (!isMockMode) {
-      try {
-        const res = await fetch('/api/alerts/trigger', { method: 'POST' });
-        if (res.ok) {
-          setSecondsUntilNextAlert(60);
-          return;
-        }
-      } catch {
-        // Fall back to client simulation if backend trigger fails
-      }
+      // A disabled/offline backend must not fall back to an invented vehicle.
+      await post('/alerts/trigger');
+      return;
     }
-    const { event, alert } = triggerAlertNow();
-    setLiveEvents((prev) => [event, ...prev].slice(0, MAX_LIVE_EVENTS));
-    setAlerts((prev) => [alert, ...prev]);
-    setLatestAlert(alert);
+    triggerAlertNow(); // simulator broadcasts through the same single channel
     setSecondsUntilNextAlert(60);
   }, []);
 
@@ -85,9 +82,6 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       .list()
       .then((data) => {
         setAlerts(data);
-        // If backend is reachable (alerts loaded), ensure we don't stay OFFLINE forever
-        // - SSE may fail in preview/proxy environments, but backend is still LIVE
-        setConnection((prev) => (prev === 'OFFLINE' && !isMockMode ? 'LIVE' : prev));
       })
       .catch(() => {
         setAlerts([]);
@@ -103,9 +97,15 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onMessage = (msg: RealtimeMessage) => {
       if (msg.type === 'EVENT') {
+        if (seenEvents.current.has(msg.payload.id)) return;
+        seenEvents.current.add(msg.payload.id);
+        if (seenEvents.current.size > 1000) {
+          seenEvents.current.delete(seenEvents.current.values().next().value!);
+        }
         setEventsSeen((n) => n + 1);
+        setPlateNotifications((prev) => mergeLiveEvent(prev, msg.payload, 30));
         if (!pausedRef.current) {
-          setLiveEvents((prev) => [msg.payload, ...prev].slice(0, MAX_LIVE_EVENTS));
+          setLiveEvents((prev) => mergeLiveEvent(prev, msg.payload, MAX_LIVE_EVENTS));
         }
       } else if (msg.type === 'ALERT') {
         const incoming = msg.payload;
@@ -163,6 +163,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const value = useMemo<LiveContextValue>(
     () => ({
       liveEvents,
+      plateNotifications,
       alerts,
       connection,
       paused,
@@ -179,6 +180,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     }),
     [
       liveEvents,
+      plateNotifications,
       alerts,
       connection,
       paused,

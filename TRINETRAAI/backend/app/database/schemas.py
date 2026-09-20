@@ -283,6 +283,9 @@ class VehicleEventResponse(TRINETRASchema):
     longitude: Optional[float] = None
     evidence_ref: Optional[str] = None
     watchlist_match: bool
+    plate_status: Optional[str] = None
+    vehicle_confidence: Optional[float] = None
+    bbox: Optional[List[float]] = None
     # Manually-uploaded CCTV video provenance (None for live-camera sightings).
     video_file: Optional[str] = None
     video_offset_sec: Optional[float] = None

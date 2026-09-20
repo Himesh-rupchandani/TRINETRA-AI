@@ -6,6 +6,7 @@ import { HeroBanner } from '@/components/layout/HeroBanner';
 import { AlertBanner } from '@/components/layout/AlertBanner';
 import { BackendCheck } from '@/components/layout/BackendCheck';
 import { LiveAlertToaster } from '@/features/alerts/LiveAlertToaster';
+import { LivePlateToaster } from '@/features/alerts/LivePlateToaster';
 import { Tour } from '@/features/tour/Tour';
 import { tourStore } from '@/features/tour/tourStore';
 
@@ -47,6 +48,7 @@ export function MainLayout() {
         <Outlet />
       </main>
       <LiveAlertToaster />
+      <LivePlateToaster />
       <Tour />
     </div>
   );

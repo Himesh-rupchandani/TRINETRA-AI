@@ -58,6 +58,7 @@ export interface VehicleEventDto {
   plate_raw?: string | null;
   plate_number?: string | null;
   plate_confidence?: number | null;
+  plate_status?: VehicleEvent['plateStatus'] | null;
   vehicle_class?: string | null;
   event_time: string;
   latitude?: number | null;
@@ -358,6 +359,7 @@ export function toVehicleEvent(
     vehicleId: dto.vehicle_track_id ?? undefined,
     plate: plate ?? '',
     plateConfidence: pct(dto.plate_confidence),
+    plateStatus: dto.plate_status ?? undefined,
     timestamp: dto.event_time,
     latitude: lat,
     longitude: lng,
