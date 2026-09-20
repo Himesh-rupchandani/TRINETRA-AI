@@ -333,7 +333,7 @@ export function toVehicleEvent(
   const lat = dto.latitude ?? meta?.latitude ?? 0;
   const lng = dto.longitude ?? meta?.longitude ?? 0;
 
-  let evidence: VehicleEvent['evidence'] = undefined;
+  let evidence = undefined;
   if (evidenceRef) {
     const safeRef = evidenceRef.trim();
     // Prevent path traversal or empty refs from breaking image URLs
@@ -347,16 +347,8 @@ export function toVehicleEvent(
         frameUrl: `/api/evidence/${encoded}`,
         plateCropUrl: !isUpload && plate ? `/api/evidence/${encoded.replace(/\.jpg$/i, '_plate.jpg')}` : undefined,
         capturedAt: dto.event_time,
-        synthetic: true,
       };
     }
-  }
-  if (!evidence) {
-    evidence = {
-      ref: `ev/${cameraId}/${toId(dto.id)}`,
-      capturedAt: dto.event_time,
-      synthetic: true,
-    };
   }
 
   return {
