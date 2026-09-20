@@ -1,5 +1,5 @@
 import type { DashboardKpis, SystemSummary } from '@/types';
-import { get, isMockMode } from './api';
+import { get, isMockMode, backendUrl } from './api';
 import * as mock from '@/mocks/mockBackend';
 import { config } from '@/lib/config';
 import { toKpis, toSystemSummary, type HealthDto, type KpiDto } from './adapters';
@@ -31,7 +31,7 @@ async function runProbe(): Promise<{
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6_000);
   try {
-    const res = await fetch(`${config.streamBasePath}/cam01/whep`, {
+    const res = await fetch(backendUrl(`${config.streamBasePath}/cam01/whep`), {
       method: 'OPTIONS',
       signal: controller.signal,
     });

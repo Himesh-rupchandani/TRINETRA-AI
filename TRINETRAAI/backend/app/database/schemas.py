@@ -394,6 +394,7 @@ class HealthResponse(TRINETRASchema):
     demo_mode: bool
     timestamp: datetime
     components: Optional[Dict[str, Any]] = None
+    vision: Optional[Dict[str, Any]] = None
 
 
 # --- Camera stream ticket ----------------------------------------------------

@@ -434,6 +434,7 @@ export function CameraPlayer({
         {showVideo && !useImg && (
           <video
             ref={videoRef}
+            crossOrigin="anonymous"
             className={cn(
               'absolute inset-0 h-full w-full bg-black object-contain transition-opacity',
               onAir ? 'opacity-100' : 'opacity-0',

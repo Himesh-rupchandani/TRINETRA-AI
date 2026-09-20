@@ -9,7 +9,7 @@
  * All credentials auto-injected server-side (vite proxy + backend), never in bundle.
  */
 
-import { get, post, isMockMode } from './api';
+import { get, post, isMockMode, backendUrl } from './api';
 import * as mock from '@/mocks/mockBackend';
 import type { Camera } from '@/types';
 import { toCamera, type CameraItemDto } from './adapters';
@@ -150,7 +150,11 @@ export const ingestService = {
         },
       };
     }
-    return get<StreamsResponse>(`/ingest/streams/${encodeURIComponent(cameraId)}`);
+    const res = await get<StreamsResponse>(`/ingest/streams/${encodeURIComponent(cameraId)}`);
+    return { ...res, streams: { ...res.streams,
+      browser_preview: { ...res.streams.browser_preview, whep_same_origin: backendUrl(res.streams.browser_preview.whep_same_origin) },
+      dashboard_mobile: { ...res.streams.dashboard_mobile, hls_live_same_origin: backendUrl(res.streams.dashboard_mobile.hls_live_same_origin) },
+    } };
   },
 
   /**
@@ -165,7 +169,7 @@ export const ingestService = {
       };
     }
     const res = await get<any>(`/ingest/preview/${encodeURIComponent(cameraId)}`);
-    return res.browser_preview;
+    return { ...res.browser_preview, whep_same_origin: backendUrl(res.browser_preview.whep_same_origin) };
   },
 
   /**
@@ -181,7 +185,7 @@ export const ingestService = {
       };
     }
     const res = await get<any>(`/ingest/hls/${encodeURIComponent(cameraId)}`);
-    return res.hls;
+    return { ...res.hls, live_same_origin: backendUrl(res.hls.live_same_origin) };
   },
 
   /**

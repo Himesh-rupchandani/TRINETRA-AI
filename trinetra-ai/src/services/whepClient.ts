@@ -11,9 +11,9 @@
  *   - HLS   : CDN host, sits behind the Sentinel access password.
  *   - WHEP  : browser-native, low latency. <-- what we use.
  *
- * The signalling URL we post to is same-origin (`/sentinel/...`) and is
- * resolved to the real gateway by the server-side proxy. No Sentinel
- * password, key or token is present in this bundle.
+ * Signalling goes through the backend's `/sentinel/...` proxy, either on the
+ * same origin or the configured public Render origin. The backend resolves the
+ * real gateway; no Sentinel password, key or token is present in this bundle.
  */
 
 export interface WhepSession {
@@ -67,7 +67,7 @@ function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
 /**
  * Negotiate a receive-only WHEP session.
  *
- * @param url    Same-origin WHEP signalling endpoint (proxied to the gateway).
+ * @param url    Public backend WHEP endpoint (proxied to the gateway).
  * @param signal Abort signal — cancels an in-flight negotiation cleanly.
  */
 export async function connectWhep(url: string, signal?: AbortSignal): Promise<WhepSession> {

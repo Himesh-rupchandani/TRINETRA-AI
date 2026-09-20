@@ -47,7 +47,7 @@ export interface HealthProbe {
 
 /** Where the fix lives when the API is not reachable on this origin. */
 export const BACKEND_HINT =
-  'On Vercel the API is a `services.backend` entry in the repository-root vercel.json, so the project serving this URL must have Root Directory = repository root (see DEPLOY_VERCEL.md §4).';
+  'On Vercel the API is a `services.backend` entry in the repository-root vercel.json, so the project serving this URL must have Root Directory = repository root (see DEPLOY_VERCEL.md §4). For a Vercel frontend with a Render ML backend, set VITE_API_BASE_URL to the Render HTTPS URL plus /api and rebuild the frontend (see docs/RENDER_BACKEND.md).';
 
 /** The Vite rewrite in action: `index.html` served for a path that must be JSON. */
 export function isSpaFallbackBody(body: unknown): boolean {

@@ -197,6 +197,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Cross-origin Vercel -> Render WHEP clients must see the session URL
+    # to DELETE it on teardown instead of leaking media-gateway sessions.
+    expose_headers=["Location", "ETag"],
 )
 
 
@@ -237,7 +240,7 @@ def health_check(db: Session = Depends(get_db)):
         "realtime_channel": "HEALTHY",
         # Reported honestly instead of assumed: on a vision-less host these
         # features are genuinely off, and the control room should say so.
-        "cv_pipeline": "HEALTHY" if vis["available"] else "DISABLED (API-only: no cv2/numpy)",
+        "cv_pipeline": "HEALTHY" if vis["available"] else "DISABLED (vision unavailable; see vision diagnostics)",
         "storage": storage["mode"],
         "demo_data": _format_demo_data(demo_report),
     }
@@ -253,6 +256,7 @@ def health_check(db: Session = Depends(get_db)):
         demo_mode=settings.DEMO_MODE,
         timestamp=datetime.now(timezone.utc),
         components=components,
+        vision=vis,
     )
 
 

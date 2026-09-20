@@ -1,3 +1,4 @@
+import { apiAssetUrl } from '@/services/api';
 import { useAsync } from '@/hooks/useAsync';
 import { Brain, AlertTriangle, Activity, Eye } from 'lucide-react';
 
@@ -11,7 +12,7 @@ interface Insights {
 export function AIInsightsDashboard() {
   const insights = useAsync(async () => {
     try {
-      const res = await fetch('/api/stats/insights');
+      const res = await fetch(apiAssetUrl('/stats/insights'));
       if (!res.ok) throw new Error('Failed');
       return (await res.json()) as Insights;
     } catch {

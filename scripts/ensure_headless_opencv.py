@@ -36,12 +36,25 @@ def pip(*args: str) -> None:
     subprocess.run(command, check=True)
 
 
+def import_works() -> bool:
+    # A distribution can be installed while cv2 is unusable (ABI/native-library
+    # errors, or shared files removed by uninstalling the overlapping GUI wheel).
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", "import cv2, numpy; assert cv2.__version__; assert numpy.__version__"],
+            capture_output=True, timeout=30,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def main() -> None:
     gui = [name for name in GUI_PACKAGES if installed(name)]
     has_headless = installed(HEADLESS)
 
-    if not gui and has_headless:
-        print("OpenCV is already configured for headless use.")
+    if not gui and has_headless and import_works():
+        print("OpenCV is already configured for headless use and imports successfully.")
         return
 
     for name in gui:
@@ -51,10 +64,10 @@ def main() -> None:
     # Reinstall when a GUI package was removed: both distributions own cv2
     # files, so a plain 'already satisfied' check is not enough to repair a
     # mixed installation.
-    if gui or not has_headless:
-        print("Installing the headless OpenCV package...")
-        pip("install", "--force-reinstall", "--no-deps", f"{HEADLESS}>=4.9.0")
-
+    print("Installing/repairing the headless OpenCV package...")
+    pip("install", "--force-reinstall", "--no-deps", f"{HEADLESS}>=4.9.0")
+    if not import_works():
+        raise SystemExit("OpenCV/NumPy still cannot be imported. Check this interpreter's ML requirements and native-library installation before starting the backend.")
     print("Headless OpenCV is ready.")
 
 

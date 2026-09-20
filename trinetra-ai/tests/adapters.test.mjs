@@ -20,6 +20,7 @@ const STUBS = {
   // adapters.ts only calls `get` at runtime inside cameraDirectory(); the tests
   // never hit the network.
   './api': {
+    backendUrl: (path) => path,
     apiAssetUrl: (path) => /^https?:\/\//.test(path) ? path : `/api${path}`,
     get: async () => {
       throw new Error('network access is disabled in frontend tests');

@@ -1,5 +1,11 @@
 # Deploying TRINETRA AI on Vercel (frontend + backend, one domain)
 
+> **For live detection / ANPR:** the Vercel Function described below is the
+> lightweight data API, not the long-running ML backend. If you already have a
+> Render service, follow [the existing Render backend upgrade guide](docs/RENDER_BACKEND.md)
+> instead. It covers ML dependencies, model files, storage, CORS and sending
+> video/evidence as well as JSON requests to the Render origin.
+
 The whole product deploys as **one Vercel project**: the Vite SPA is served from
 the CDN and the FastAPI backend runs as a Vercel Function under the same origin
 at `/api`. The browser therefore needs no CORS exception, no mixed-content

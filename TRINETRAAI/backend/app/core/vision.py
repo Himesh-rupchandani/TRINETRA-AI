@@ -50,11 +50,13 @@ class VisionUnavailable(RuntimeError):
 
 
 _MISSING_REASON = (
-    "OpenCV/NumPy are not installed in this process, so live frame decoding, "
-    "vehicle detection and ANPR are unavailable here. Start the backend with "
-    "`pip install -r requirements-ml.txt` (or run the Docker image, which "
-    "already includes them) to enable the CV pipeline."
+    "OpenCV and/or NumPy could not be imported by this backend process, so live "
+    "decoding, detection and ANPR are unavailable. Install requirements-ml.txt "
+    "with the backend's Python interpreter, run scripts/ensure_headless_opencv.py, "
+    "and restart/redeploy. Installing only requirements.txt enables the data API, "
+    "not the ML pipeline. A Vercel frontend must use the full ML backend for these features."
 )
+_IMPORT_ERRORS: Dict[str, str] = {}
 
 # Scalar/array *types* are referenced by annotations at import time, long before
 # any pixel is touched. Answering those with ``object`` keeps module loading
@@ -84,7 +86,7 @@ _STUB_TYPES: Dict[str, Any] = {
 
 
 def _unavailable(name: str, pkg: str) -> Any:
-    raise VisionUnavailable(f"{pkg}.{name}() called without {pkg} installed. {_MISSING_REASON}")
+    raise VisionUnavailable(f"{pkg}.{name}() called while {pkg} is unavailable. {_MISSING_REASON}")
 
 
 class _UnavailableModule(ModuleType):
@@ -126,7 +128,8 @@ try:  # pragma: no cover - exercised implicitly by whichever branch applies
     import numpy as np  # type: ignore[import-not-found]
 
     NUMPY_AVAILABLE = True
-except Exception:  # ImportError, or a broken GUI/headless cv2 overlap
+except Exception as exc:  # Missing package OR a broken native/ABI installation
+    _IMPORT_ERRORS["numpy"] = type(exc).__name__
     np = _UnavailableModule("numpy", _STUB_TYPES)
     NUMPY_AVAILABLE = False
 
@@ -136,7 +139,8 @@ try:  # pragma: no cover
     import cv2  # type: ignore[import-not-found]
 
     CV2_AVAILABLE = True
-except Exception:
+except Exception as exc:
+    _IMPORT_ERRORS["cv2"] = type(exc).__name__
     cv2 = _UnavailableModule("cv2", {"VideoCapture": object, "Mat": object})
     CV2_AVAILABLE = False
 
@@ -152,8 +156,24 @@ def vision_status() -> Dict[str, Any]:
         "available": vision_available(),
         "cv2": CV2_AVAILABLE,
         "numpy": NUMPY_AVAILABLE,
-        "reason": None if vision_available() else _MISSING_REASON,
+        "reason": None if vision_available() else unavailable_reason(),
+        "forced_api_only": _FORCE_API_ONLY,
+        "deployment": ("render" if os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID")
+                       else "vercel" if os.environ.get("VERCEL") else "other"),
+        "python_version": sys.version.split()[0],
+        "import_error_types": dict(_IMPORT_ERRORS),
+        "scope": "OpenCV/NumPy import readiness; camera reachability and model/OCR inference need separate checks.",
     }
+
+
+def unavailable_reason() -> str:
+    if _FORCE_API_ONLY:
+        return (
+            "Vision processing is disabled by TRINETRA_API_ONLY in this backend. "
+            "For the full Render ML service, unset it or set 0, install the ML "
+            "requirements and redeploy. A Vercel frontend should call that backend."
+        )
+    return _MISSING_REASON
 
 
 def require_vision() -> None:
@@ -172,7 +192,8 @@ def require_vision() -> None:
         status_code=503,
         detail={
             "error": "VISION_STACK_UNAVAILABLE",
-            "message": _MISSING_REASON,
+            "message": unavailable_reason(),
+            "vision": vision_status(),
             "hint": (
                 "Registry, events, watchlist, alerts, GIS routes, stats and "
                 "reports keep working — only frame-level CV is disabled here."

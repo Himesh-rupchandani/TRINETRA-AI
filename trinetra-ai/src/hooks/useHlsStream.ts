@@ -1,28 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { backoffDelay } from '@/services/whepClient';
+import { sentinelHlsUrl } from '@/lib/backendUrls';
 
 export type HlsPhase = 'IDLE' | 'CONNECTING' | 'RECONNECTING' | 'LIVE' | 'UNAVAILABLE';
 
 /**
  * Map a Sentinel WHEP signalling URL onto its HLS playback URL (guide §1).
- * Same-origin /sentinel URLs stay same-origin (proxied); absolute gateway
- * URLs are rebuilt onto the default HTTP port where HLS is served.
+ * Backend /sentinel URLs retain their proxy prefix (including a remote Render
+ * origin). Direct gateway URLs keep the legacy default-port HLS mapping.
  */
-export function whepUrlToHls(url: string | null | undefined): string | null {
-  if (!url) return null;
-  const m = /\/stream\/([^/?#]+)\/whep/.exec(url);
-  if (!m) return null;
-  const hlsPath = `/live/stream/${m[1]}/index.m3u8`;
-  if (/^https?:\/\//i.test(url)) {
-    try {
-      const u = new URL(url);
-      return `${u.protocol}//${u.hostname}${hlsPath}`;
-    } catch {
-      return null;
-    }
-  }
-  return url.startsWith('/sentinel') ? `/sentinel${hlsPath}` : hlsPath;
-}
+export const whepUrlToHls = sentinelHlsUrl;
 
 function nativeHls(el: HTMLVideoElement): boolean {
   try {

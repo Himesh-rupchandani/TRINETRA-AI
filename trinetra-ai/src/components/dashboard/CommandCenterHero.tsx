@@ -1,3 +1,4 @@
+import { apiAssetUrl } from '@/services/api';
 import { useEffect, useState } from 'react';
 import { Zap, Activity, Cctv, MapPin, Lock } from 'lucide-react';
 import { useAsync } from '@/hooks/useAsync';
@@ -19,13 +20,13 @@ export function CommandCenterHero() {
   // No fabricated fallbacks: when either endpoint fails the tile shows "—"
   // instead of an invented LOW threat level or a made-up 99.98% saving.
   const threat = useAsync(async () => {
-    const res = await fetch('/api/stats/threat-level');
+    const res = await fetch(apiAssetUrl('/stats/threat-level'));
     if (!res.ok) throw new Error(`threat-level responded ${res.status}`);
     return (await res.json()) as ThreatLevel;
   }, []);
 
   const bandwidth = useAsync(async () => {
-    const res = await fetch('/api/stats/bandwidth');
+    const res = await fetch(apiAssetUrl('/stats/bandwidth'));
     if (!res.ok) throw new Error(`bandwidth responded ${res.status}`);
     return (await res.json()) as BandwidthData;
   }, []);

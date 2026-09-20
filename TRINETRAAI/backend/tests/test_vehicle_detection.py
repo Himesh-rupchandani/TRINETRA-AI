@@ -145,12 +145,19 @@ class TestAnnotate:
 class TestDetectPostProcessing:
     @staticmethod
     def _fake_model(boxes, confs, clss):
-        import torch
+        # Test the .cpu().numpy() contract without importing the optional model runtime.
+        class Tensor:
+            def __init__(self, values):
+                self.values = np.asarray(values, dtype=np.float32)
+
+            def cpu(self):
+                return self
+
+            def numpy(self):
+                return self.values
 
         boxes_ns = SimpleNamespace(
-            xyxy=torch.tensor(boxes, dtype=torch.float32),
-            conf=torch.tensor(confs, dtype=torch.float32),
-            cls=torch.tensor(clss, dtype=torch.float32),
+            xyxy=Tensor(boxes), conf=Tensor(confs), cls=Tensor(clss),
         )
         return SimpleNamespace(predict=lambda *a, **k: [SimpleNamespace(boxes=boxes_ns)])
 
@@ -357,6 +364,8 @@ class TestLiveDetectEndpoint:
         monkeypatch.setattr(live_anpr, "live_anpr_service", pipeline)
         monkeypatch.setattr(type(live_anpr.ocr_service), "available", property(lambda self: False))
         monkeypatch.setattr(vehicle_detection_service, "detect", lambda frame: _dets())
+        monkeypatch.setattr(vehicle_detection_service, "_disabled_reason", None)
+        monkeypatch.setattr(vehicle_detection_service, "last_error", None)
         try:
             camera_manager.add_camera(
                 camera_id=cam_id, source=str(video), source_type="file", auto_start=False

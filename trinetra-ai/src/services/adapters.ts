@@ -24,7 +24,7 @@ import type {
   VehicleRoute,
   WatchlistRecord,
 } from '@/types';
-import { get, apiAssetUrl } from './api';
+import { get, apiAssetUrl, backendUrl } from './api';
 import { evidencePaths } from '@/lib/evidence';
 import { haversineKm, minutesBetween } from '@/lib/utils';
 
@@ -494,10 +494,10 @@ export function toStreamTicket(dto: StreamTicketDto): CameraStreamTicket {
   return {
     cameraId: dto.camera_id.toLowerCase(),
     streamType: dto.stream_type as CameraStreamTicket['streamType'],
-    streamUrl: dto.stream_url,
+    streamUrl: backendUrl(dto.stream_url),
     expiresAt: dto.expires_at,
     poster: undefined, // resolved by the player (synthetic/registry still)
-    detectionUrl: dto.detection_url ?? undefined,
+    detectionUrl: dto.detection_url ? backendUrl(dto.detection_url) : undefined,
   };
 }
 

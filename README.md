@@ -316,3 +316,7 @@ single `pytest` run covers all three layers — it is skipped, not failed, when 
 ### Camera traffic observations
 
 Motion-aware tracking, configurable per-camera counting lines/zones, and current-session class/crossing counters now share the live ANPR detector. OCR/photo previews remain bounded to 3 vehicles by default. These are **sampled observation counts, not total traffic or violation alerts**. See [Traffic counting setup and limits](docs/TRAFFIC_COUNTING.md).
+
+### Existing Render backend + Vercel frontend
+
+The full live-CV runtime must run on the persistent backend, not the Vercel data function. See [Render setup and verification](docs/RENDER_BACKEND.md) for the existing-service build/start commands, Docker option, public API URL routing, storage and safe diagnostics.
