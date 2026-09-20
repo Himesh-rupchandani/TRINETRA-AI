@@ -221,7 +221,7 @@ def test_counting_has_separate_budget_and_does_not_require_ocr(rig, monkeypatch)
         VehicleDetection(10+i*80, 20, 70+i*80, 150, "car", .94) for i in range(5)
     ])
     calls = []
-    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args: calls.append(args) or None)
+    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args, **kwargs: calls.append(args) or None)
     process()
     result = process()
     assert result["traffic"]["observed_tracks"] == result["traffic"]["by_class"]["car"] == 5

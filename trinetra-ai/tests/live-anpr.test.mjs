@@ -165,3 +165,22 @@ test('recent metadata alone is not enough to draw numbers over a different pictu
   includes(overlay, 'clearTimeout(paintTimer)');
   includes(overlay, 'video.seeking');
 });
+
+suite('OCR progress — pending, rejected and unavailable are distinct');
+const { plateProgressLabel } = loadTs('src/lib/liveDetections.ts');
+test('first accepted reading is awaiting agreement, not a claimed failure or confirmed plate', () => {
+  eq(plateProgressLabel({ocr_state:'CONFIRMING',ocr_agreement_reads:1,ocr_required_reads:2}), 'Confirming plate · 1/2 matching samples');
+  eq(plateProgressLabel({ocr_state:'READING'}), 'Reading plate…');
+  eq(plateProgressLabel({ocr_state:'QUEUED'}), 'Waiting for OCR');
+});
+test('model unavailability and confidence rejection are visible', () => {
+  eq(plateProgressLabel({ocr_state:'UNAVAILABLE'}), 'OCR unavailable');
+  eq(plateProgressLabel({ocr_state:'LOW_CONFIDENCE'}), 'Plate text below confidence threshold');
+  eq(plateProgressLabel({ocr_state:'TOO_SMALL'}), 'Plate crop too small');
+  eq(plateProgressLabel({ocr_state:'ERROR'}), 'OCR could not process this crop');
+});
+test('older backend snapshots still distinguish in-progress work from unreadable text', () => {
+  eq(plateProgressLabel({},'PROCESSING'), 'Reading plate…');
+  eq(plateProgressLabel({},'UNAVAILABLE'), 'OCR unavailable');
+  eq(plateProgressLabel({},'SCANNING'), 'Plate text not recognized');
+});

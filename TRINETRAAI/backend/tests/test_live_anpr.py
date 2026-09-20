@@ -42,7 +42,7 @@ def vehicles(count=3):
     return [VehicleDetection(10 + 200*i, 20, 180 + 200*i, 220, "car", .94) for i in range(count)]
 
 
-def plate_read(frame, bbox, vehicle_class, confidence=.94):
+def plate_read(frame, bbox, vehicle_class, confidence=.94, **kwargs):
     index = min(2, int(bbox[0]) // 200)
     x, y, _, _ = bbox
     return PlateRead(PLATES[index], PLATES[index], confidence, confidence, True,
@@ -125,7 +125,7 @@ def test_three_plates_confirmed_persisted_broadcast_and_drawn(rig):
 
 def test_unreadable_is_unknown_never_invented(rig, monkeypatch):
     _, factory, _, messages, process = rig
-    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args: None)
+    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args, **kwargs: None)
     for _ in range(3):
         result = process()
         assert all(d["plate_status"] == "UNKNOWN" and d["plate_number"] is None for d in result["detections"])
@@ -137,7 +137,7 @@ def test_conflicting_reads_need_fresh_agreement(rig, monkeypatch):
     monkeypatch.setattr(live.vehicle_detection_service, "detect", lambda frame: vehicles(1))
     process()
     read = PlateRead("GJ01ZZ9999", "GJ01ZZ9999", .95, .95, True)
-    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args: read)
+    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args, **kwargs: read)
     process()
     assert rows(factory) == []
     process()
@@ -149,7 +149,7 @@ def test_low_confidence_read_is_labelled_and_cannot_trigger_watchlist(rig, monke
     with factory() as db:
         db.add(Watchlist(plate_number=PLATES[0], category="stolen vehicle", active=True))
         db.commit()
-    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args: plate_read(*args, confidence=.7))
+    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args, **kwargs: plate_read(*args, confidence=.7))
     process()
     process()
     assert len(rows(factory)) == 3
@@ -263,7 +263,7 @@ def test_vehicle_budget_limits_ocr_work(rig, monkeypatch):
     _, factory, _, _, process = rig
     monkeypatch.setattr(live.vehicle_detection_service, "detect", lambda frame: vehicles(5))
     called = []
-    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args: called.append(args) or plate_read(*args))
+    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args, **kwargs: called.append(args) or plate_read(*args))
     result = process(frame=np.zeros((400, 1200, 3), dtype=np.uint8))
     assert len(called) == len(result["detections"]) == 3
     assert rows(factory) == []
@@ -477,7 +477,7 @@ def test_confirmed_plate_stays_visible_while_next_sample_is_processing(rig, monk
     process()
     process()
 
-    def next_read(*args):
+    def next_read(*args, **kwargs):
         snapshot = svc.snapshot("cam1")
         assert snapshot["status"] == "PROCESSING"
         assert {d["plate_number"] for d in snapshot["detections"]} == set(PLATES)
@@ -492,7 +492,7 @@ def test_continuing_vehicle_detection_cannot_keep_an_old_unreadable_identity_for
     _, factory, _, _, process = rig
     process()
     process()
-    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args: None)
+    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args, **kwargs: None)
     for _ in range(6):
         snapshot = process()
     assert all(d["plate_number"] is None and d["event_id"] is None for d in snapshot["detections"])
@@ -520,7 +520,7 @@ def test_conflict_clears_an_already_confirmed_label_immediately(rig, monkeypatch
     monkeypatch.setattr(live.vehicle_detection_service, "detect", lambda frame: vehicles(1))
     process()
     process()
-    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args: PlateRead("GJ01ZZ9999", "GJ01ZZ9999", .95, .95, True))
+    monkeypatch.setattr(live, "read_plate_for_vehicle", lambda *args, **kwargs: PlateRead("GJ01ZZ9999", "GJ01ZZ9999", .95, .95, True))
     snapshot = process()
     assert snapshot["detections"][0]["plate_number"] is None
     assert snapshot["detections"][0]["event_id"] is None
@@ -643,7 +643,7 @@ def test_photo_endpoint_does_not_wait_for_ocr(api, rig, monkeypatch):
     monkeypatch.setattr(svc, "start", lambda: live.LiveAnprService.start(svc))
     entered, release = threading.Event(), threading.Event()
 
-    def slow_ocr(*args):
+    def slow_ocr(*args, **kwargs):
         entered.set()
         assert release.wait(3)
         return None

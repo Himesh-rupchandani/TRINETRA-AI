@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ExternalLink, ImageOff, ScanLine } from 'lucide-react';
+import { plateProgressLabel } from '@/lib/liveDetections';
 import { apiAssetUrl } from '@/services/api';
 import type { LiveAnprSnapshot, LivePhoto } from '@/services/liveAnprService';
 import type { Camera, VehicleEvent } from '@/types';
@@ -33,8 +34,11 @@ export function LivePhotoEvidence({ camera, snapshot, selected, latestSaved }: {
       <p className="text-2xs leading-relaxed text-ink-muted">
         Latest captured vehicles · auto-updating. These are camera crops, not stock photos.
       </p>
+      {(current?.status === 'UNAVAILABLE' || current?.status === 'ERROR') && current.reason && (
+        <p role="status" className="rounded border border-degraded/30 bg-degraded/10 p-2 text-2xs text-degraded">{current.reason}</p>
+      )}
       <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-        {photos.map((photo) => <DetectionPhoto key={photo.track_id} photo={photo} recorded={camera.streamType === 'FILE'} />)}
+        {photos.map((photo) => <DetectionPhoto key={photo.track_id} photo={photo} status={current?.status} recorded={camera.streamType === 'FILE'} />)}
       </div>
       <p className="text-[10px] leading-relaxed text-ink-faint">
         Temporary detection previews. Confirmed plate sightings and their saved evidence remain in the Vehicle Log.
@@ -43,9 +47,11 @@ export function LivePhotoEvidence({ camera, snapshot, selected, latestSaved }: {
   );
 }
 
-function DetectionPhoto({ photo, recorded }: { photo: LivePhoto; recorded: boolean }) {
+function DetectionPhoto({ photo, recorded, status }: { photo: LivePhoto; recorded: boolean; status?: LiveAnprSnapshot['status'] }) {
   const imageUrl = apiAssetUrl(photo.image_path);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [failedCrop, setFailedCrop] = useState<string | null>(null);
+  const cropUrl = photo.plate_image_path ? apiAssetUrl(photo.plate_image_path) : null;
   const failed = failedUrl === imageUrl;
   const plate = photo.plate_number;
   return (
@@ -64,7 +70,7 @@ function DetectionPhoto({ photo, recorded }: { photo: LivePhoto; recorded: boole
         </a>
         <div className="min-w-0 space-y-1.5 p-2.5">
           <p className="text-2xs font-semibold text-ink">{prettyVehicleClass(photo.class_name)} · Track {photo.track_id}</p>
-          <p className={plate ? 'break-all font-mono text-xs font-bold text-ink' : 'text-2xs text-ink-muted'}>{plate || 'Plate not read'}</p>
+          <p className={plate ? 'break-all font-mono text-xs font-bold text-ink' : 'text-2xs text-ink-muted'}>{plate || plateProgressLabel(photo, status)}</p>
           {photo.plate_status === 'LOW_CONFIDENCE' && <p className="text-2xs font-semibold text-degraded">Verify read</p>}
           {photo.plate_confidence != null && <p className="text-[10px] text-ink-muted">{Math.round(photo.plate_confidence * 100)}% OCR</p>}
           <p className="font-mono text-[10px] text-ink-faint">Captured {formatTime(photo.captured_at)}</p>
@@ -72,6 +78,13 @@ function DetectionPhoto({ photo, recorded }: { photo: LivePhoto; recorded: boole
             {recorded ? 'Recorded video' : 'Camera capture'}
             {recorded && photo.media_time != null ? ` · ${formatVideoOffset(photo.media_time)}` : ''}
           </p>
+          {cropUrl && <details className="text-[10px] text-ink-muted">
+            <summary className="cursor-pointer">Show area scanned for text</summary>
+            {failedCrop === cropUrl ? <p>Scan crop unavailable or expired</p> : <a href={cropUrl} target="_blank" rel="noreferrer">
+              <img key={cropUrl} src={cropUrl} alt="Actual area scanned by OCR" className="mt-1 h-14 w-full rounded bg-black object-contain" loading="lazy" decoding="async" onError={() => setFailedCrop(cropUrl)} />
+            </a>}
+            <p>{photo.ocr_region_source === 'heuristic' ? 'Fallback search area · verify any read' : 'Detector-proposed crop · not proof of a correct read'}</p>
+          </details>}
           {photo.event_id != null && <p className="text-[10px] text-online">Plate linked to Vehicle Log</p>}
         </div>
       </div>

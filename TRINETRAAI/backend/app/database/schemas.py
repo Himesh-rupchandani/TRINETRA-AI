@@ -396,6 +396,7 @@ class HealthResponse(TRINETRASchema):
     components: Optional[Dict[str, Any]] = None
     vision: Optional[Dict[str, Any]] = None
     camera_registry: Optional[Dict[str, Any]] = None
+    ocr: Optional[Dict[str, Any]] = None
 
 
 # --- Camera stream ticket ----------------------------------------------------

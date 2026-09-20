@@ -258,3 +258,34 @@ The same detector also supports motion-aware tracking and per-camera normalized
 line/zone counts; see [Traffic counting](TRAFFIC_COUNTING.md). Counting has a
 separate bounded tracking budget and does not increase the OCR/photo budget.
 Plate sightings and observation-session counters are deliberately separate.
+
+## A visible plate still says unreadable
+
+A vehicle photo is published **before** OCR completes. The photo panel now
+separates **Waiting for OCR**, **Reading plate**, **Confirming (1/2 samples)**,
+low confidence, missing/tiny regions and engine failures. Only a confirmed
+identity gets a plate number/event; the absence of a number is not necessarily
+a finished failed read. Each vehicle's completed status is published without
+waiting for the other vehicles in the batch.
+
+**Show area scanned for text** displays the actual OCR search crop, including
+failed attempts. It is labelled as a proposed/search area, not guaranteed plate
+localization. `/api/health` also exposes cached `ocr` engine state without
+loading a model just because health was polled.
+
+Localized plate crops have modest clipped padding while preserving the original
+character scale. If localization picked an unhelpful region and OCR yielded no
+valid read, one lower-vehicle rescue region gets at most two extra OCR attempts.
+The per-vehicle budget is at most eight OCR calls (two localized regions × three
+variants, plus two rescue calls). No extra vehicle detector call is added.
+Rescue accepts only canonical text actually returned by OCR, never joins strings
+across a whole vehicle, never replaces uncertain letters/digits to force a match,
+and remains **Verify read** even with high OCR confidence. Two independently
+sampled agreeing reads and the existing rejection threshold still apply; rescue
+reads cannot trigger watchlist alarms.
+
+Resizing is interpolation, not recovery of missing detail. A screenshot of a
+thumbnail cannot establish the engine's original input quality or output.
+Exact false negatives need the original captured photo/video plus camera/sample
+context. Repository crop checks are integration checks, not a claim that the
+operator's specific plate has been recognized correctly.

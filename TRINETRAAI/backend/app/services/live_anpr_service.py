@@ -27,7 +27,7 @@ from ..core.paths import evidence_root
 from ..core.vision import cv2, np
 from ..database.database import SessionLocal
 from ..database.models import Camera, CameraTrafficConfig, VehicleEvent
-from .anpr_pipeline import PlateRead, TrackPlateAccumulator, read_plate_for_vehicle
+from .anpr_pipeline import PlateAttempt, PlateRead, TrackPlateAccumulator, read_plate_for_vehicle
 from .event_service import event_message, store_event
 from .ocr_service import ocr_service
 from .live_tracker import LiveTracker
@@ -313,8 +313,9 @@ class LiveAnprService:
                     for photo in batch.photos:
                         detection = current.get(photo["track_id"])
                         if detection:
-                            for name in ("plate_number", "plate_status", "plate_confidence", "event_id"):
-                                photo[name] = detection[name]
+                            for name in ("plate_number", "plate_status", "plate_confidence", "event_id",
+                                         "ocr_state", "ocr_agreement_reads", "ocr_required_reads", "ocr_region_source"):
+                                photo[name] = detection.get(name)
                 state.result = {
                     "status": status, "reason": reason,
                     "source_id": packet.source_id, "media_time": packet.media_time,
@@ -323,6 +324,7 @@ class LiveAnprService:
                     "submitted_at": packet.submitted_at,
                     "detections": [dict(d) for d in detections],
                     "processing_ms": round((self._clock() - packet.submitted_at) * 1000),
+                    "ocr": ocr_service.runtime_status(),
                     "traffic": ({**state.traffic.snapshot(), "tracker": state.tracker.name,
                                  "max_tracked_vehicles": settings.LIVE_ANPR_MAX_TRACKED_VEHICLES,
                                  "ocr_budget": settings.LIVE_ANPR_MAX_VEHICLES,
@@ -392,7 +394,11 @@ class LiveAnprService:
             ts.last_seen = packet.submitted_at
             output.append(dict(x1=track.x1, y1=track.y1, x2=track.x2, y2=track.y2,
                                class_name=track.class_name, confidence=round(track.confidence, 4),
-                               track_id=track.track_id, plate_box=None, **self._identity(ts)))
+                               track_id=track.track_id, plate_box=None, **self._identity(ts),
+                               ocr_state="READING" if not output else "QUEUED",
+                               ocr_agreement_reads=ts.votes.best().reads if ts.votes.best() else 0,
+                               ocr_required_reads=max(2, settings.ANPR_MIN_AGREE_READS),
+                               ocr_region_source=None))
         # Make the actual vehicle photos available BEFORE OCR or plate voting.
         # Unreadable plates must not leave the Photo Evidence panel empty.
         self._cache_photos(packet, state, output)
@@ -403,13 +409,20 @@ class LiveAnprService:
             self._publish(packet, state, output)
             return
         if not ocr_service.available:
+            for detection in output:
+                detection["ocr_state"] = "UNAVAILABLE"
             self._publish(packet, state, output, "UNAVAILABLE", "OCR unavailable; enable OCR_ENABLED and install rapidocr-onnxruntime.")
             return
-        for track, detection in zip(shown, output):
+        for index, (track, detection) in enumerate(zip(shown, output)):
             if state.cancelled:
                 return
             ts = state.tracks[track.track_id]
-            read = read_plate_for_vehicle(packet.frame, [track.x1, track.y1, track.x2, track.y2], track.class_name)
+            detection["ocr_state"] = "READING"
+            if index:
+                self._publish(packet, state, output, "PROCESSING")
+            attempt = PlateAttempt()
+            read = read_plate_for_vehicle(packet.frame, [track.x1, track.y1, track.x2, track.y2],
+                                          track.class_name, diagnostics=attempt)
             if read:
                 best = ts.votes.best()
                 # A changed identity needs fresh agreement, not old majority votes
@@ -422,12 +435,19 @@ class LiveAnprService:
                 if read.plate_box:
                     b = read.plate_box
                     detection["plate_box"] = [b.x1, b.y1, b.x2, b.y2]
-                    self._cache_plate_photo(packet, track.track_id, b)
+            region = read.plate_box if read and read.plate_box else attempt.region
+            if region:
+                self._cache_plate_photo(packet, track.track_id, region)
+                detection["ocr_region_source"] = region.source
             # A contradictory read immediately clears the previously shown
             # identity; the replacement still needs two agreeing samples.
             detection.update(self._identity(ts))
             vote = ts.votes.best()
+            detection["ocr_agreement_reads"] = vote.reads if vote else 0
+            detection["ocr_state"] = ("CONFIRMED" if read and detection["plate_number"] else
+                                      "CONFIRMING" if read else "RECENT_READ" if detection["plate_number"] else attempt.state)
             if detection["plate_number"] is None:
+                self._publish(packet, state, output, "PROCESSING")
                 continue
             previous = state.recent.get(vote.normalized)
             if previous and packet.submitted_at - previous[0] < settings.LIVE_ANPR_DEDUP_SECONDS:
@@ -437,6 +457,7 @@ class LiveAnprService:
             if ts.event_id is not None:
                 state.recent[vote.normalized] = (packet.submitted_at, ts.event_id)
             detection["event_id"] = ts.event_id
+            self._publish(packet, state, output, "PROCESSING")
         state.recent = {p: v for p, v in state.recent.items()
                         if packet.submitted_at - v[0] < settings.LIVE_ANPR_DEDUP_SECONDS}
         self._publish(packet, state, output)
@@ -524,7 +545,8 @@ class LiveAnprService:
                 class_name=detection["class_name"], image_path=f"{path}/vehicle.jpg",
                 plate_image_path=None, captured_at=packet.captured_at.isoformat(),
                 media_time=packet.media_time,
-                **{k: detection[k] for k in ("plate_number", "plate_status", "plate_confidence", "event_id")},
+                **{k: detection.get(k) for k in ("plate_number", "plate_status", "plate_confidence", "event_id",
+                                                "ocr_state", "ocr_agreement_reads", "ocr_required_reads", "ocr_region_source")},
             ))
         if not photos:
             return  # keep the last capture, labelled by its original timestamp

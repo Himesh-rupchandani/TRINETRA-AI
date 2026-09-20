@@ -17,6 +17,7 @@ Hard rules enforced here:
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
@@ -50,11 +51,12 @@ class PlateRead:
     ocr_confidence: float     # 0.0 - 1.0, the engine's own score
     indian_format: bool
     plate_box: Optional[PlateBox] = None
+    requires_review: bool = False  # broad fallback region is not precise localization
 
     @property
     def status(self) -> str:
         low = float(getattr(settings, "OCR_LOW_CONFIDENCE_MARK", 0.80))
-        return PLATE_STATUS_HIGH if self.confidence >= low else PLATE_STATUS_LOW
+        return PLATE_STATUS_HIGH if self.confidence >= low and not self.requires_review else PLATE_STATUS_LOW
 
 def format_score(normalized: str) -> float:
     """1.0 = canonical Indian plate, 0.7 = plausible, 0.45 = generic alnum."""
@@ -85,59 +87,125 @@ def plate_text_candidates(lines: Sequence[tuple], *, join_lines: bool = False) -
     return candidates
 
 
+@dataclass
+class PlateAttempt:
+    """Small per-read diagnostic; no raw unconfirmed plate text is published."""
+    state: str = "NO_REGION"
+    region: Optional[PlateBox] = None
+    ocr_calls: int = 0
+    fallback_used: bool = False
+
+
+def _padded_region(region: PlateBox, frame, vehicle_bbox) -> PlateBox:
+    if region.source == "heuristic":
+        return region
+    h, w = frame.shape[:2]
+    vx1, vy1, vx2, vy2 = map(float, vehicle_bbox)
+    vw, vh = vx2-vx1, vy2-vy1
+    px, py = max(2, round(region.width*.05)), max(2, round(region.height*.12))
+    return PlateBox(
+        max(0, int(vx1-.03*vw), region.x1-px), max(0, int(vy1-.03*vh), region.y1-py),
+        min(w, int(vx2+.03*vw), region.x2+px), min(h, int(vy2+.03*vh), region.y2+py),
+        region.confidence, region.source,
+    )
+
+
 def read_plate_for_vehicle(
     frame: np.ndarray,
     vehicle_bbox: Sequence[float],
     vehicle_class: str = "car",
     max_regions: int = 2,
+    *,
+    diagnostics: Optional[PlateAttempt] = None,
 ) -> Optional[PlateRead]:
-    """
-    Run the complete plate stage for one vehicle box.
+    """Read bounded localized regions, then one conservative rescue region.
 
-    Returns the best :class:`PlateRead`, or ``None`` when nothing plate-shaped
-    could be read (caller stores the sighting as ``UNKNOWN``).
+    A model proposal can be a lamp/logo, or crop the edge of a glyph. Modest
+    padding preserves edges. If localized OCR fails, try the lower vehicle
+    ONCE (raw + contrast variants), rather than letting a bad proposal suppress
+    the visible plate forever. Rescue reads require canonical format, remain
+    Verify reads and still need independent-frame agreement in the live worker.
     """
+    attempt = diagnostics if diagnostics is not None else PlateAttempt()
     if frame is None or getattr(frame, "size", 0) == 0:
         return None
     if not ocr_service.available:
+        attempt.state = "UNAVAILABLE"
         return None
-
-    reject = float(getattr(settings, "OCR_MIN_CONFIDENCE", 0.60))
+    reject = float(getattr(settings, "OCR_MIN_CONFIDENCE", .60))
     regions = plate_detector_service.detect(frame, vehicle_bbox, vehicle_class,
-                                            max_candidates=max_regions)
+                                            max_candidates=max(1, min(max_regions, 2)))
     best: Optional[PlateRead] = None
+    saw_text = saw_small = rejected = False
 
-    for region in regions:
+    def scan(region, *, rescue=False):
+        nonlocal best, saw_text, saw_small, rejected
+        attempt.region = region
+        if region.width < 24 or region.height < 8:
+            saw_small = True
+            return
+        original_height = region.height
+        region = _padded_region(region, frame, vehicle_bbox)
         crop = frame[region.y1:region.y2, region.x1:region.x2]
-        if crop is None or crop.size == 0:
-            continue
-        if crop.shape[1] < 24 or crop.shape[0] < 8:
-            continue
-        for variant in preprocess_variants(crop):
+        if crop.size == 0 or region.width < 24 or region.height < 8:
+            saw_small = True
+            return
+        attempt.region = region
+        # Padding must not shrink the actual letters below the old 128px
+        # plate target; preserve the scale of the unpadded plate region.
+        target_height = min(256, round(128 * region.height / max(1, original_height)))
+        variants = preprocess_variants(crop, target_height=target_height)
+        if rescue and len(variants) >= 3:
+            variants = [variants[-1], variants[0]]  # raw colour, then contrast; max 2 extra calls
+        for variant in variants[:2 if rescue else 3]:
+            attempt.ocr_calls += 1
             lines = ocr_service.read_lines(variant)
+            if ocr_service.last_read_error:
+                attempt.state = "ERROR"
+                return
+            saw_text = saw_text or bool(lines)
             for text, ocr_conf in plate_text_candidates(lines, join_lines=region.source != "heuristic"):
+                try:
+                    score = float(ocr_conf)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(score) or not 0 <= score <= 1:
+                    continue
                 norm = candidate_from_text(text)
                 if norm is None:
                     continue
+                canonical = bool(INDIAN_PLATE_RE.match(norm))
+                if region.source == "heuristic" and not canonical:
+                    continue  # never join/guess loose text across a whole vehicle
                 fscore = format_score(norm)
-                if fscore <= 0.0:
+                confidence = score * fscore
+                if confidence < reject:
+                    rejected = rejected or canonical or bool(LOOSE_PLATE_RE.match(norm))
                     continue
-                conf = float(ocr_conf) * fscore
-                if conf < reject:
-                    continue
-                read = PlateRead(
-                    raw=text,
-                    normalized=norm,
-                    confidence=round(min(conf, 1.0), 4),
-                    ocr_confidence=round(float(ocr_conf), 4),
-                    indian_format=bool(INDIAN_PLATE_RE.match(norm)),
-                    plate_box=region,
-                )
+                read = PlateRead(text, norm, round(confidence, 4), round(score, 4), canonical,
+                                 region, requires_review=region.source == "heuristic")
                 if best is None or read.confidence > best.confidence:
                     best = read
-            # A confident canonical plate is good enough — stop burning CPU.
-            if best is not None and best.indian_format and best.confidence >= 0.92:
-                return best
+            if best is not None and best.indian_format and best.confidence >= .92:
+                return
+
+    for region in regions[:2]:
+        scan(region)
+        if attempt.state == "ERROR":
+            break
+        if best and best.indian_format and best.confidence >= .92:
+            break
+    if best is None and attempt.state != "ERROR" and not any(r.source == "heuristic" for r in regions):
+        fallback = plate_detector_service.fallback_region(frame, vehicle_bbox, vehicle_class)
+        if fallback:
+            attempt.fallback_used = True
+            scan(fallback, rescue=True)
+    if best:
+        attempt.state, attempt.region = "READ", best.plate_box
+    elif attempt.state != "ERROR":
+        attempt.state = ("LOW_CONFIDENCE" if rejected else "NO_PLATE_TEXT" if saw_text else
+                         "TOO_SMALL" if saw_small and attempt.ocr_calls == 0 else
+                         "NO_TEXT" if attempt.ocr_calls else "NO_REGION")
     return best
 
 # ---------------------------------------------------------------------------
@@ -153,6 +221,7 @@ class TrackPlateVote:
     reads: int
     confidence_sum: float
     indian_format: bool
+    requires_review: bool = False
 
 class TrackPlateAccumulator:
     """
@@ -181,9 +250,11 @@ class TrackPlateAccumulator:
                 reads=1,
                 confidence_sum=read.confidence,
                 indian_format=read.indian_format,
+                requires_review=read.requires_review,
             )
             return
         v.reads += 1
+        v.requires_review = v.requires_review or read.requires_review
         v.confidence_sum += read.confidence
         if read.confidence > v.best_confidence:
             v.best_confidence = read.confidence
@@ -214,7 +285,7 @@ class TrackPlateAccumulator:
         low = float(getattr(settings, "OCR_LOW_CONFIDENCE_MARK", 0.80))
         min_agree = int(getattr(settings, "ANPR_MIN_AGREE_READS", 2))
         conf = self.aggregate_confidence()
-        if conf >= low and v.reads >= min_agree and v.indian_format:
+        if conf >= low and v.reads >= min_agree and v.indian_format and not v.requires_review:
             return PLATE_STATUS_HIGH
         return PLATE_STATUS_LOW
 

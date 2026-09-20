@@ -32,6 +32,7 @@ from .camera.live_source import sync_live_camera
 from .core.paths import evidence_root
 from .services.ws_manager import ws_manager
 from .services.live_anpr_service import live_anpr_service
+from .services.ocr_service import ocr_service
 from .api.cameras import router as cameras_router
 from .api.live_anpr import router as live_anpr_router
 from .api.watchlist import router as watchlist_router
@@ -276,6 +277,7 @@ def health_check(db: Session = Depends(get_db)):
         components=components,
         vision=vis,
         camera_registry=_camera_registry_report,
+        ocr=ocr_service.runtime_status(),
     )
 
 

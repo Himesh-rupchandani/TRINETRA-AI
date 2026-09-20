@@ -1,5 +1,5 @@
 import type { VehicleEvent } from '@/types';
-import type { LiveAnprSnapshot } from '@/services/liveAnprService';
+import type { LiveAnprSnapshot, OcrProgress } from '@/services/liveAnprService';
 
 /** object-contain geometry, in the sampled frame's coordinate system. */
 export function containedBox(box: readonly number[], frameW: number, frameH: number, width: number, height: number) {
@@ -65,4 +65,23 @@ export function matchesSceneSignature(signature: readonly number[] | undefined, 
     difference += Math.abs(signature[i] - luminance);
   }
   return difference / signature.length <= 24;
+}
+
+
+/** Absence of a confirmed number is not always an OCR failure. */
+export function plateProgressLabel(photo: OcrProgress, status?: LiveAnprSnapshot['status']) {
+  const stage = photo.ocr_state ?? (status === 'PROCESSING' ? 'READING' : status === 'UNAVAILABLE' ? 'UNAVAILABLE' : 'NO_TEXT');
+  switch (stage) {
+    case 'QUEUED': return 'Waiting for OCR';
+    case 'READING': return 'Reading plate…';
+    case 'CONFIRMING': return `Confirming plate · ${photo.ocr_agreement_reads ?? 1}/${photo.ocr_required_reads ?? 2} matching samples`;
+    case 'UNAVAILABLE': return 'OCR unavailable';
+    case 'ERROR': return 'OCR could not process this crop';
+    case 'NO_REGION': return 'Plate region not found';
+    case 'TOO_SMALL': return 'Plate crop too small';
+    case 'LOW_CONFIDENCE': return 'Plate text below confidence threshold';
+    case 'NO_PLATE_TEXT': return 'No valid plate text recognized';
+    case 'RECENT_READ': return 'Using recent confirmed read';
+    default: return 'Plate text not recognized';
+  }
 }

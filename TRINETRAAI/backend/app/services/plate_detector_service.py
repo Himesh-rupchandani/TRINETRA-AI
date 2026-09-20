@@ -189,6 +189,14 @@ class PlateDetectorService:
         boxes.sort(key=lambda b: -b.confidence)
         return boxes[:max_candidates]
 
+    def fallback_region(self, frame, vehicle_bbox, vehicle_class="car") -> Optional[PlateBox]:
+        """One bounded lower-vehicle search region, only after localized OCR fails."""
+        h, w = frame.shape[:2]
+        box = _clip(*map(float, vehicle_bbox), w, h, pad_x=.03, pad_y=.03)
+        if box is None:
+            return None
+        return self._heuristic(*box, vehicle_class)[0]
+
     # ------------------------------------------------------------ backends
     def _detect_model(self, crop: np.ndarray, ox: int, oy: int) -> List[PlateBox]:
         model = self._ensure_model()
