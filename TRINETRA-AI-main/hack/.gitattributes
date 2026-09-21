@@ -1,9 +1,0 @@
-# Keep interpreter scripts LF-only on every platform: a CRLF checkout of a
-# bash script fails in Git Bash with "$'\r': command not found", and the node
-# setup script is executed by npm's predev hook on all OSes.
-*.sh   text eol=lf
-*.mjs  text eol=lf
-# Windows PowerShell 5.1 cannot parse LF-only .ps1 files (here-strings break),
-# so keep the one-click launcher CRLF (it is also committed with a UTF-8 BOM
-# so emoji survive on systems without native UTF-8 code pages).
-*.ps1  text eol=crlf

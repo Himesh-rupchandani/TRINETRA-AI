@@ -1,5 +1,0 @@
-nc: 2
-names:
-  0: vehicle
-  1: number_plate
-description: "Trinetra AI fine-tuned YOLO11 model for vehicle and number plate detection"
