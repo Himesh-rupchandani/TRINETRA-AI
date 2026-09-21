@@ -1,0 +1,35 @@
+# Render's repo-root Docker context must never contain secrets/runtime data.
+.git
+**/.venv
+**/venv
+**/node_modules
+**/.cache
+**/__pycache__
+**/.pytest_cache
+**/dist
+**/build
+**/.env
+**/.env.*
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.mp4
+**/*.avi
+**/*.mov
+**/*.mkv
+**/uploads
+**/evidence
+**/tests
+hack
+runs
+training
+# The image copies only the two existing .pt models required at runtime.
+**/*.onnx
+**/*.log
+**/.DS_Store
+**/.netrc
+**/.npmrc
+**/.ssh
+**/.git-credentials
+**/*.pem
+**/*.key

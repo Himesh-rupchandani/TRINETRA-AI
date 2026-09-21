@@ -1,0 +1,491 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   TRINETRA AI — Modern Government Command Center design tokens
+   Neutral, high-density, readable at control-room distance.
+   ------------------------------------------------------------------ */
+@layer base {
+  :root {
+    /* Light operational theme (always active — Night/Dark Mode removed) */
+    /* Hard opt-out of browser/OS auto-darkening (incl. fullscreen views). */
+    color-scheme: light;
+    --surface-0: 243 246 250;
+    --surface-1: 255 255 255;
+    --surface-2: 248 250 253;
+    --surface-3: 241 244 249;
+    --line: 226 232 240;
+    --line-strong: 148 163 184;
+    --ink: 15 23 42;
+    --ink-muted: 71 85 105;
+    --ink-faint: 100 116 139;
+    --brand: 37 99 235;
+    --brand-soft: 219 234 254;
+  }
+
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface-0 text-ink antialiased;
+    font-feature-settings: 'tnum' 1, 'cv05' 1;
+  }
+
+  /* Guided walkthrough auto-scroll margin so highlighted section sits cleanly below sticky header */
+  [data-tour] {
+    scroll-margin-top: 155px;
+    scroll-margin-bottom: 50px;
+  }
+
+  /* Visible focus everywhere — accessibility requirement */
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgb(var(--surface-0));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line));
+    border-radius: 6px;
+    border: 2px solid rgb(var(--surface-0));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--line-strong));
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-surface-1 border border-line rounded-2xl shadow-panel;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between gap-3 px-4 h-12 border-b border-line shrink-0;
+  }
+
+  .panel-title {
+    @apply text-sm font-semibold text-ink;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold
+           tracking-normal px-3.5 h-9 transition-colors select-none
+           disabled:opacity-45 disabled:pointer-events-none whitespace-nowrap;
+  }
+  .btn-primary {
+    @apply btn bg-brand border-brand text-white shadow-sm hover:bg-brand/90;
+  }
+  .btn-solid {
+    @apply btn bg-brand border-brand text-white hover:opacity-90;
+  }
+  .btn-tint {
+    @apply btn bg-brand/10 border-brand/25 text-brand hover:bg-brand/15;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent border-line text-ink-muted hover:bg-surface-2 hover:text-ink;
+  }
+  .btn-danger {
+    @apply btn bg-critical/10 border-critical/30 text-critical hover:bg-critical/15;
+  }
+  .btn-xs {
+    @apply h-7 px-2.5 text-2xs gap-1 rounded-md;
+  }
+
+  .input {
+    @apply w-full h-9 rounded-lg border border-line bg-surface-1 px-3 text-sm text-ink
+           placeholder:text-ink-faint focus:border-brand focus:outline-none
+           focus-visible:outline-none focus:ring-2 focus:ring-brand/25;
+  }
+  .select {
+    @apply input pr-8 appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2394a3b8'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 14px;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-ink-faint mb-1.5;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-semibold
+           leading-4 whitespace-nowrap;
+  }
+
+  .kv-label {
+    @apply text-2xs font-medium text-ink-faint;
+  }
+  .kv-value {
+    @apply text-xs font-medium text-ink;
+  }
+
+  .data-table {
+    @apply w-full text-xs border-collapse;
+  }
+  /* Embedded tables (CameraDetail's 380px box, upload/analysis panels) scroll
+     inside their own fixed-height box, where sticky top:0 is correct. */
+  .data-table thead th {
+    @apply sticky top-0 z-10 bg-surface-2 text-left text-xs font-semibold
+           text-ink-muted px-4 py-2.5 border-b border-line whitespace-nowrap;
+  }
+  /* Full-page tables (Find Vehicle, Vehicle Log, Cameras, Registry, ...):
+     keep the header STATIC, at the top of the table. Do NOT make these
+     sticky: these pages scroll inside nested containers (page scroller +
+     overflow-x table wrapper) and a sticky th gets pinned relative to the
+     wrong scrollport — observed as the header row floating in the middle
+     of the rows (Find Vehicle) and pinned over the nav bar (Vehicle Log),
+     in both the window-scroll and inner-scroll configurations. A static
+     thead is unconditionally at the top of its table. */
+  .data-table-page thead th {
+    position: static;
+  }
+  .data-table tbody td {
+    @apply px-4 py-3 border-b border-line/60 align-middle whitespace-nowrap;
+  }
+  .data-table tbody tr:hover {
+    @apply bg-surface-2;
+  }
+
+  .plate {
+    @apply font-mono font-bold tracking-wider;
+  }
+
+  /* Horizontal top-nav scroller: swipe/scroll without a visible bar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .link-btn {
+    @apply inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline;
+  }
+
+  .scanline {
+    background-image: repeating-linear-gradient(
+      0deg,
+      rgb(255 255 255 / 0.03) 0px,
+      rgb(255 255 255 / 0.03) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded bg-surface-3;
+  }
+}
+
+/* ---------------- Leaflet theming ---------------- */
+.leaflet-container {
+  background: rgb(var(--surface-0));
+  font-family: inherit;
+  outline: none;
+}
+.leaflet-bar,
+.leaflet-control-attribution,
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgb(var(--surface-1)) !important;
+  color: rgb(var(--ink)) !important;
+  border-color: rgb(var(--line)) !important;
+}
+.leaflet-bar a {
+  background: rgb(var(--surface-1)) !important;
+  color: rgb(var(--ink)) !important;
+  border-bottom-color: rgb(var(--line)) !important;
+}
+.leaflet-bar a:hover {
+  background: rgb(var(--surface-3)) !important;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 4px !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35) !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  width: auto !important;
+  min-width: 210px;
+}
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  opacity: 0.65;
+}
+.leaflet-marker-icon.trinetra-marker {
+  background: transparent;
+  border: 0;
+  /* New markers ease in — opacity only, Leaflet owns the transform. */
+  animation: trinetra-dot-in 0.25s ease both;
+}
+/* Menu cards rise in one after another on load. */
+.trinetra-card-in {
+  animation: trinetra-card-in 0.45s ease both;
+}
+@keyframes trinetra-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trinetra-card-in,
+  .trinetra-live-dot span {
+    animation: none;
+  }
+}
+@keyframes trinetra-dot-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Route-playback dot: solid core with an expanding ping ring. */
+.trinetra-playback-dot {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+.trinetra-playback-dot::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+.trinetra-playback-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #2563eb;
+  animation: trinetra-ping 1.2s ease-out infinite;
+}
+@keyframes trinetra-ping {
+  0% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+/* Dashboard → home view transition: the old page sinks away, home rises in. */
+::view-transition-old(root) {
+  animation: trinetra-page-out 0.25s ease both;
+}
+::view-transition-new(root) {
+  animation: trinetra-page-in 0.35s ease both;
+}
+@keyframes trinetra-page-out {
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+  }
+}
+@keyframes trinetra-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+/* ============================================================
+   TRINETRA AI — Motion system
+   Icon click feedback (pop + ripple), entrances, modal & nav FX.
+   ============================================================ */
+
+/* Every lucide icon eases its transforms (powers the hover lift + click pop). */
+.lucide {
+  transition: transform 80ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 80ms ease;
+}
+
+/* Playful hover lift + glow on icons inside interactive controls. */
+.btn:hover .lucide,
+button:hover .lucide,
+a:hover .lucide,
+[role='button']:hover .lucide {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+/* Primary / tint buttons get a coloured glow halo on hover. */
+.btn-primary:hover {
+  box-shadow: 0 8px 22px -6px rgb(var(--brand) / 0.6);
+}
+.btn-tint:hover {
+  box-shadow: 0 6px 18px -6px rgb(var(--brand) / 0.4);
+}
+
+/* One-shot "pop" added to an icon the moment it is clicked (useIconFx hook). */
+.icon-pop-on {
+  animation: trin-icon-pop 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes trin-icon-pop {
+  0%   { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 currentColor); }
+  20%  { transform: scale(0.68) rotate(-9deg); filter: drop-shadow(0 0 11px currentColor); }
+  52%  { transform: scale(1.3) rotate(8deg); filter: drop-shadow(0 0 13px currentColor); }
+  74%  { transform: scale(0.9) rotate(-3deg); filter: drop-shadow(0 0 6px currentColor); }
+  100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 currentColor); }
+}
+
+/* Material-style ripple spawned at the exact click point on compact controls. */
+.icon-ripple {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  opacity: 0.4;
+  pointer-events: none;
+  transform: scale(0);
+  animation: trin-ripple 300ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes trin-ripple {
+  0%   { transform: scale(0); opacity: 0.5; box-shadow: 0 0 0 0 currentColor; }
+  100% { transform: scale(17); opacity: 0; box-shadow: 0 0 0 16px transparent; }
+}
+
+/* Entrance animations */
+.enter-up {
+  animation: trin-enter-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes trin-enter-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: trin-fade-in 90ms ease-out both;
+}
+@keyframes trin-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Hero icon gently floats to draw the eye. */
+.float-soft {
+  animation: trin-float 1.8s ease-in-out infinite;
+}
+@keyframes trin-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* Modal / popover scale-in */
+.modal-pop {
+  animation: trin-modal-pop 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes trin-modal-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Staggered KPI strip entrance + one-time shine sweep */
+.kpi-stagger > * {
+  position: relative;
+  overflow: hidden;
+  animation: trin-enter-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.kpi-stagger > *::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.6) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: trin-shimmer 450ms ease-out 120ms 1 both;
+  pointer-events: none;
+}
+@keyframes trin-shimmer {
+  to { transform: translateX(130%); }
+}
+.kpi-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.kpi-stagger > *:nth-child(2) { animation-delay: 70ms; }
+.kpi-stagger > *:nth-child(3) { animation-delay: 140ms; }
+.kpi-stagger > *:nth-child(4) { animation-delay: 210ms; }
+.kpi-stagger > *:nth-child(5) { animation-delay: 280ms; }
+.kpi-stagger > *:nth-child(6) { animation-delay: 350ms; }
+
+/* Alert card: entrance + (for brand-new critical) attention pulse */
+.alert-enter-pulse {
+  animation:
+    trin-enter-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    trin-pulse-ring 1.2s 200ms infinite;
+}
+@keyframes trin-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgb(225 29 72 / 0.55); }
+  70%  { box-shadow: 0 0 0 13px rgb(225 29 72 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(225 29 72 / 0); }
+}
+
+/* Sidebar active item: sliding accent bar */
+.nav-accent {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 58%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: rgb(var(--brand));
+  transform: translateY(-50%) scaleY(0);
+  transform-origin: center;
+  transition: transform 110ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.nav-accent.is-active {
+  transform: translateY(-50%) scaleY(1);
+}
+
+/* Active nav icon glows + breathes so the current page is unmistakable. */
+a[aria-current='page'] .lucide {
+  filter: drop-shadow(0 0 5px rgb(var(--brand) / 0.9));
+  animation: trin-nav-icon 1.6s ease-in-out infinite;
+}
+@keyframes trin-nav-icon {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.16); }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .lucide { transition: none; filter: none; }
+  .icon-pop-on,
+  .icon-ripple,
+  .enter-up,
+  .fade-in,
+  .modal-pop,
+  .alert-enter-pulse,
+  .kpi-stagger > *,
+  .kpi-stagger > *::after,
+  a[aria-current='page'] .lucide,
+  .float-soft {
+    animation: none !important;
+  }
+  .nav-accent { transition: none; transform: translateY(-50%) scaleY(0); }
+  .nav-accent.is-active { transform: translateY(-50%) scaleY(1); }
+}
