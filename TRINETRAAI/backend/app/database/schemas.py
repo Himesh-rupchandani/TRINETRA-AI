@@ -131,6 +131,8 @@ class CameraStreamTicket(TRINETRASchema):
     # Same-origin MJPEG view of the same camera with real-time OpenCV vehicle
     # detection (green boxes). None when the source cannot be processed.
     detection_url: Optional[str] = None
+    # Allows a player to keep one MJPEG connection while toggling AI safely.
+    detection_control: bool = False
 
 
 class CameraStreamInfo(TRINETRASchema):
@@ -283,6 +285,9 @@ class VehicleEventResponse(TRINETRASchema):
     longitude: Optional[float] = None
     evidence_ref: Optional[str] = None
     watchlist_match: bool
+    plate_status: Optional[str] = None
+    vehicle_confidence: Optional[float] = None
+    bbox: Optional[List[float]] = None
     # Manually-uploaded CCTV video provenance (None for live-camera sightings).
     video_file: Optional[str] = None
     video_offset_sec: Optional[float] = None
@@ -391,6 +396,10 @@ class HealthResponse(TRINETRASchema):
     demo_mode: bool
     timestamp: datetime
     components: Optional[Dict[str, Any]] = None
+    vision: Optional[Dict[str, Any]] = None
+    camera_registry: Optional[Dict[str, Any]] = None
+    ocr: Optional[Dict[str, Any]] = None
+    resource_budget: Optional[Dict[str, Any]] = None
 
 
 # --- Camera stream ticket ----------------------------------------------------

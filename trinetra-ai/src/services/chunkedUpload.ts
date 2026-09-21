@@ -1,3 +1,4 @@
+import { apiAssetUrl } from '@/services/api';
 /**
  * Chunked upload client — splits a File into 3 MB chunks and posts them one at
  * a time to `/api/uploads/chunks/*`. The chunks are intentionally small enough
@@ -72,7 +73,7 @@ async function sendChunk(
   form.append('chunk_number', String(chunkIndex));
   form.append('chunk', blob, `chunk-${chunkIndex}`);
 
-  const res = await fetch(`/api/uploads/chunks/${encodeURIComponent(uploadId)}`, {
+  const res = await fetch(apiAssetUrl(`/uploads/chunks/${encodeURIComponent(uploadId)}`), {
     method: 'POST',
     body: form,
     signal,
@@ -137,7 +138,7 @@ export async function uploadChunked<T>(
   } catch (err) {
     // Best-effort abort — clean the temp file on the server.
     try {
-      await fetch(`/api/uploads/chunks/${encodeURIComponent(init.upload_id)}/abort`, {
+      await fetch(apiAssetUrl(`/uploads/chunks/${encodeURIComponent(init.upload_id)}/abort`), {
         method: 'POST',
       });
     } catch {

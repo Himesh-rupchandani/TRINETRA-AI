@@ -47,6 +47,14 @@ Sentinel CCTV → Frame (PTS) → Vehicle Detection (YOLO11) → Tracking
 → Frontend → Vehicle Search → GIS Route
 ```
 
+## Live number plates → notification → Vehicle Log
+
+Live players now sample up to **3 vehicles per frame** for ANPR without waiting
+for inference to play video. Agreeing plate reads produce camera overlays,
+in-app notifications and auto-updating camera history / Vehicle Log entries.
+Duplicate sightings are suppressed and uncertain reads are marked for review.
+See [Live ANPR setup, performance limits and verification](docs/LIVE_ANPR.md).
+
 ## Quick start — Backend + Frontend Only (recommended for local dev)
 
 No cv-engine, no heavy ML models needed. 2 terminals.
@@ -304,3 +312,11 @@ cd trinetra-ai && npm test               # 48 frontend contract tests (plain nod
 The backend suite also drives the frontend suite (`tests/test_frontend_js_suite.py`), so a
 single `pytest` run covers all three layers — it is skipped, not failed, when `node` or
 `trinetra-ai/node_modules` are unavailable.
+
+### Camera traffic observations
+
+Motion-aware tracking, configurable per-camera counting lines/zones, and current-session class/crossing counters now share the live ANPR detector. OCR/photo previews remain bounded to 3 vehicles by default. These are **sampled observation counts, not total traffic or violation alerts**. See [Traffic counting setup and limits](docs/TRAFFIC_COUNTING.md).
+
+### Existing Render backend + Vercel frontend
+
+The full live-CV runtime must run on the persistent backend, not the Vercel data function. See [Render setup and verification](docs/RENDER_BACKEND.md) for the existing-service build/start commands, Docker option, public API URL routing, storage and safe diagnostics.

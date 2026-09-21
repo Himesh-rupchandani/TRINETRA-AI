@@ -29,6 +29,7 @@ from typing import Dict, List, Optional
 from ..core.vision import cv2, np
 
 from ..core.config import settings
+from ..core.resource_budget import inference_budget
 from ..core.logging_config import logger
 
 # COCO class id -> label, restricted to road vehicles.
@@ -59,11 +60,12 @@ class VehicleDetectionService:
         self._frame_counter: Dict[str, int] = {}
         self._last_detections: Dict[str, List[VehicleDetection]] = {}
         self.last_inference_ms: Optional[float] = None
+        self.last_error: Optional[str] = None
 
     # ------------------------------------------------------------------ model
     @property
     def enabled(self) -> bool:
-        return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", True)) and self._disabled_reason is None
+        return bool(getattr(settings, "VEHICLE_DETECTION_ENABLED", True)) and self._disabled_reason is None and inference_budget()["allowed"]
 
     def _resolve_model_path(self) -> str:
         """Find the weights: configured path (relative to backend root), the
@@ -88,12 +90,18 @@ class VehicleDetectionService:
         return os.path.basename(configured) or "yolo11s.pt"
 
     def _ensure_model(self):
+        budget = inference_budget()
+        if not budget["allowed"]:
+            self.last_error = budget["reason"]
+            return None
         if self._model is not None or self._disabled_reason is not None:
             return self._model
         with self._model_lock:
             if self._model is not None or self._disabled_reason is not None:
                 return self._model
             try:
+                import torch
+                torch.set_num_threads(settings.CV_CPU_THREADS)
                 from ultralytics import YOLO  # lazy: heavy import
 
                 path = self._resolve_model_path()
@@ -106,6 +114,11 @@ class VehicleDetectionService:
                     np.zeros((imgsz, imgsz, 3), dtype=np.uint8),
                     verbose=False, imgsz=imgsz, device="cpu",
                 )
+                # Ultralytics creates its predictor/thread pool at warm-up.
+                # Limit it afterwards so inference cannot monopolise a small
+                # machine while several cameras are decoding/streaming.
+                import torch
+                torch.set_num_threads(settings.CV_CPU_THREADS)
                 self._model = model
                 logger.info(f"[DETECTION] Model ready in {time.perf_counter() - t0:.1f}s")
             except Exception as exc:  # missing ultralytics/torch, no weights, no network…
@@ -138,8 +151,10 @@ class VehicleDetectionService:
                     classes=list(VEHICLE_CLASS_IDS.keys()),
                 )
         except Exception as exc:
+            self.last_error = "Vehicle inference failed."
             logger.error(f"[DETECTION] Inference failed: {exc}")
             return []
+        self.last_error = None
         self.last_inference_ms = (time.perf_counter() - t0) * 1000.0
 
         detections: List[VehicleDetection] = []

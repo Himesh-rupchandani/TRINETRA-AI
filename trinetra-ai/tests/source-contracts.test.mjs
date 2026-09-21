@@ -53,7 +53,7 @@ test('isMjpeg is part of the dependency array', () => {
   includes(player, 'setMjpegSrc(isMjpeg ? (ticket?.streamUrl || `/cvfeed/${camera.id}`) : null);');
   includes(
     player,
-    '}, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id, isMjpeg]);',
+    '}, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, managedMjpeg, legacyDetectionActive, camera.id, isMjpeg, viewerId]);',
     'a stale dependency array leaves the player black after an MJPEG fallback',
   );
   excludes(player, "setMjpegSrc(ticket?.streamType === 'MJPEG' ? `/cvfeed/${camera.id}` : null);\n  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, detectionActive, camera.id]);");
@@ -213,8 +213,10 @@ test('the player schedules a fresh ticket when a transport dead-ends', () => {
   includes(playerSrc, 'void requestStream()', 'the scheduled action re-requests the ticket');
 });
 
-test('a re-fetched ticket restarts the ladder from WebRTC', () => {
-  includes(playerSrc, "setTransport('whep');\n      setWanted(true);", 'every fresh ticket must re-probe WebRTC before stepping down');
+test('a fresh ticket prefers WebRTC without overriding a required HLS fallback', () => {
+  includes(playerSrc, "if ((!rtcOk || !decodable) && hls)");
+  includes(playerSrc, "setTransport('hls');");
+  includes(playerSrc, "} else {\n        setTransport('whep');\n      }\n      setWanted(true);");
 });
 
 test('the reconnecting UI covers both the hooks and the ticket scheduler', () => {

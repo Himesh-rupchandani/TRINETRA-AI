@@ -24,7 +24,8 @@ import type {
   VehicleRoute,
   WatchlistRecord,
 } from '@/types';
-import { get } from './api';
+import { get, apiAssetUrl, backendUrl } from './api';
+import { evidencePaths } from '@/lib/evidence';
 import { haversineKm, minutesBetween } from '@/lib/utils';
 
 /* ------------------------------ raw DTO types ------------------------------ */
@@ -58,6 +59,7 @@ export interface VehicleEventDto {
   plate_raw?: string | null;
   plate_number?: string | null;
   plate_confidence?: number | null;
+  plate_status?: VehicleEvent['plateStatus'] | null;
   vehicle_class?: string | null;
   event_time: string;
   latitude?: number | null;
@@ -168,6 +170,7 @@ export interface StreamTicketDto {
   playable?: boolean;
   reason?: string | null;
   detection_url?: string | null;
+  detection_control?: boolean;
 }
 
 /* --------------------------- camera directory ------------------------------ */
@@ -185,6 +188,10 @@ export interface CameraMeta {
 }
 
 let directoryPromise: Promise<Map<string, CameraMeta>> | null = null;
+
+export function invalidateCameraDirectory(): void {
+  directoryPromise = null;
+}
 
 async function loadDirectory(): Promise<Map<string, CameraMeta>> {
   const list = await get<CameraItemDto[] | { data?: CameraItemDto[] }>('/cameras').then(
@@ -311,14 +318,6 @@ export function toCamera(dto: CameraItemDto): Camera {
   };
 }
 
-function encodeEvidenceRef(ref: string): string {
-  // Encode each path segment separately to preserve slashes but handle spaces/special chars
-  return ref
-    .split('/')
-    .map((seg) => encodeURIComponent(seg))
-    .join('/');
-}
-
 export function toVehicleEvent(
   dto: VehicleEventDto,
   dir?: Map<string, CameraMeta> | null,
@@ -333,23 +332,13 @@ export function toVehicleEvent(
   const lat = dto.latitude ?? meta?.latitude ?? 0;
   const lng = dto.longitude ?? meta?.longitude ?? 0;
 
-  let evidence = undefined;
-  if (evidenceRef) {
-    const safeRef = evidenceRef.trim();
-    // Prevent path traversal or empty refs from breaking image URLs
-    if (safeRef && !safeRef.startsWith('/') && !safeRef.includes('..')) {
-      const encoded = encodeEvidenceRef(safeRef);
-      // For uploaded videos (uploads/) and analysis (analysis/), only the main crop exists
-      // For live cameras, try to also provide plate crop if it likely exists
-      const isUpload = safeRef.startsWith('uploads/') || safeRef.startsWith('analysis/');
-      evidence = {
-        ref: safeRef,
-        frameUrl: `/api/evidence/${encoded}`,
-        plateCropUrl: !isUpload && plate ? `/api/evidence/${encoded.replace(/\.jpg$/i, '_plate.jpg')}` : undefined,
-        capturedAt: dto.event_time,
-      };
-    }
-  }
+  const paths = evidencePaths(evidenceRef, Boolean(plate));
+  const evidence = paths ? {
+    ref: evidenceRef!.trim(),
+    frameUrl: apiAssetUrl(paths.framePath),
+    plateCropUrl: paths.platePath ? apiAssetUrl(paths.platePath) : undefined,
+    capturedAt: dto.event_time,
+  } : undefined;
 
   return {
     id: toId(dto.id),
@@ -358,6 +347,7 @@ export function toVehicleEvent(
     vehicleId: dto.vehicle_track_id ?? undefined,
     plate: plate ?? '',
     plateConfidence: pct(dto.plate_confidence),
+    plateStatus: dto.plate_status ?? undefined,
     timestamp: dto.event_time,
     latitude: lat,
     longitude: lng,
@@ -509,10 +499,11 @@ export function toStreamTicket(dto: StreamTicketDto): CameraStreamTicket {
   return {
     cameraId: dto.camera_id.toLowerCase(),
     streamType: dto.stream_type as CameraStreamTicket['streamType'],
-    streamUrl: dto.stream_url,
+    streamUrl: backendUrl(dto.stream_url),
     expiresAt: dto.expires_at,
     poster: undefined, // resolved by the player (synthetic/registry still)
-    detectionUrl: dto.detection_url ?? undefined,
+    detectionUrl: dto.detection_url ? backendUrl(dto.detection_url) : undefined,
+    detectionControl: dto.detection_control === true,
   };
 }
 

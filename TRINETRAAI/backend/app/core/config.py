@@ -1,9 +1,9 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import List, Union
+from typing import List, Union, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # app/core/config.py -> parents[2] == TRINETRAAI/backend. Mirrors the anchor
@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     YOLO_MODEL_PATH: str = "models/yolo11s.pt"
     CONFIDENCE_THRESHOLD: float = 0.45
     PROCESS_EVERY_N_FRAMES: int = 3
+    # Bound native inference thread pools too, leaving CPU for video decoding.
+    CV_CPU_THREADS: int = Field(2, ge=1, le=16)
+    CV_MEMORY_GUARD_ENABLED: bool = True
+    # Admission policy for this combined Torch + detector + OCR stack, not a
+    # universal model requirement or throughput guarantee.
+    CV_MIN_MEMORY_MB: int = Field(1024, ge=0, le=65536)
+    CV_MEMORY_RESERVE_MB: int = Field(160, ge=32, le=4096)
     OCR_ENABLED: bool = True
     OCR_MIN_CONFIDENCE: float = 0.60
     # Above this the plate is trusted (HIGH); between OCR_MIN_CONFIDENCE and
@@ -90,6 +97,24 @@ class Settings(BaseSettings):
     # matching the reference look where the whole vehicle reads as green.
     # 0.0 = outline only (old look); 1.0 = solid green.
     DETECTION_BOX_FILL_ALPHA: float = 0.55
+
+    # Live ANPR is independent of playback: one latest-frame mailbox per camera,
+    # a bounded worker pool, and a configurable number of vehicles OCR'd in a
+    # sampled frame. Ten covers busy scenes while remaining bounded for smooth
+    # playback; increase only when the host has sufficient memory.
+    LIVE_ANPR_ENABLED: bool = True
+    # Optional unattended/resident OCR is separate from a viewer opting in.
+    # Default OFF: merely starting a decoder must not load the ML models.
+    LIVE_ANPR_RESIDENT_ENABLED: bool = False
+    LIVE_ANPR_MAX_VEHICLES: int = Field(10, ge=1, le=32)
+    LIVE_ANPR_TRACKER: Literal["motion", "iou"] = "motion"
+    LIVE_ANPR_MAX_TRACKED_VEHICLES: int = Field(32, ge=3, le=128)
+    LIVE_ANPR_SAMPLE_SECONDS: float = Field(1.0, ge=0.25, le=30)
+    LIVE_ANPR_WORKERS: int = Field(1, ge=1, le=4)
+    LIVE_ANPR_MAX_CAMERAS: int = Field(32, ge=1, le=128)
+    LIVE_ANPR_DEDUP_SECONDS: int = Field(60, ge=1, le=3600)
+    LIVE_ANPR_OVERLAY_TTL_SECONDS: float = Field(3.0, ge=0.5, le=10)
+    LIVE_ANPR_IDLE_SECONDS: int = Field(60, ge=10, le=600)
 
     # ---- Number-plate detection (new pipeline stage) ----
     # A fine-tuned plate detector produced by training/train_plate_detector.py.
@@ -114,6 +139,9 @@ class Settings(BaseSettings):
 
     # Demo Mode
     DEMO_MODE: bool = True
+    # Synthetic scheduled alerts require a separate, explicit opt-in. Never
+    # generate invented sightings merely because real cameras are unavailable.
+    DEMO_ALERTS_ENABLED: bool = False
     # Start stream ingestion for every registered camera at boot? Off by
     # default: a control room opens the streams it is actually looking at
     # (POST /cameras/{id}/start). Set true to ingest the whole grid.
@@ -187,6 +215,9 @@ class Settings(BaseSettings):
     # instance can only ever be demo data — nothing of the operator's is at
     # risk. A populated registry is never rewritten.
     AUTO_SEED_DEMO: bool = False
+    # Camera directory only: no example events, alerts or watchlist entries.
+    # The Render image enables this for the existing 30-camera Sentinel grid.
+    AUTO_REGISTER_SENTINEL_GRID: bool = False
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

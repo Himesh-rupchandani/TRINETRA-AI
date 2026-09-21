@@ -15,6 +15,7 @@ Thread-safe singleton; the OCR model is loaded lazily, once per process.
 from __future__ import annotations
 
 import threading
+import math
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -23,6 +24,7 @@ from typing import List, Optional
 from ..core.vision import cv2, np
 
 from ..core.config import settings
+from ..core.resource_budget import inference_budget
 from ..core.logging_config import logger
 from ..utils.plate_normalizer import INDIAN_PLATE_RE, normalize_plate
 
@@ -77,14 +79,14 @@ def preprocess_for_ocr(crop: np.ndarray, target_width: int = 320) -> np.ndarray:
     gray = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
-def upscale_plate(crop: np.ndarray, target_height: int = 64, max_scale: float = 6.0) -> np.ndarray:
+def upscale_plate(crop: np.ndarray, target_height: int = 128, max_scale: float = 6.0) -> np.ndarray:
     """
-    Super-resolution for small/far plates.
+    Bounded interpolation/sharpening for small/far OCR crops (not super-resolution).
 
     CCTV plates are often 12-25 px tall — far below what any OCR recogniser can
     read. We upscale to ``target_height`` with Lanczos (best for text edges)
-    and follow with a mild unsharp mask, which recovers stroke separation
-    without amplifying sensor noise the way a plain bicubic zoom does.
+    and follow with a mild unsharp mask. This can help the recognizer, but it
+    cannot recover characters/detail that the camera did not capture.
     """
     if crop is None or crop.size == 0:
         return crop
@@ -94,12 +96,12 @@ def upscale_plate(crop: np.ndarray, target_height: int = 64, max_scale: float = 
     if h >= target_height:
         return crop
     scale = min(max_scale, target_height / float(h))
-    out = cv2.resize(crop, (max(8, int(w * scale)), max(8, int(h * scale))),
+    out = cv2.resize(crop, (max(8, round(w * scale)), max(8, round(h * scale))),
                      interpolation=cv2.INTER_LANCZOS4)
     blurred = cv2.GaussianBlur(out, (0, 0), 1.2)
     return cv2.addWeighted(out, 1.6, blurred, -0.6, 0)
 
-def preprocess_variants(crop: np.ndarray) -> List[np.ndarray]:
+def preprocess_variants(crop: np.ndarray, target_height: int = 128) -> List[np.ndarray]:
     """
     Several preprocessing variants of one plate crop, best-effort first.
 
@@ -111,7 +113,7 @@ def preprocess_variants(crop: np.ndarray) -> List[np.ndarray]:
     """
     if crop is None or crop.size == 0:
         return []
-    base = upscale_plate(crop)
+    base = upscale_plate(crop, target_height=target_height)
     variants: List[np.ndarray] = []
     try:
         gray = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
@@ -155,6 +157,19 @@ class OcrService:
         self._engine = None
         self._engine_name: Optional[str] = None
         self._attempted = False
+        self._initializing = False
+        self._read_context = threading.local()
+
+    @property
+    def last_read_error(self) -> Optional[str]:
+        return getattr(self._read_context, "error", None)
+
+    def runtime_status(self) -> dict:
+        """Cached state only: a health poll must never initialize a model."""
+        enabled = bool(settings.OCR_ENABLED)
+        return dict(enabled=enabled, loaded=self._engine is not None, engine=self._engine_name,
+                    state="DISABLED" if not enabled else "READY" if self._engine is not None else
+                    "INITIALIZING" if self._initializing else "UNAVAILABLE" if self._attempted else "NOT_STARTED")
 
     @property
     def engine_name(self) -> Optional[str]:
@@ -163,12 +178,14 @@ class OcrService:
 
     @property
     def available(self) -> bool:
-        if not bool(getattr(settings, "OCR_ENABLED", True)):
+        if not bool(getattr(settings, "OCR_ENABLED", True)) or not inference_budget()["allowed"]:
             return False
         self._ensure_engine()
         return self._engine is not None
 
     def _ensure_engine(self):
+        if not inference_budget()["allowed"]:
+            return None
         # NOTE: ``_attempted`` is flipped only *after* the engine has finished
         # loading, and always inside the lock. Setting it first would let a
         # second thread (the analysis workers run several videos in parallel)
@@ -180,13 +197,22 @@ class OcrService:
         with self._lock:
             if self._attempted:
                 return self._engine
+            self._initializing = True
             try:
                 # RapidOCR first: models ship inside the wheel (fully offline).
                 try:
                     from rapidocr_onnxruntime import RapidOCR
 
                     logger.info("[ANPR] Initializing RapidOCR (bundled ONNX models, offline)")
-                    self._engine = RapidOCR()
+                    self._engine = RapidOCR(
+                        intra_op_num_threads=settings.CV_CPU_THREADS,
+                        inter_op_num_threads=1,
+                        # Inputs here are already cropped/upscaled plates. The
+                        # engine's default MIN side of 736 enlarged each tiny
+                        # crop into a multi-megapixel image, stalling live ANPR.
+                        det_limit_type="max",
+                        det_limit_side_len=640,
+                    )
                     self._engine_name = "rapidocr"
                     return self._engine
                 except Exception as exc:
@@ -208,10 +234,12 @@ class OcrService:
                 )
             finally:
                 self._attempted = True
+                self._initializing = False
         return self._engine
 
     def _read_lines(self, image: np.ndarray) -> List[tuple]:
         """Raw (text, confidence) lines. Never raises."""
+        self._read_context.error = None
         engine = self._ensure_engine()
         if engine is None or image is None or getattr(image, "size", 0) == 0:
             return []
@@ -224,22 +252,39 @@ class OcrService:
                         _box, text, conf = item
                     except Exception:
                         continue
-                    if text:
-                        lines.append((str(text).strip(), float(conf)))
+                    try:
+                        score = float(conf)
+                    except (TypeError, ValueError):
+                        continue
+                    if text and math.isfinite(score) and 0 <= score <= 1:
+                        lines.append((str(text).strip(), score))
                 return lines
             if self._engine_name == "easyocr":
-                results = engine.readtext(image, detail=1, paragraph=False)
+                # The reference ANPR project uses an alphanumeric allowlist. Keep it
+                # here as a cheap false-positive filter for EasyOCR; RapidOCR
+                # receives the same filtering later through candidate_from_text.
+                results = engine.readtext(
+                    image,
+                    detail=1,
+                    paragraph=False,
+                    allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+                )
                 lines = []
                 for item in results or []:
                     try:
                         _box, text, conf = item
                     except Exception:
                         continue
-                    if text:
-                        lines.append((str(text).strip(), float(conf)))
+                    try:
+                        score = float(conf)
+                    except (TypeError, ValueError):
+                        continue
+                    if text and math.isfinite(score) and 0 <= score <= 1:
+                        lines.append((str(text).strip(), score))
                 return lines
         except Exception as exc:
-            logger.error(f"[ANPR] OCR read failed: {exc}")
+            self._read_context.error = type(exc).__name__
+            logger.error("[ANPR] OCR inference failed (%s)", type(exc).__name__)
         return []
 
     def read_lines(self, image: np.ndarray) -> List[tuple]:

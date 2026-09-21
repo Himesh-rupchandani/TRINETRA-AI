@@ -1,3 +1,4 @@
+import { apiAssetUrl } from '@/services/api';
 import { useAsync } from '@/hooks/useAsync';
 import { Server, Cpu, BarChart3 } from 'lucide-react';
 
@@ -28,7 +29,7 @@ const EMPTY: BandwidthData = {
 
 export function BandwidthEngine() {
   const data = useAsync(async () => {
-    const res = await fetch('/api/stats/bandwidth');
+    const res = await fetch(apiAssetUrl('/stats/bandwidth'));
     if (!res.ok) throw new Error(`Bandwidth engine responded ${res.status}`);
     const json = (await res.json()) as Partial<BandwidthData>;
     return {

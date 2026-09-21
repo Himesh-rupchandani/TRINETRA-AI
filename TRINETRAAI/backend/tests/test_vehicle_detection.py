@@ -145,12 +145,19 @@ class TestAnnotate:
 class TestDetectPostProcessing:
     @staticmethod
     def _fake_model(boxes, confs, clss):
-        import torch
+        # Test the .cpu().numpy() contract without importing the optional model runtime.
+        class Tensor:
+            def __init__(self, values):
+                self.values = np.asarray(values, dtype=np.float32)
+
+            def cpu(self):
+                return self
+
+            def numpy(self):
+                return self.values
 
         boxes_ns = SimpleNamespace(
-            xyxy=torch.tensor(boxes, dtype=torch.float32),
-            conf=torch.tensor(confs, dtype=torch.float32),
-            cls=torch.tensor(clss, dtype=torch.float32),
+            xyxy=Tensor(boxes), conf=Tensor(confs), cls=Tensor(clss),
         )
         return SimpleNamespace(predict=lambda *a, **k: [SimpleNamespace(boxes=boxes_ns)])
 
@@ -294,6 +301,21 @@ class TestStreamTicketDetectionUrl:
             db.commit()
             db.close()
 
+    def test_authorized_generic_rtsp_uses_backend_not_sentinel_gateway(self, client):
+        with client.session_factory() as db:
+            db.add(Camera(camera_id="GENERIC", name="Authorized camera", stream_type="rtsp",
+                          stream_url="rtsp://private.invalid/authorized", status="ONLINE"))
+            db.commit()
+            try:
+                ticket = client.get("/api/cameras/generic/stream").json()
+                assert ticket["stream_type"] == "MJPEG"
+                assert ticket["detection_control"] is True
+                assert ticket["stream_url"] == "/api/cameras/generic/live"
+                assert "rtsp://" not in str(ticket)
+            finally:
+                db.query(Camera).filter(Camera.camera_id == "GENERIC").delete()
+                db.commit()
+
     def test_ticket_unknown_camera_404(self, client):
         assert client.get("/api/cameras/nope-does-not-exist/stream").status_code == 404
 
@@ -335,7 +357,16 @@ class TestLiveDetectEndpoint:
 
         video = _make_tmp_video(tmp_path / "feed3.mp4", frames=30)
         cam_id = "CAMDETECTLIVE"
+        from app.services import live_anpr_service as live_anpr
+        # The pipeline is now asynchronous and lifespan-owned. Isolate its
+        # lifecycle from other TestClients and never warm a real OCR model in
+        # this drawing/streaming contract test.
+        pipeline = live_anpr.LiveAnprService()
+        monkeypatch.setattr(live_anpr, "live_anpr_service", pipeline)
+        monkeypatch.setattr(type(live_anpr.ocr_service), "available", property(lambda self: False))
         monkeypatch.setattr(vehicle_detection_service, "detect", lambda frame: _dets())
+        monkeypatch.setattr(vehicle_detection_service, "_disabled_reason", None)
+        monkeypatch.setattr(vehicle_detection_service, "last_error", None)
         try:
             camera_manager.add_camera(
                 camera_id=cam_id, source=str(video), source_type="file", auto_start=False
@@ -364,6 +395,7 @@ class TestLiveDetectEndpoint:
         finally:
             camera_manager.remove_camera(cam_id)
             vehicle_detection_service.forget(cam_id.lower())
+            pipeline.stop()
 
 
 # ============================================================================

@@ -8,13 +8,16 @@ import { ingestService } from '@/services/ingestService';
 import { cn } from '@/lib/utils';
 
 export default function Ingest() {
-  const { cameras } = useCameras();
+  const { cameras, refresh: refreshCameras } = useCameras();
   const [selectedId, setSelectedId] = useState<string>('cam04');
   const [streams, setStreams] = useState<any>(null);
   const [health, setHealth] = useState<any>(null);
   const [catalogue, setCatalogue] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [registryBusy, setRegistryBusy] = useState(false);
+  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const selectedCamera = cameras.find((c) => c.id === selectedId) ?? cameras[0] ?? null;
 
@@ -27,18 +30,34 @@ export default function Ingest() {
   useEffect(() => {
     if (!selectedId) return;
     setLoading(true);
+    let cancelled = false;
     Promise.all([
       ingestService.streams(selectedId).catch(() => null),
       ingestService.health().catch(() => null),
       ingestService.catalogue(false).catch(() => null),
     ])
       .then(([s, h, cat]) => {
+        if (cancelled) return;
         setStreams(s);
         setHealth(h);
         setCatalogue(cat?.raw ?? null);
       })
-      .finally(() => setLoading(false));
-  }, [selectedId]);
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedId, refreshTick]);
+
+  const updateRegistry = async (restore: boolean) => {
+    if (restore && !window.confirm('Restore missing CAM01–CAM30 camera entries? Existing settings, saved sightings and alerts will not be changed. This does not verify or start every feed.')) return;
+    setRegistryBusy(true); setNotice(null);
+    try {
+      const result = restore ? await ingestService.restoreCameraList() : await ingestService.syncCatalogue();
+      setNotice({ ok: result.status === 'success', message: result.message ?? (result.status === 'success' ? 'Camera list updated.' : 'Catalogue could not be synced; existing camera list was kept.') });
+      if (result.status === 'success') refreshCameras();
+      setRefreshTick(v => v+1);
+    } catch (error) {
+      setNotice({ ok: false, message: error instanceof Error ? error.message : 'Camera-list update failed.' });
+    } finally { setRegistryBusy(false); }
+  };
 
   const copy = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -53,21 +72,20 @@ export default function Ingest() {
         title="Unified Ingest API — All 4 Sentinel Streams"
         icon={ListTree}
         tone="blue"
-        subtitle="RTSP AI • WHEP Browser • HLS Mobile • Catalogue — auto-login, no manual credentials"
+        subtitle="RTSP AI • WHEP Browser • HLS Mobile • Camera directory — credentials stay server-side"
         actions={
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => {
-              setLoading(true);
-              ingestService.catalogue(true).then(() => window.location.reload());
-            }}
-          >
-            <RefreshCcw size={12} /> Sync Catalogue
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-ghost" disabled={registryBusy} onClick={() => void updateRegistry(false)}>
+              <RefreshCcw size={12} /> Sync Catalogue
+            </button>
+            <button type="button" className="btn-ghost" disabled={registryBusy} onClick={() => void updateRegistry(true)}>
+              Restore 30-camera list
+            </button>
+          </div>
         }
       />
 
+      {notice && <p role="status" className={cn('mx-4 mt-3 rounded border p-3 text-xs', notice.ok ? 'border-online/40 text-online' : 'border-degraded/40 text-degraded')}>{notice.message}</p>}
       <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-12">
         {/* Left: Camera selector + live player */}
         <div className="lg:col-span-5 flex flex-col gap-4">
@@ -98,7 +116,7 @@ export default function Ingest() {
               title={`Live Preview — ${selectedCamera.name}`}
               icon={Play}
               actions={
-                <span className="chip border-online/30 bg-online/10 text-online text-2xs">AUTO-LOGIN • LIVE</span>
+                <span className="chip border-online/30 bg-online/10 text-online text-2xs">PLAYBACK PREVIEW</span>
               }
             >
               <CameraPlayer camera={selectedCamera} autoRequest />

@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import { config } from '@/lib/config';
+import { apiUrl, backendRootUrl } from '@/lib/backendUrls';
 import { backendMissingMessage, isSpaFallbackBody } from '@/lib/backendStatus';
 
 /**
@@ -94,8 +95,9 @@ http.interceptors.response.use(
  */
 function assertJsonBody(url: string, data: unknown): void {
   if (!isSpaFallbackBody(data)) return;
-  const origin =
-    typeof window !== 'undefined' && window.location ? window.location.origin : config.apiBaseUrl;
+  const origin = /^https?:\/\//i.test(config.apiBaseUrl)
+    ? new URL(config.apiBaseUrl).origin
+    : typeof window !== 'undefined' && window.location ? window.location.origin : config.apiBaseUrl;
   throw new ApiError(`${config.apiBaseUrl}${url} — ${backendMissingMessage(origin, url, 200)}`, 200);
 }
 
@@ -111,8 +113,24 @@ export async function post<T>(url: string, body?: unknown, cfg?: AxiosRequestCon
   return res.data;
 }
 
+export async function put<T>(url: string, body?: unknown, cfg?: AxiosRequestConfig): Promise<T> {
+  const res = await http.put<T>(url, body, cfg);
+  assertJsonBody(url, res.data);
+  return res.data;
+}
+
 /** True when the app is running against synthetic data. */
 export const isMockMode = config.useMocks;
+
+/** Browser asset endpoint; use the same API origin/prefix as JSON requests. */
+export function apiAssetUrl(path: string, baseUrl = config.apiBaseUrl): string {
+  return apiUrl(path, baseUrl);
+}
+
+/** Resolve server-issued root paths against the configured backend origin. */
+export function backendUrl(path: string, apiBase = config.apiBaseUrl): string {
+  return backendRootUrl(path, apiBase);
+}
 
 /** Absolute URL for a realtime endpoint, honouring the configured base URL. */
 export function realtimeUrl(path: string, protocol: 'http' | 'ws' = 'http'): string {

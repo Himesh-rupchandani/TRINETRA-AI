@@ -85,6 +85,15 @@ class Camera(Base):
     )
 
 
+class CameraTrafficConfig(Base):
+    """Persisted per-camera normalized counting geometry (not traffic totals)."""
+    __tablename__ = "camera_traffic_configs"
+    camera_id = Column(String(50), primary_key=True)
+    config_json = Column(Text, nullable=False)
+    revision = Column(String(32), nullable=False)
+    updated_at = Column(UTCDateTime(), default=get_utc_now, nullable=False)
+
+
 class Detection(Base):
     __tablename__ = "detections"
 

@@ -23,7 +23,10 @@ from ..core.config import settings
 from ..core.logging_config import logger
 from ..database.database import get_db
 from ..database.models import Camera
-from ..services.sentinel_catalogue_service import sync_sentinel_catalogue
+from ..database.camera_directory import restore_sentinel_directory
+from ..core.vision import vision_available
+from ..camera.manager import camera_manager
+from ..services.sentinel_catalogue_service import sync_sentinel_catalogue, fetch_catalogue
 from ..services.sentinel_stream_service import (
     get_whep_path,
     get_whep_gateway_url,
@@ -125,8 +128,8 @@ def get_catalogue(
         try:
             result = sync_sentinel_catalogue(db)
             return {
-                "source": "sentinel",
-                "synced": True,
+                "source": "sentinel" if result["status"] == "success" else "database",
+                "synced": result["status"] == "success",
                 "catalogue_url": settings.SENTINEL_CATALOGUE_URL,
                 **result,
             }
@@ -166,6 +169,27 @@ def get_catalogue(
 )
 def sync_catalogue_endpoint(db: Session = Depends(get_db)):
     result = sync_sentinel_catalogue(db)
+    return result
+
+
+@router.post("/restore-camera-list", summary="Restore missing entries from the bundled 30-camera directory")
+def restore_camera_list(db: Session = Depends(get_db)):
+    """Metadata only. Never overwrites an existing camera or inserts demo events."""
+    result = restore_sentinel_directory(db)
+    db.commit()
+    runtime_warnings = []
+    if vision_available():
+        for camera_id in result.get("added_ids", []):
+            try:
+                camera = db.query(Camera).filter(Camera.camera_id == camera_id).first()
+                if camera:
+                    camera_manager.add_camera(camera_id=camera.camera_id, source=camera.stream_url,
+                                              source_type=camera.stream_type, auto_start=False)
+            except Exception:
+                runtime_warnings.append(camera_id)
+    if runtime_warnings:
+        result["runtime_registration_warnings"] = runtime_warnings
+        result["message"] += " Some runtime handles need a backend restart; camera entries are saved."
     return result
 
 
@@ -312,19 +336,16 @@ def get_hls_streams(camera_id: str, db: Session = Depends(get_db)):
     description="Checks if Sentinel credentials are configured and if catalogue is reachable.",
 )
 def ingest_health(db: Session = Depends(get_db)):
-    import httpx
-
     catalogue_ok = False
     catalogue_error = None
     cameras_count = db.query(Camera).count()
     try:
-        with httpx.Client(timeout=3.0) as client:
-            r = client.get(settings.SENTINEL_CATALOGUE_URL)
-            catalogue_ok = r.status_code == 200
-            if not catalogue_ok:
-                catalogue_error = f"HTTP {r.status_code}"
-    except Exception as e:
-        catalogue_error = str(e)
+        fetch_catalogue(settings.SENTINEL_CATALOGUE_URL)
+        catalogue_ok = True
+    except ValueError as exc:
+        catalogue_error = str(exc)
+    except Exception as exc:
+        catalogue_error = f"Catalogue request failed ({type(exc).__name__})."
 
     return {
         "credentials_configured": credentials_configured(),

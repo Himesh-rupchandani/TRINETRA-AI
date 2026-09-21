@@ -65,4 +65,6 @@ export interface CameraStreamTicket {
    * backend cannot process the source.
    */
   detectionUrl?: string;
+  /** Server supports per-viewer OFF/ON without reconnecting the decoder. */
+  detectionControl?: boolean;
 }

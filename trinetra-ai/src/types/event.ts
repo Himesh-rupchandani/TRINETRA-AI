@@ -26,6 +26,8 @@ export interface VehicleEvent {
   vehicleId?: number;
   plate: string;
   plateConfidence: number;
+  /** OCR reliability; tentative reads are never silently promoted. */
+  plateStatus?: 'HIGH' | 'LOW_CONFIDENCE' | 'UNKNOWN' | 'SIMULATED';
   timestamp: string;
   latitude: number;
   longitude: number;

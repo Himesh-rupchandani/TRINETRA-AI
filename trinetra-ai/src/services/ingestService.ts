@@ -9,10 +9,18 @@
  * All credentials auto-injected server-side (vite proxy + backend), never in bundle.
  */
 
-import { get, post, isMockMode } from './api';
+import { get, post, isMockMode, backendUrl } from './api';
 import * as mock from '@/mocks/mockBackend';
 import type { Camera } from '@/types';
-import { toCamera, type CameraItemDto } from './adapters';
+import { toCamera, invalidateCameraDirectory, type CameraItemDto } from './adapters';
+
+export interface RegistryActionResult {
+  status: 'success' | 'warning';
+  message: string;
+  total_cameras: number;
+  synced_count?: number;
+  added_count?: number;
+}
 
 interface CatalogueResponse {
   source: string;
@@ -20,6 +28,9 @@ interface CatalogueResponse {
   cameras: CameraItemDto[];
   catalogue_url?: string;
   synced?: boolean;
+  status?: 'success' | 'warning';
+  message?: string;
+  synced_count?: number;
 }
 
 interface StreamsResponse {
@@ -90,6 +101,7 @@ export const ingestService = {
       };
     }
     const res = await get<CatalogueResponse>(`/ingest/catalogue${sync ? '?sync=true' : ''}`);
+    if (sync && res.status === 'success') invalidateCameraDirectory();
     const cameras = (res.cameras ?? []).map(toCamera);
     return { cameras, raw: res };
   },
@@ -107,7 +119,17 @@ export const ingestService = {
         cameras: [] as any,
       };
     }
-    return post<CatalogueResponse>('/ingest/sync');
+    const result = await post<CatalogueResponse>('/ingest/sync');
+    if (result.status === 'success') invalidateCameraDirectory();
+    return result;
+  },
+
+  /** Camera metadata only; never seeds demo detections or starts 30 streams. */
+  async restoreCameraList(): Promise<RegistryActionResult> {
+    if (isMockMode) throw new Error('Camera-list restore requires the real backend.');
+    const result = await post<RegistryActionResult>('/ingest/restore-camera-list');
+    if (result.status === 'success') invalidateCameraDirectory();
+    return result;
   },
 
   /**
@@ -150,7 +172,11 @@ export const ingestService = {
         },
       };
     }
-    return get<StreamsResponse>(`/ingest/streams/${encodeURIComponent(cameraId)}`);
+    const res = await get<StreamsResponse>(`/ingest/streams/${encodeURIComponent(cameraId)}`);
+    return { ...res, streams: { ...res.streams,
+      browser_preview: { ...res.streams.browser_preview, whep_same_origin: backendUrl(res.streams.browser_preview.whep_same_origin) },
+      dashboard_mobile: { ...res.streams.dashboard_mobile, hls_live_same_origin: backendUrl(res.streams.dashboard_mobile.hls_live_same_origin) },
+    } };
   },
 
   /**
@@ -165,7 +191,7 @@ export const ingestService = {
       };
     }
     const res = await get<any>(`/ingest/preview/${encodeURIComponent(cameraId)}`);
-    return res.browser_preview;
+    return { ...res.browser_preview, whep_same_origin: backendUrl(res.browser_preview.whep_same_origin) };
   },
 
   /**
@@ -181,7 +207,7 @@ export const ingestService = {
       };
     }
     const res = await get<any>(`/ingest/hls/${encodeURIComponent(cameraId)}`);
-    return res.hls;
+    return { ...res.hls, live_same_origin: backendUrl(res.hls.live_same_origin) };
   },
 
   /**

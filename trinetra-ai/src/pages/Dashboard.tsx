@@ -12,6 +12,7 @@ import {
   Brain,
   Shield,
 } from 'lucide-react';
+import { TrafficSessionsPanel } from '@/components/dashboard/TrafficSessionsPanel';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { AlertCard } from '@/components/alerts/AlertCard';
 import { CameraPlayer } from '@/components/camera/CameraPlayer';
@@ -161,11 +162,13 @@ export default function Dashboard() {
             <CameraPlayer camera={liveCamera} autoRequest />
             <div className="flex items-center justify-between px-3 py-2.5 text-2xs border-t border-line bg-surface-2/50">
               <span className="text-ink-faint">Secure HLS/WHEP feed • Encrypted • Auto-reconnect 2s→30s • PTS timing</span>
-              <span className="chip border-emerald-200 bg-emerald-500 text-white font-bold text-[10px]">● REC • YOLO11 • 25 FPS • 120ms latency</span>
+              <span className="chip border-emerald-200 bg-emerald-500 text-white font-bold text-[10px]">Sampled detection • measured statistics below</span>
             </div>
           </Panel>
         </section>
       )}
+
+      <TrafficSessionsPanel />
 
       {/* Operations KPIs — Tour: kpis */}
       <section
@@ -209,8 +212,8 @@ export default function Dashboard() {
             </div>
           }
         />
-        <KpiCard label="Vehicle Detections" value={formatNumber(kpis.data?.vehicleDetections24h)} sub={latestSeen ? <>Last seen {relativeTime(latestSeen, now)} · {lastHourCount} last hour</> : 'Last 24 hours'} tile="blue" icon={Car} to="/events" cta="View events" loading={kpis.loading && !kpis.data} />
-        <KpiCard label="ANPR Reads" value={formatNumber(kpis.data?.anprReads24h)} sub={readRate != null ? `${formatPct(readRate)} read rate` : 'Automated recognition'} tile="sky" icon={ScanLine} to="/events" cta="View logs" loading={kpis.loading && !kpis.data} />
+        <KpiCard label="Logged Sightings (24h)" value={formatNumber(kpis.data?.vehicleDetections24h)} sub={latestSeen ? <>Last seen {relativeTime(latestSeen, now)} · {lastHourCount} last hour</> : 'Last 24 hours'} tile="blue" icon={Car} to="/events" cta="View events" loading={kpis.loading && !kpis.data} />
+        <KpiCard label="Saved Plate Reads" value={formatNumber(kpis.data?.anprReads24h)} sub={readRate != null ? `${formatPct(readRate)} of logged sightings` : 'Automated recognition'} tile="sky" icon={ScanLine} to="/events" cta="View logs" loading={kpis.loading && !kpis.data} />
         <KpiCard label="Watchlist Matches" value={formatNumber(kpis.data?.watchlistMatches24h)} sub={lastMatch?.plate ? <>Last: <span className="font-mono\">{lastMatch.plate}</span> · {relativeTime(lastMatch.timestamp, now)}</> : 'No matches 24h'} tone={kpis.data?.watchlistMatches24h ? 'critical' : 'neutral'} tile="orange" icon={ShieldAlert} to="/watchlist" cta="Watchlist" loading={kpis.loading && !kpis.data} />
       </section>
 

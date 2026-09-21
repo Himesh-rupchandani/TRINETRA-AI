@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # Allow running this file directly as a script
 if __name__ == "__main__" and not __package__:
@@ -12,7 +12,8 @@ if __name__ == "__main__" and not __package__:
             sys.path.insert(0, str(p))
     __package__ = "backend.app.api"
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -260,7 +261,20 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
         else None
     )
 
-    if playable and (cam.stream_type or "").lower() == "file":
+    source_type = (cam.stream_type or "").lower()
+    use_backend_view = source_type == "file" or (
+        source_type in ("rtsp", "hls") and not is_sentinel_camera(cam.stream_url)
+    )
+    if playable and use_backend_view:
+        if not vision_available():
+            return CameraStreamTicket(
+                camera_id=slug, stream_type="MJPEG", stream_url="",
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+                playable=False, reason="This camera needs the backend ML/video requirements for playback.",
+            )
+        # Arbitrary authorized RTSP/HLS sources are not Sentinel camera IDs.
+        # Keep credentials server-side and play the backend mirror instead of
+        # constructing a nonexistent /sentinel/stream/<id>/whep path.
         return CameraStreamTicket(
             camera_id=slug,
             stream_type="MJPEG",
@@ -269,6 +283,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
             playable=True,
             reason=None,
             detection_url=detection_url,
+            detection_control=detection_url is not None,
         )
 
     # Sentinel WHEP endpoint is /stream/<id>/whep on the gateway (integrator
@@ -347,7 +362,7 @@ def delete_camera(camera_id: str, db: Session = Depends(get_db)):
 @router.post("/{camera_id}/start", dependencies=[Depends(require_vision)])
 def start_camera(camera_id: str, db: Session = Depends(get_db)):
     """Start ingestion worker for a camera."""
-    cam = db.query(Camera).filter(Camera.camera_id == camera_id).first()
+    cam = db.query(Camera).filter(func.upper(Camera.camera_id) == camera_id.strip().upper()).first()
     if not cam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -359,8 +374,8 @@ def start_camera(camera_id: str, db: Session = Depends(get_db)):
     from ..services.sentinel_stream_service import resolve_ingest_source
 
     source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
-    stream = camera_manager.get_camera(camera_id)
-    if not stream:
+    stream = camera_manager.get_camera(cam.camera_id)
+    if not stream or (not stream.is_alive() and stream.source != source):
         camera_manager.add_camera(
             camera_id=cam.camera_id,
             source=source,
@@ -368,9 +383,9 @@ def start_camera(camera_id: str, db: Session = Depends(get_db)):
             auto_start=True,
         )
     else:
-        camera_manager.start_camera(camera_id)
+        camera_manager.start_camera(cam.camera_id)
 
-    return {"status": "started", "camera_id": camera_id}
+    return {"status": "started", "camera_id": cam.camera_id}
 
 
 @router.post("/{camera_id}/stop", dependencies=[Depends(require_vision)])
@@ -437,7 +452,9 @@ def live_signal_status(camera_id: str):
 
 
 @router.get("/{camera_id}/live/detect", dependencies=[Depends(require_vision)])
-def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
+def live_detection_stream(camera_id: str, db: Session = Depends(get_db),
+                          viewer_id: Optional[str] = Query(None, max_length=80, pattern=r"^[A-Za-z0-9_-]+$"),
+                          analysis: bool = Query(False)):
     """
     Live MJPEG stream with real-time OpenCV vehicle detection (green boxes).
 
@@ -483,7 +500,26 @@ def live_detection_stream(camera_id: str, db: Session = Depends(get_db)):
         existing.source_type = source_type
 
     return StreamingResponse(
-        camera_manager.generate_mjpeg_stream(cam.camera_id, detect_vehicles=True),
+        camera_manager.generate_mjpeg_stream(cam.camera_id, detect_vehicles=True,
+                                             viewer_id=viewer_id, initial_detection=analysis),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+class LiveViewDetectionRequest(BaseModel):
+    viewer_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    enabled: bool
+    sequence: int = Field(0, ge=0)
+
+
+@router.put("/{camera_id}/live/detection", dependencies=[Depends(require_vision)])
+def set_live_view_detection(camera_id: str, payload: LiveViewDetectionRequest, db: Session = Depends(get_db)):
+    camera = db.query(Camera).filter(func.upper(Camera.camera_id) == camera_id.strip().upper()).first()
+    if not camera:
+        raise HTTPException(404, "Camera not found")
+    try:
+        enabled = camera_manager.set_view_detection(camera.camera_id, payload.viewer_id, payload.enabled, payload.sequence)
+    except ValueError:
+        raise HTTPException(429, "Live viewer capacity reached; close unused viewers and retry")
+    return {"camera_id": camera.camera_id.lower(), "enabled": enabled}

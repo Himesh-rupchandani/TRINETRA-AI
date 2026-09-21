@@ -20,17 +20,22 @@ from sqlalchemy import text
 
 from .core.config import settings
 from .core.logging_config import logger
-from .core.vision import vision_available, vision_status, warn_once
+from .core.vision import cv2, vision_available, vision_status, warn_once
+from .core.resource_budget import inference_budget
 from .core.bootstrap import ensure_demo_dataset, get_demo_seed_report, storage_report
 from .core.bootstrap import _format_demo_data  # internal, but stable for health
 from .database.database import init_db, get_db, SessionLocal
 from .database.models import Camera
+from .database.camera_directory import restore_sentinel_directory
 from .database.schemas import HealthResponse
 from .camera.manager import camera_manager
 from .camera.live_source import sync_live_camera
 from .core.paths import evidence_root
 from .services.ws_manager import ws_manager
+from .services.live_anpr_service import live_anpr_service
+from .services.ocr_service import ocr_service
 from .api.cameras import router as cameras_router
+from .api.live_anpr import router as live_anpr_router
 from .api.watchlist import router as watchlist_router
 from .api.alerts import router as alerts_router
 from .api.detections import router as detections_router
@@ -43,6 +48,7 @@ from .api.chunked_uploads import router as chunked_uploads_router
 from .api.video_analysis import router as video_analysis_router
 from .api.evidence import router as evidence_router
 from .api.stats import router as stats_router
+from .api.traffic import router as traffic_router
 from .api.stream import router as sse_router
 from .api.websocket import router as ws_router
 from .api.ingest import router as ingest_router
@@ -54,9 +60,14 @@ from .api.reports import router as reports_router
 from .api.sentinel_proxy import router as sentinel_proxy_router
 
 
+_camera_registry_report = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for database initialization and camera streams."""
+    global _camera_registry_report
+    _camera_registry_report = None
     logger.info("Starting TRINETRA AI Surveillance Engine...")
 
     # 1. Ensure tables exist before we probe blank DB.  init_db() also does this,
@@ -103,6 +114,13 @@ async def lifespan(app: FastAPI):
     # that can never reach the SSE queues or WebSocket transports.
     ws_manager.attach_loop(asyncio.get_running_loop())
 
+    # Resident streams submit samples to the same bounded pipeline as browser
+    # WHEP/HLS frames. Inference never runs inside the camera acquisition loop.
+    if vision_available():
+        cv2.setNumThreads(settings.CV_CPU_THREADS)
+        live_anpr_service.start()
+        camera_manager.set_pipeline_callback(live_anpr_service.submit_packet)
+
     # 2. Sync the env-configured REAL live camera (.env -> registry), then
     # register existing cameras into CameraManager
     db = SessionLocal()
@@ -111,6 +129,17 @@ async def lifespan(app: FastAPI):
             sync_live_camera(db)
         except Exception as e:
             logger.error(f"Error syncing live camera source: {e}")
+        restored_ids = set()
+        if settings.AUTO_REGISTER_SENTINEL_GRID:
+            try:
+                _camera_registry_report = restore_sentinel_directory(db)
+                db.commit()
+                restored_ids = set(_camera_registry_report.get("added_ids", []))
+                logger.info("[CAMERA DIRECTORY] %s", _camera_registry_report["message"])
+            except Exception:
+                db.rollback()
+                _camera_registry_report = {"status": "error", "message": "Camera directory restore failed; existing data was preserved."}
+                logger.exception("[CAMERA DIRECTORY] Could not restore missing camera entries")
         cameras = db.query(Camera).all()
         if not vision_available():
             # No OpenCV in this process: there is nothing to decode, so do not
@@ -128,34 +157,46 @@ async def lifespan(app: FastAPI):
             # 30-camera demo grid never spawns 30 decoder threads.
             auto_start = (
                 settings.AUTO_START_CAMERAS
+                and cam.camera_id.upper() not in restored_ids
                 and (cam.stream_url or "").strip() != ""
                 and (cam.stream_type or "").lower() != "file"
             )
+            source = cam.stream_url
+            source_type = cam.stream_type
+            if auto_start:
+                from .services.sentinel_stream_service import resolve_ingest_source
+                source = resolve_ingest_source(cam.camera_id, cam.stream_url, cam.stream_type)
+                if source != cam.stream_url:
+                    source_type = "rtsp"
             camera_manager.add_camera(
-                camera_id=cam.camera_id,
-                source=cam.stream_url,
-                source_type=cam.stream_type,
-                auto_start=auto_start,
+                camera_id=cam.camera_id, source=source,
+                source_type=source_type, auto_start=auto_start,
             )
     except Exception as e:
         logger.error(f"Error initializing cameras from DB: {e}")
     finally:
         db.close()
 
-    # 2b. Start automated 60-second alert scheduler (unique vehicle & different location on map)
+    # Scripted alerts are for an explicitly opted-in demo only, never a
+    # replacement for real detections when cameras/ML are unavailable.
     from .services.alert_scheduler import start_alert_scheduler, stop_alert_scheduler
-    alert_task = asyncio.create_task(start_alert_scheduler(interval_seconds=60))
+    alert_task = None
+    if settings.DEMO_MODE and settings.DEMO_ALERTS_ENABLED:
+        alert_task = asyncio.create_task(start_alert_scheduler(interval_seconds=60))
 
     yield
 
     # 3. Clean shutdown - release all camera resources and scheduler
     logger.info("Shutting down TRINETRA AI Surveillance Engine...")
     stop_alert_scheduler()
-    alert_task.cancel()
-    ws_manager.detach_loop()
+    if alert_task is not None:
+        alert_task.cancel()
+    camera_manager.set_pipeline_callback(None)
     active_cams = camera_manager.list_cameras()
     for cam in active_cams:
         camera_manager.stop_camera(cam["camera_id"])
+    await asyncio.to_thread(live_anpr_service.stop)
+    ws_manager.detach_loop()
     logger.info("All camera streams and resources cleanly released.")
 
 
@@ -177,6 +218,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Cross-origin Vercel -> Render WHEP clients must see the session URL
+    # to DELETE it on teardown instead of leaking media-gateway sessions.
+    expose_headers=["Location", "ETag"],
 )
 
 
@@ -205,6 +249,7 @@ def health_check(db: Session = Depends(get_db)):
         db_total = len(cam_list)
 
     vis = vision_status()
+    budget = inference_budget()
     storage = storage_report()
     demo_report = get_demo_seed_report()
     components = {
@@ -217,7 +262,7 @@ def health_check(db: Session = Depends(get_db)):
         "realtime_channel": "HEALTHY",
         # Reported honestly instead of assumed: on a vision-less host these
         # features are genuinely off, and the control room should say so.
-        "cv_pipeline": "HEALTHY" if vis["available"] else "DISABLED (API-only: no cv2/numpy)",
+        "cv_pipeline": ("HEALTHY" if budget["allowed"] else "DEGRADED") if vis["available"] else "DISABLED (vision unavailable; see vision diagnostics)",
         "storage": storage["mode"],
         "demo_data": _format_demo_data(demo_report),
     }
@@ -233,6 +278,10 @@ def health_check(db: Session = Depends(get_db)):
         demo_mode=settings.DEMO_MODE,
         timestamp=datetime.now(timezone.utc),
         components=components,
+        vision=vis,
+        camera_registry=_camera_registry_report,
+        ocr=ocr_service.runtime_status(),
+        resource_budget=budget,
     )
 
 
@@ -255,12 +304,14 @@ def root():
 for prefix in ["/api", "/api/v1"]:
     r = APIRouter(prefix=prefix)
     r.include_router(cameras_router)
+    r.include_router(live_anpr_router)
     r.include_router(watchlist_router)
     r.include_router(alerts_router)
     r.include_router(detections_router)
     r.include_router(events_router)
     r.include_router(vehicles_router)
     r.include_router(stats_router)
+    r.include_router(traffic_router)
     r.include_router(internal_router)
     r.include_router(officers_router)
     r.include_router(uploads_router)

@@ -74,7 +74,7 @@ export const config = {
   appName: 'TRINETRA AI',
   tagline: 'Intelligent Vision. Faster Response.',
   useMocks: (env.VITE_USE_MOCKS ?? 'true') !== 'false',
-  apiBaseUrl: env.VITE_API_BASE_URL ?? '/api',
+  apiBaseUrl: (env.VITE_API_BASE_URL?.trim() || '/api').replace(/\/+$/, ''),
   // The backend serves both SSE (/api/stream) and WebSocket (/api/ws/events).
   // SSE is the default: it traverses reverse proxies cleanly and reconnects
   // natively in the browser.

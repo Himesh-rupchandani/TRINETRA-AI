@@ -13,5 +13,12 @@ await import('./adapters.test.mjs');
 await import('./env-setup.test.mjs');
 await import('./backend-status.test.mjs');
 await import('./source-contracts.test.mjs');
+await import('./live-anpr.test.mjs');
+await import('./event-refresh.test.mjs');
+await import('./evidence.test.mjs');
+await import('./traffic.test.mjs');
+await import('./deployment-routing.test.mjs');
+await import('./registry-restore.test.mjs');
+await import('./playback-budget.test.mjs');
 
 process.exit(await runAll());
