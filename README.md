@@ -266,11 +266,13 @@ real network cameras — the file-backed demo grid always plays on demand.
 
 | Mode | How | Data source |
 |---|---|---|
-| **DEMO** (repo default) | `VITE_USE_MOCKS=true` | In-browser synthetic dataset incl. the scripted `GJ01AB1234` journey |
-| **LIVE** | `VITE_USE_MOCKS=false BACKEND_ORIGIN=http://localhost:8000 npm run dev` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
+| **LIVE** (repo default) | `VITE_USE_MOCKS=false` | Real backend only — real events, alerts, SSE realtime, GIS routes. No synthetic plates/confidences/routes |
+| **DEMO** (explicit opt-in) | `VITE_USE_MOCKS=true` | In-browser synthetic dataset incl. the scripted `GJ01AB1234` journey |
 
-Run the backend with `DEMO_MODE=false` in LIVE mode so unreachable cameras stay
-honestly `OFFLINE` instead of falling back to the backend's synthetic feed.
+The repository defaults to LIVE mode. Keep `DEMO_MODE=false` in the backend so
+unreachable cameras stay honestly `OFFLINE` instead of falling back to a
+synthetic video feed. The optional `scripts.seed_demo` command only adds sample
+records to a database; it does not enable synthetic camera frames.
 
 > `BACKEND_ORIGIN` has **no `VITE_` prefix** on purpose: it is read by
 > `vite.config.ts` (Node side) to target the dev proxy, and must never be

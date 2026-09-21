@@ -73,7 +73,9 @@ export const basemaps: { id: BasemapId; label: string }[] = [
 export const config = {
   appName: 'TRINETRA AI',
   tagline: 'Intelligent Vision. Faster Response.',
-  useMocks: (env.VITE_USE_MOCKS ?? 'true') !== 'false',
+  // Real backend mode is the safe default. Pure mock/demo mode is explicit:
+  // set VITE_USE_MOCKS=true when an offline walkthrough is wanted.
+  useMocks: (env.VITE_USE_MOCKS ?? 'false') === 'true',
   apiBaseUrl: (env.VITE_API_BASE_URL?.trim() || '/api').replace(/\/+$/, ''),
   // The backend serves both SSE (/api/stream) and WebSocket (/api/ws/events).
   // SSE is the default: it traverses reverse proxies cleanly and reconnects

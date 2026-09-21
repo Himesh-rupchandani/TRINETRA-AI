@@ -32,7 +32,7 @@ ENV PYTHONUNBUFFERED=1 \
     HOST=0.0.0.0 \
     PORT=8000 \
     APP_ENV=production \
-    DEMO_MODE=true
+    DEMO_MODE=false
 
 EXPOSE 8000
 

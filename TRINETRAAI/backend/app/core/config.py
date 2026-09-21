@@ -137,8 +137,10 @@ class Settings(BaseSettings):
     MATCH_FUZZY_MAX_DISTANCE: int = 1
     MATCH_MIN_CONFIDENCE: float = 0.60          # below this a read never joins a match group
 
-    # Demo Mode
-    DEMO_MODE: bool = True
+    # Demo Mode — disabled by default. Enable explicitly only when a local
+    # synthetic fallback is wanted; unreachable real cameras must not silently
+    # turn into invented video.
+    DEMO_MODE: bool = False
     # Synthetic scheduled alerts require a separate, explicit opt-in. Never
     # generate invented sightings merely because real cameras are unavailable.
     DEMO_ALERTS_ENABLED: bool = False

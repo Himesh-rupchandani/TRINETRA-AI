@@ -140,7 +140,7 @@ dateTo, timeFrom, timeTo, watchlistOnly, page, pageSize`.
 `.env` (see `.env.example`) — **browser-safe values only**:
 
 ```dotenv
-VITE_USE_MOCKS=true          # false → use the real backend
+VITE_USE_MOCKS=false         # true → explicit offline mock/demo mode
 VITE_API_BASE_URL=/api       # same-origin proxy recommended
 VITE_REALTIME_TRANSPORT=sse  # sse | ws | off
 VITE_MAP_CENTER_LAT=23.0225

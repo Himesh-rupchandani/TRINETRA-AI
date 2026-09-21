@@ -123,8 +123,27 @@ function appendMissingKeys(filePath, content, defaults) {
   return `${content}${separator}\n# Added by scripts/auto-setup-env.mjs (keys that were missing)\n${additions}\n`;
 }
 
-function ensureFrontendEnv(filePath, creds) {
+function ensureFrontendEnv(filePath, creds, { localOverride = false } = {}) {
   const name = path.basename(filePath);
+
+  // `.env.local` is an optional override and has higher precedence than `.env`
+  // in Vite. Do not create empty SENTINEL_* keys there: an empty generated
+  // override would silently hide credentials that the operator later adds to
+  // `.env`. An operator-owned `.env.local` is always left byte-for-byte alone.
+  if (localOverride) {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(
+        filePath,
+        '# Optional local overrides. Keep secrets here only if you prefer this file.\n',
+        'utf8',
+      );
+      console.log(`✅ Created ${name} (optional overrides only)`);
+    } else {
+      console.log(`✅ ${name} already exists — left untouched`);
+    }
+    return;
+  }
+
   const defaults = {
     VITE_USE_MOCKS: 'false',
     VITE_API_BASE_URL: '/api',
@@ -191,7 +210,7 @@ function ensureBackendEnv(creds) {
 const creds = resolveCredentials();
 
 ensureFrontendEnv(path.join(frontendRoot, '.env'), creds);
-ensureFrontendEnv(path.join(frontendRoot, '.env.local'), creds);
+ensureFrontendEnv(path.join(frontendRoot, '.env.local'), creds, { localOverride: true });
 ensureBackendEnv(creds);
 
 if (!isSet(creds.email) || !isSet(creds.password)) {

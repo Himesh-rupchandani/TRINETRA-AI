@@ -21,7 +21,7 @@ services:
       - EVIDENCE_ROOT=/app/data/evidence
       - UPLOAD_DIR=/app/data/uploads
       - ANALYSIS_DIR=/app/data/uploads/analysis
-      - DEMO_MODE=true
+      - DEMO_MODE=false
       - SENTINEL_CATALOGUE_URL=https://cctv.corp8.cloud/cameras.json
       - CORS_ORIGINS=["*"]
     volumes:
