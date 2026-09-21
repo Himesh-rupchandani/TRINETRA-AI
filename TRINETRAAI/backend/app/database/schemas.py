@@ -131,6 +131,8 @@ class CameraStreamTicket(TRINETRASchema):
     # Same-origin MJPEG view of the same camera with real-time OpenCV vehicle
     # detection (green boxes). None when the source cannot be processed.
     detection_url: Optional[str] = None
+    # Allows a player to keep one MJPEG connection while toggling AI safely.
+    detection_control: bool = False
 
 
 class CameraStreamInfo(TRINETRASchema):

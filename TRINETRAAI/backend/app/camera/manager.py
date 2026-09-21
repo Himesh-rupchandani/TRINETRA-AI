@@ -385,7 +385,7 @@ class CameraManager:
             return control.enabled
 
     def generate_mjpeg_stream(self, camera_id: str, detect_vehicles: bool = False,
-                              viewer_id: Optional[str] = None, initial_detection: bool = True):
+                              viewer_id: Optional[str] = None, initial_detection: bool = False):
         """Yield multipart MJPEG stream frames for HTTP live view.
 
         When no resident worker is running for the camera (e.g. file-backed
@@ -464,6 +464,9 @@ class CameraManager:
                             packet = self.get_latest_packet(camera_id) or self.get_latest_packet(camera_id.upper())
                             if packet is not None:
                                 media_time = packet.pts_ms / 1000.0
+                                # This viewer explicitly enabled detection. A
+                                # resident decoder alone no longer implies OCR.
+                                detector.submit_packet(packet, viewer_requested=True)
                         frame = detector.annotate(camera_id, frame,
                                                   source_id="resident" if resident else source_id,
                                                   media_time=media_time)

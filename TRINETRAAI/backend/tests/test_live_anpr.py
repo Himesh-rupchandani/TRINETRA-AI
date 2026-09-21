@@ -468,7 +468,7 @@ def test_synthetic_camera_fallback_cannot_create_real_sightings(rig):
     from app.camera.packet import FramePacket
     svc, factory, *_ = rig
     packet = FramePacket(np.zeros((32, 64, 3), dtype=np.uint8), 1.0, "CAM1", 1, source_type="demo")
-    assert svc.submit_packet(packet) is False
+    assert svc.submit_packet(packet, viewer_requested=True) is False
     assert not svc._pending and not rows(factory)
 
 

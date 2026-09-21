@@ -309,6 +309,7 @@ class TestStreamTicketDetectionUrl:
             try:
                 ticket = client.get("/api/cameras/generic/stream").json()
                 assert ticket["stream_type"] == "MJPEG"
+                assert ticket["detection_control"] is True
                 assert ticket["stream_url"] == "/api/cameras/generic/live"
                 assert "rtsp://" not in str(ticket)
             finally:

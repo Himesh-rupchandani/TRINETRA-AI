@@ -170,6 +170,7 @@ export interface StreamTicketDto {
   playable?: boolean;
   reason?: string | null;
   detection_url?: string | null;
+  detection_control?: boolean;
 }
 
 /* --------------------------- camera directory ------------------------------ */
@@ -502,6 +503,7 @@ export function toStreamTicket(dto: StreamTicketDto): CameraStreamTicket {
     expiresAt: dto.expires_at,
     poster: undefined, // resolved by the player (synthetic/registry still)
     detectionUrl: dto.detection_url ? backendUrl(dto.detection_url) : undefined,
+    detectionControl: dto.detection_control === true,
   };
 }
 

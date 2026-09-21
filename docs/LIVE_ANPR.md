@@ -44,8 +44,12 @@ LIVE_ANPR_DEDUP_SECONDS=60
 OCR_ENABLED=true
 ```
 
-Open **Live Cameras → Open camera**. **Plate detection: On** is the default.
-The player shows boxes and readable numbers; the camera's history and
+Open **Live Cameras → Open camera**. **Plate detection: Off** is the default.
+Opening a video does not enable OCR. Press **Plate detection: Off** only on the
+camera you want to analyse; the button changes to **On**. Changing camera,
+stopping playback, reopening the page or refreshing starts OFF again. Automatic
+transport retries within the same requested session do not opt another camera in.
+When manually enabled, the player shows boxes and readable numbers; the camera's history and
 **Vehicle Log** refresh automatically. Ordinary plate reads generate an
 **in-app notification**, with a link to that plate/camera in the log. They do
 not become police/watchlist alarms merely because a plate was read.
@@ -57,8 +61,9 @@ not become police/watchlist alarms merely because a plate was read.
   backend MJPEG view. Inference runs separately from decoding/rendering.
 - Browser sampling runs only while its player is playing in a visible tab.
   To keep scanning after navigating away, start the camera's **resident
-  backend ingestion** (`POST /api/cameras/CAMERA_ID/start`). It must be
-  reachable from the backend. `AUTO_START_CAMERAS=true` starts configured
+  backend ingestion** (`POST /api/cameras/CAMERA_ID/start`) and explicitly set
+  `LIVE_ANPR_RESIDENT_ENABLED=true`. It must be reachable from the backend.
+  Resident AI is OFF by default; starting a decoder alone does not enable OCR. `AUTO_START_CAMERAS=true` starts configured
   network cameras at boot; do not enable a whole large grid on a small CPU.
   Stop a resident worker with `POST /api/cameras/CAMERA_ID/stop`.
 - **Recorded footage is labelled RECORDED, not LIVE.** Its log records carry
@@ -140,6 +145,7 @@ rows on screen; a successful retry reconciles them without a full-page reload.
 | `LIVE_ANPR_MAX_VEHICLES` | 3 | Largest vehicle boxes considered per sampled frame |
 | `LIVE_ANPR_SAMPLE_SECONDS` | 1 | Minimum sampling interval per camera |
 | `LIVE_ANPR_WORKERS` | 1 | Shared inference workers, not one worker per viewer |
+| `LIVE_ANPR_RESIDENT_ENABLED` | false | Explicit opt-in for unattended/background OCR |
 | `CV_CPU_THREADS` | 2 | Native YOLO/OCR CPU thread budget |
 | `LIVE_ANPR_MAX_CAMERAS` | 32 | Memory/admission limit, **not** a throughput guarantee |
 | `LIVE_ANPR_DEDUP_SECONDS` | 60 | Repeat-sighting cooldown |
@@ -325,3 +331,22 @@ Use adequate RAM/CPU or a separate ML host and benchmark a few authorized feeds.
 More worker processes or replicas are not a safe workaround for the current
 in-memory scheduler. Saved readings, two-frame confirmation and unknown/Verify
 labels remain unchanged; no synthetic events fill a paused inference stream.
+
+
+## Default-OFF rollout
+
+Keep `LIVE_ANPR_ENABLED=true`, `VEHICLE_DETECTION_ENABLED=true` and
+`OCR_ENABLED=true` if operators should be able to enable a selected camera.
+Those are backend capabilities, not automatic per-player activation. Keep
+`AUTO_START_CAMERAS=false` and `LIVE_ANPR_RESIDENT_ENABLED=false` for the
+low-load, viewer-driven workflow. Manually requested uploaded-video analysis
+jobs are separate and still consume resources. Already-loaded ML models may
+retain RAM until the process restarts; switching a viewer OFF is not unloading
+all shared weights or stopping another explicitly enabled viewer.
+
+Controlled MJPEG starts with `analysis=false`; raw native playback sends no
+sampled JPEG while OFF. The stream ticket advertises `detection_control` so a
+new frontend does not accidentally send an OFF viewer to an older server's
+always-detect endpoint. A legacy direct `/live/detect` request remains an
+explicit inference request for compatibility. The browser smoke now explicitly
+clicks OFF → ON when a detection test is requested. Saved records are untouched.

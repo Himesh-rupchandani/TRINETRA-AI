@@ -4,7 +4,7 @@ This adds **motion-aware tracking, per-camera line/zone configuration, and curre
 
 ## Using it
 
-1. Open a configured camera with **Plate detection: On**.
+1. Open a configured camera, then explicitly switch **Plate detection: Off → On** (OFF is the default).
 2. Photos still appear immediately. The **Traffic observations · current session** panel sits below the player/photo workflow.
 3. Expand **Counting line / zone settings**. Choose no rule, line crossing, or zone entry; select horizontal/vertical movement and a direction filter.
 4. Adjust percentages against the video overlay: **yellow is an unsaved preview**, cyan is saved geometry. Lines have an adjustable position and span; zones are normalized rectangles. SVG `meet` aligns them with the same letterboxing as the video.

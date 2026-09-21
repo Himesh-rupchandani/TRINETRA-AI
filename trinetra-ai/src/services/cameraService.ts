@@ -16,6 +16,7 @@ interface StreamTicketDto {
   playable?: boolean;
   reason?: string | null;
   detection_url?: string | null;
+  detection_control?: boolean;
 }
 
 /**

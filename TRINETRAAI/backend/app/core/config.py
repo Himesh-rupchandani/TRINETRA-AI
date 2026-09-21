@@ -101,6 +101,9 @@ class Settings(BaseSettings):
     # Live ANPR is independent of playback: one latest-frame mailbox per camera,
     # a bounded worker pool, and at most 3 vehicles OCR'd in a sampled frame.
     LIVE_ANPR_ENABLED: bool = True
+    # Optional unattended/resident OCR is separate from a viewer opting in.
+    # Default OFF: merely starting a decoder must not load the ML models.
+    LIVE_ANPR_RESIDENT_ENABLED: bool = False
     LIVE_ANPR_MAX_VEHICLES: int = Field(3, ge=1, le=10)
     LIVE_ANPR_TRACKER: Literal["motion", "iou"] = "motion"
     LIVE_ANPR_MAX_TRACKED_VEHICLES: int = Field(32, ge=3, le=128)

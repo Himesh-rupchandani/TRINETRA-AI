@@ -16,7 +16,7 @@ COPY TRINETRAAI/backend /app/TRINETRAAI/backend/
 COPY trinetra_detection/models/yolo11n.pt trinetra_detection/models/best.pt /app/trinetra_detection/models/
 COPY scripts/render_start.sh /app/scripts/render_start.sh
 ENV APP_ENV=production DEBUG=false DEMO_MODE=false DEMO_ALERTS_ENABLED=false \
-    AUTO_SEED_DEMO=false AUTO_START_CAMERAS=false AUTO_REGISTER_SENTINEL_GRID=true TRINETRA_API_ONLY=0
+    AUTO_SEED_DEMO=false AUTO_START_CAMERAS=false LIVE_ANPR_RESIDENT_ENABLED=false AUTO_REGISTER_SENTINEL_GRID=true TRINETRA_API_ONLY=0
 WORKDIR /app/TRINETRAAI/backend
 EXPOSE 10000
 CMD ["bash", "/app/scripts/render_start.sh"]

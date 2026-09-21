@@ -159,3 +159,64 @@ def test_model_loaders_do_not_import_heavy_engines_when_memory_is_refused(monkey
     assert v._ensure_model() is None and not v.enabled
     o=ocr.OcrService();assert o._ensure_engine() is None and not o._attempted
     p=plates.PlateDetectorService();assert p._ensure_model() is None and not p._model_attempted
+
+
+def test_managed_mjpeg_is_off_without_an_explicit_opt_in(monkeypatch):
+    import cv2
+    manager=CameraManager()
+    calls=[]
+    monkeypatch.setattr(live,'live_anpr_service',SimpleNamespace(
+        submit=lambda *a,**kw:calls.append('submit'),
+        annotate=lambda camera,frame,**kw:calls.append('annotate') or frame))
+    capture=SimpleNamespace(get=lambda prop:25,release=lambda:None)
+    monkeypatch.setattr(manager,'_ondemand_candidates',lambda camera:[('fixture.mp4',True)])
+    monkeypatch.setattr(manager,'_open_ondemand_capture',lambda source:capture)
+    monkeypatch.setattr(manager,'_read_ondemand_frame',lambda *a:np.zeros((100,200,3),np.uint8))
+    stream=manager.generate_mjpeg_stream('CAM1',detect_vehicles=True,viewer_id='off-default')
+    try:
+        assert next(stream).startswith(b'--frame')
+        assert calls==[]  # video served without even submitting an AI sample
+        manager.set_view_detection('CAM1','off-default',True,1)
+        next(stream)
+        assert calls==['submit','annotate']
+    finally:
+        stream.close()
+
+
+def test_resident_decoder_requires_separate_opt_in_but_a_selected_viewer_can_scan(rig,monkeypatch):
+    from app.camera.packet import FramePacket
+    from app.core.config import settings
+    svc,*_=rig
+    calls=[]
+    monkeypatch.setattr(svc,'submit',lambda *a,**kw:calls.append(kw) or True)
+    monkeypatch.setattr(settings,'LIVE_ANPR_RESIDENT_ENABLED',False)
+    packet=FramePacket(np.zeros((30,40,3),np.uint8),1000,'CAM1',1,source_type='rtsp')
+    assert not svc.submit_packet(packet) and not calls
+    assert svc.submit_packet(packet,viewer_requested=True) and len(calls)==1
+    monkeypatch.setattr(settings,'LIVE_ANPR_RESIDENT_ENABLED',True)
+    assert svc.submit_packet(packet) and len(calls)==2
+    packet.source_type='demo'
+    assert not svc.submit_packet(packet,viewer_requested=True) and len(calls)==2
+
+
+def test_selected_mjpeg_view_can_scan_resident_frames_without_background_ai(monkeypatch):
+    from app.camera.packet import FramePacket
+    manager=CameraManager()
+    frame=np.zeros((100,200,3),np.uint8)
+    packet=FramePacket(frame,1000,'CAM1',1,source_type='rtsp')
+    calls=[]
+    monkeypatch.setattr(live,'live_anpr_service',SimpleNamespace(
+        submit_packet=lambda packet,**kw:calls.append(kw),
+        annotate=lambda camera,frame,**kw:frame))
+    monkeypatch.setattr(manager,'get_latest_frame',lambda *a,**kw:frame.copy())
+    monkeypatch.setattr(manager,'has_live_signal',lambda *a:True)
+    monkeypatch.setattr(manager,'get_latest_packet',lambda *a:packet)
+    stream=manager.generate_mjpeg_stream('CAM1',detect_vehicles=True,viewer_id='resident-view',initial_detection=False)
+    try:
+        next(stream); assert calls==[]
+        manager.set_view_detection('CAM1','resident-view',True,1)
+        next(stream); assert calls==[{'viewer_requested':True}]
+        manager.set_view_detection('CAM1','resident-view',False,2)
+        next(stream); assert len(calls)==1
+    finally:
+        stream.close()

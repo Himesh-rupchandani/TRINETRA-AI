@@ -92,6 +92,9 @@ AUTO_SEED_DEMO=false
 AUTO_REGISTER_SENTINEL_GRID=true
 AUTO_START_CAMERAS=false
 LIVE_ANPR_ENABLED=true
+LIVE_ANPR_RESIDENT_ENABLED=false
+VEHICLE_DETECTION_ENABLED=true
+OCR_ENABLED=true
 LIVE_ANPR_MAX_VEHICLES=3
 LIVE_ANPR_WORKERS=1
 CV_CPU_THREADS=2
@@ -170,6 +173,16 @@ Existing data is preserved and streams are not all started. See
 manual restore and catalogue-login diagnostics. A count of 31 includes the
 30 grid entries plus the separate `CAMLIVE` slot; it is not proof of 31 playing
 videos.
+
+## Default plate detection is now OFF
+
+The frontend opens cameras in view-only mode. Manually turn detection ON for a
+selected camera when needed. Keep `AUTO_START_CAMERAS=false` and
+`LIVE_ANPR_RESIDENT_ENABLED=false` so unattended decoding does not start OCR.
+If you previously set `LIVE_ANPR_ENABLED=false` as an emergency OOM workaround,
+set it back to `true` **only if you want manual ON available**; the memory guard
+still applies and can pause AI on an undersized instance. Changing to default
+OFF does not make a Free instance large enough for the full ML stack.
 
 ## 5. Verify the actual Render service
 

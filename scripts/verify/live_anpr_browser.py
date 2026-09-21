@@ -92,7 +92,10 @@ def run(args):
             log.get_by_role("heading", name="Vehicle Log", exact=True).wait_for()
             camera = context.new_page()
             camera.goto(f"{base}/cameras/{camera_id}", wait_until="domcontentloaded")
-            camera.get_by_role("button", name="Plate detection: On").wait_for()
+            # Opening playback is deliberately AI-OFF. This opt-in smoke
+            # explicitly enables analysis rather than relying on an eager default.
+            camera.get_by_role("button", name="Plate detection: Off", exact=True).click()
+            camera.get_by_role("button", name="Plate detection: On", exact=True).wait_for()
             camera.wait_for_function("() => [...document.images].some(i => i.src.includes('/live/detect') && i.naturalWidth > 0)")
             gallery = camera.get_by_test_id("live-photo-evidence")
             gallery.wait_for(timeout=args.timeout * 1000)

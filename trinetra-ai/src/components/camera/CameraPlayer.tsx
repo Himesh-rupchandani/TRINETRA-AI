@@ -8,7 +8,7 @@ import { useHlsStream, whepUrlToHls } from '@/hooks/useHlsStream';
 import { canDecodeOverWebRtc, webRtcAvailable } from '@/lib/mediaSupport';
 import { cn, formatTime } from '@/lib/utils';
 import { config } from '@/lib/config';
-import { controlledMjpegUrl } from '@/lib/anprScheduling';
+import { controlledMjpegUrl, cameraDetectionEnabled } from '@/lib/anprScheduling';
 import { anprStatusLabel } from '@/lib/liveDetections';
 import { CountingOverlay } from './CountingOverlay';
 import type { CountingPreview } from '@/services/trafficService';
@@ -90,16 +90,20 @@ export function CameraPlayer({
   // this camera (OpenCV + YOLO, green boxes) it is shown instead of the raw
   // feed. The operator can switch back to the raw stream at any time, and any
   // failure of the detection view silently falls back to the raw feed.
-  const [aiBoxes, setAiBoxes] = useState(true);
+  // Watching a camera must not implicitly start the ML stack. Each new
+  // camera/playback session is OFF until the operator explicitly opts in.
+  const [detectionCameraId, setDetectionCameraId] = useState<string | null>(null);
+  const aiBoxes = cameraDetectionEnabled(camera.id, detectionCameraId);
   const [detectionFailed, setDetectionFailed] = useState(false);
   const [viewerId] = useState(() => crypto.randomUUID());
   const initialDetection = useRef(aiBoxes);
   const detectionSequence = useRef(0);
   useLayoutEffect(() => { initialDetection.current = aiBoxes; }, [aiBoxes]);
-  const managedMjpeg = isMjpeg && !detectionFailed && Boolean(ticket?.detectionUrl);
+  const managedMjpeg = isMjpeg && ticket?.detectionControl === true && !detectionFailed && Boolean(ticket?.detectionUrl);
   // Keep WHEP/HLS on the native video decoder; switching them to MJPEG for
   // AI tied playback to inference speed. Only file/MJPEG cameras use that view.
   const detectionActive = isMjpeg && aiBoxes && !detectionFailed && Boolean(ticket?.detectionUrl);
+  const legacyDetectionActive = detectionActive && !managedMjpeg;
   const [anprStatus, setAnprStatus] = useState<LiveAnprSnapshot | null>(null);
   const [anprError, setAnprError] = useState<string | null>(null);
   const onAnprStatus = useCallback((value: LiveAnprSnapshot) => {
@@ -129,7 +133,7 @@ export function CameraPlayer({
     };
     void poll();
     return () => { stopped = true; abort.abort(); clearTimeout(timer); };
-  }, [detectionActive, wanted, camera.id, onAnprStatus, onDetectionSnapshot]);
+  }, [detectionActive, wanted, camera.id, onAnprStatus, onDetectionSnapshot, aiBoxes]);
 
   // The MJPEG views (file feed / AI detection view) can also serve an honest
   // "NO SIGNAL" placeholder when the camera source is unreachable from this
@@ -219,8 +223,14 @@ export function CameraPlayer({
       setMjpegSrc(controlledMjpegUrl(ticket.detectionUrl, viewerId, initialDetection.current));
       return;
     }
+    // Older backends ignore analysis=false. Stay on their RAW endpoint while
+    // OFF, rather than accidentally starting inference during a rolling deploy.
+    if (legacyDetectionActive && ticket?.detectionUrl) {
+      setMjpegSrc(ticket.detectionUrl);
+      return;
+    }
     setMjpegSrc(isMjpeg ? (ticket?.streamUrl || `/cvfeed/${camera.id}`) : null);
-  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, managedMjpeg, camera.id, isMjpeg, viewerId]);
+  }, [ticket?.cameraId, ticket?.streamUrl, ticket?.detectionUrl, managedMjpeg, legacyDetectionActive, camera.id, isMjpeg, viewerId]);
 
   useEffect(() => {
     if (!managedMjpeg || !wanted || config.useMocks) return;
@@ -260,6 +270,7 @@ export function CameraPlayer({
   };
 
   const stopStream = () => {
+    setDetectionCameraId(null);
     setWanted(false);
     setTicket(null);
     setTransport('whep');
@@ -272,6 +283,7 @@ export function CameraPlayer({
 
   // Switching camera always releases the previous feed first.
   useEffect(() => {
+    setDetectionCameraId(null);
     setWanted(false);
     setTicket(null);
     setTransport('whep');
@@ -428,7 +440,7 @@ export function CameraPlayer({
             decoding="async"
             onLoad={() => setMjpegAlive(true)}
             onError={() => {
-              if (managedMjpeg && mjpegSrc?.startsWith(ticket?.detectionUrl ?? '')) {
+              if ((managedMjpeg || legacyDetectionActive) && mjpegSrc?.startsWith(ticket?.detectionUrl ?? '')) {
                 setDetectionFailed(true); // detection view unavailable -> raw feed
               } else if (mjpegSrc !== ticket?.streamUrl && ticket?.streamUrl) {
                 setMjpegSrc(ticket.streamUrl); // CV engine not running -> backend view
@@ -679,9 +691,9 @@ export function CameraPlayer({
                 <button
                   type="button"
                   className="btn-ghost btn-xs"
-                  onClick={() => setAiBoxes((v) => !v)}
+                  onClick={() => setDetectionCameraId(aiBoxes ? null : camera.id.toLowerCase())}
                   aria-pressed={aiBoxes}
-                  title="Read plates, notify and save to Vehicle Log. Up to 3 vehicles per sampled frame by default."
+                  title="Off by default. Enable plate detection only for this camera when needed. Saved logs and evidence are kept."
                 >
                   <ScanSearch size={11} aria-hidden /> Plate detection: {aiBoxes ? 'On' : 'Off'}
                 </button>

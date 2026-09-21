@@ -1,6 +1,6 @@
 import { deepEq, eq, includes, loadTs, ok, readSource, suite, test } from './harness.mjs';
 const { FrameEncoder } = loadTs('src/services/frameEncoder.ts');
-const { frameAdmissionDelay, nextSampleDelay, controlledMjpegUrl } = loadTs('src/lib/anprScheduling.ts');
+const { frameAdmissionDelay, nextSampleDelay, controlledMjpegUrl, cameraDetectionEnabled } = loadTs('src/lib/anprScheduling.ts');
 const snapshot = (changes={}) => ({status:'SCANNING',pending:false,sample_interval_ms:1000,result_age_ms:10,...changes});
 const video = () => ({readyState:4,paused:false,videoWidth:1920,videoHeight:1080,currentTime:12});
 
@@ -64,8 +64,29 @@ test('MJPEG toggles are commands; they cannot change the video URL/restart a rec
   eq(controlledMjpegUrl('https://backend.test/api/cameras/a/live/detect','view',true),'https://backend.test/api/cameras/a/live/detect?viewer_id=view&analysis=true');
   const source=readSource('trinetra-ai/src/components/camera/CameraPlayer.tsx');
   includes(source,'setViewDetection(camera.id, viewerId, aiBoxes, ++detectionSequence.current');
-  includes(source,'managedMjpeg, camera.id, isMjpeg, viewerId]');
+  includes(source,'managedMjpeg, legacyDetectionActive, camera.id, isMjpeg, viewerId]');
   const overlay=readSource('trinetra-ai/src/components/camera/DetectionOverlay.tsx');
   includes(overlay,'capture.dispose()');
   includes(overlay,'frameAdmissionDelay(preflight');
+});
+
+
+suite('live cameras — manual detection opt-in');
+test('every new camera is OFF and another camera cannot inherit ON', () => {
+  eq(cameraDetectionEnabled('cam01',null),false);
+  eq(cameraDetectionEnabled('cam01','cam01'),true);
+  eq(cameraDetectionEnabled('cam02','cam01'),false);
+  eq(cameraDetectionEnabled('CAM01','cam01'),true);
+  eq(controlledMjpegUrl('/api/cameras/cam01/live/detect','viewer',false), '/api/cameras/cam01/live/detect?viewer_id=viewer&analysis=false');
+});
+test('player defaults, stopping and camera changes clear the opt-in', () => {
+  const source=readSource('trinetra-ai/src/components/camera/CameraPlayer.tsx');
+  includes(source, 'const [detectionCameraId, setDetectionCameraId] = useState<string | null>(null)');
+  includes(source, 'const aiBoxes = cameraDetectionEnabled(camera.id, detectionCameraId)');
+  includes(source, 'const stopStream = () => {\n    setDetectionCameraId(null)');
+  includes(source, '// Switching camera always releases the previous feed first.\n  useEffect(() => {\n    setDetectionCameraId(null)');
+  includes(source, 'active={aiBoxes && phase ===');
+  includes(source, 'const detectionActive = isMjpeg && aiBoxes');
+  includes(source, 'ticket?.detectionControl === true');
+  includes(source, 'const legacyDetectionActive = detectionActive && !managedMjpeg');
 });

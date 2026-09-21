@@ -241,10 +241,12 @@ class LiveAnprService:
                 return 1000
             return max(0, round((settings.LIVE_ANPR_SAMPLE_SECONDS - elapsed) * 1000))
 
-    def submit_packet(self, packet) -> bool:
+    def submit_packet(self, packet, *, viewer_requested: bool = False) -> bool:
         # CameraStream can generate clearly labelled demo frames on a failed
         # source in DEMO_MODE. They must NEVER enter the real sighting log.
         if packet.source_type == "demo":
+            return False
+        if not viewer_requested and not settings.LIVE_ANPR_RESIDENT_ENABLED:
             return False
         return self.submit(
             packet.camera_id, packet.frame, source_id="resident",

@@ -22,3 +22,9 @@ export function controlledMjpegUrl(url: string, viewerId: string, initialEnabled
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}viewer_id=${encodeURIComponent(viewerId)}&analysis=${initialEnabled ? 'true' : 'false'}`;
 }
+
+
+/** Explicit, camera-scoped opt-in; never inherit another camera's ON state. */
+export function cameraDetectionEnabled(cameraId: string, enabledCameraId: string | null): boolean {
+  return enabledCameraId != null && enabledCameraId === cameraId.toLowerCase();
+}

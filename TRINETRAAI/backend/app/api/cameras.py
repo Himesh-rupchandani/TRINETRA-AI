@@ -283,6 +283,7 @@ def get_camera_stream_ticket(camera_id: str, db: Session = Depends(get_db)):
             playable=True,
             reason=None,
             detection_url=detection_url,
+            detection_control=detection_url is not None,
         )
 
     # Sentinel WHEP endpoint is /stream/<id>/whep on the gateway (integrator
@@ -453,7 +454,7 @@ def live_signal_status(camera_id: str):
 @router.get("/{camera_id}/live/detect", dependencies=[Depends(require_vision)])
 def live_detection_stream(camera_id: str, db: Session = Depends(get_db),
                           viewer_id: Optional[str] = Query(None, max_length=80, pattern=r"^[A-Za-z0-9_-]+$"),
-                          analysis: bool = Query(True)):
+                          analysis: bool = Query(False)):
     """
     Live MJPEG stream with real-time OpenCV vehicle detection (green boxes).
 
