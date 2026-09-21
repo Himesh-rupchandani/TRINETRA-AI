@@ -260,7 +260,15 @@ class OcrService:
                         lines.append((str(text).strip(), score))
                 return lines
             if self._engine_name == "easyocr":
-                results = engine.readtext(image, detail=1, paragraph=False)
+                # The reference ANPR project uses an alphanumeric allowlist. Keep it
+                # here as a cheap false-positive filter for EasyOCR; RapidOCR
+                # receives the same filtering later through candidate_from_text.
+                results = engine.readtext(
+                    image,
+                    detail=1,
+                    paragraph=False,
+                    allowlist="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+                )
                 lines = []
                 for item in results or []:
                     try:
