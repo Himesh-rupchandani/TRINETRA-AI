@@ -364,7 +364,7 @@ def test_frame_api_validation_and_throttling(api, rig, monkeypatch):
     res = api.post("/api/cameras/cam1/detect-frame?client_id=tab1&media_time=1", content=jpeg, headers=headers)
     assert res.status_code == 200 and res.json()["accepted"] is True
     assert api.post("/api/cameras/CAM1/detect-frame", content=jpeg, headers=headers).json()["accepted"] is False
-    assert api.get("/api/cameras/CAM1/anpr").json()["max_vehicles"] == 3
+    assert api.get("/api/cameras/CAM1/anpr").json()["max_vehicles"] == settings.LIVE_ANPR_MAX_VEHICLES
     assert api.get("/api/cameras/unknown/anpr").status_code == 404
     monkeypatch.setattr(settings, "LIVE_ANPR_ENABLED", False)
     assert api.post("/api/cameras/cam1/detect-frame", content=jpeg, headers=headers).status_code == 503

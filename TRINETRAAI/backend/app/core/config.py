@@ -99,12 +99,14 @@ class Settings(BaseSettings):
     DETECTION_BOX_FILL_ALPHA: float = 0.55
 
     # Live ANPR is independent of playback: one latest-frame mailbox per camera,
-    # a bounded worker pool, and at most 3 vehicles OCR'd in a sampled frame.
+    # a bounded worker pool, and a configurable number of vehicles OCR'd in a
+    # sampled frame. Ten covers busy scenes while remaining bounded for smooth
+    # playback; increase only when the host has sufficient memory.
     LIVE_ANPR_ENABLED: bool = True
     # Optional unattended/resident OCR is separate from a viewer opting in.
     # Default OFF: merely starting a decoder must not load the ML models.
     LIVE_ANPR_RESIDENT_ENABLED: bool = False
-    LIVE_ANPR_MAX_VEHICLES: int = Field(3, ge=1, le=10)
+    LIVE_ANPR_MAX_VEHICLES: int = Field(10, ge=1, le=32)
     LIVE_ANPR_TRACKER: Literal["motion", "iou"] = "motion"
     LIVE_ANPR_MAX_TRACKED_VEHICLES: int = Field(32, ge=3, le=128)
     LIVE_ANPR_SAMPLE_SECONDS: float = Field(1.0, ge=0.25, le=30)

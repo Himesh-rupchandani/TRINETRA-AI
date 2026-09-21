@@ -36,7 +36,8 @@ server-side proxy configuration, not `VITE_` variables or source control.
 DEMO_MODE=false
 DEMO_ALERTS_ENABLED=false
 LIVE_ANPR_ENABLED=true
-LIVE_ANPR_MAX_VEHICLES=3
+# Maximum vehicles OCR'd per sampled frame. Increase only with enough RAM.
+LIVE_ANPR_MAX_VEHICLES=10
 LIVE_ANPR_SAMPLE_SECONDS=1
 LIVE_ANPR_WORKERS=1
 CV_CPU_THREADS=2
