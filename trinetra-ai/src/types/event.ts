@@ -26,6 +26,8 @@ export interface VehicleEvent {
   vehicleId?: number;
   plate: string;
   plateConfidence: number;
+  /** Exact OCR string before normalisation, so a weak read stays reviewable. */
+  plateRaw?: string;
   /** OCR reliability; tentative reads are never silently promoted. */
   plateStatus?: 'HIGH' | 'LOW_CONFIDENCE' | 'UNKNOWN' | 'SIMULATED';
   timestamp: string;
@@ -45,6 +47,14 @@ export interface VehicleEvent {
   videoFile?: string;
   /** Position inside the uploaded video, in seconds. */
   videoOffsetSec?: number;
+  /** Stored analysis video this sighting was cut from (multi-video analysis only). */
+  videoId?: string;
+  /** Frame index inside the source video, when the pipeline recorded one. */
+  frameNumber?: number;
+  /** Vehicle detector box [x1, y1, x2, y2] in source-frame pixels. */
+  bbox?: [number, number, number, number];
+  /** Vehicle detector confidence (0-100) — not the same thing as the OCR confidence. */
+  vehicleConfidence?: number;
 }
 
 export interface EventFilters {

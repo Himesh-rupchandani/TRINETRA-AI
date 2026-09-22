@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileImage, ImageOff, MapPin, ScanLine, AlertCircle } from 'lucide-react';
+import { FileImage, ImageOff, MapPin, Play, ScanLine, AlertCircle } from 'lucide-react';
 import type { VehicleEvent } from '@/types';
 import { cn, formatDateTime, formatVideoOffset, prettyPlate, prettyVehicleClass } from '@/lib/utils';
+import { hasSourceMoment } from '@/lib/sourceVideo';
 import { hideBrokenImage, trackId, vehicleStill } from '@/utils/mediaAssets';
 import { ConfidenceBar } from '@/components/common/Links';
 import { EmptyState } from '@/components/common/Panel';
+import { PlateReadCard, SourceMomentPlayer } from '@/components/vehicle/PlateReadCard';
 
 /**
- * Evidence panel — CCTV frame + plate crop + capture metadata.
+ * Evidence panel — CCTV frame + plate-read provenance + capture metadata.
  * Handles real evidence (including uploaded videos), synthetic demo frames,
  * and broken images with proper fallbacks so no broken-image icon ever shows.
+ * Uploaded footage gets a jump to the exact second in the source video instead
+ * of a plate crop, because those flows store a vehicle crop only.
  */
 export function EvidencePanel({
   event,
@@ -24,7 +28,10 @@ export function EvidencePanel({
   // Errors belong to one URL, not to the panel forever. New detections must
   // load automatically after an older photo failed or expired.
   const [failedFrame, setFailedFrame] = useState<string | null>(null);
-  const [failedPlate, setFailedPlate] = useState<string | null>(null);
+  // Which detection the source player was opened for. Remembering the id (not a
+  // boolean) means selecting another sighting drops the player by itself, with
+  // no reset effect and no stale video of the previous vehicle.
+  const [momentFor, setMomentFor] = useState<string | null>(null);
 
   if (!event) {
     return (
@@ -39,14 +46,16 @@ export function EvidencePanel({
   }
 
   const ev = event.evidence;
+  const showMoment = momentFor === event.id;
   const frameError = Boolean(ev?.frameUrl && failedFrame === ev.frameUrl);
-  const plateError = Boolean(ev?.plateCropUrl && failedPlate === ev.plateCropUrl);
   const isUpload = event.evidenceRef?.startsWith('uploads/') || event.evidenceRef?.startsWith('analysis/');
 
   return (
     <div className={cn('flex flex-col gap-3.5 p-4', className)}>
       <figure className="overflow-hidden rounded border border-line bg-black">
-        {ev?.synthetic ? (
+        {showMoment ? (
+          <SourceMomentPlayer event={event} onClose={() => setMomentFor(null)} />
+        ) : ev?.synthetic ? (
           <div className="relative aspect-video w-full overflow-hidden bg-black">
             <div className="absolute inset-0 grid place-items-center bg-surface-2 text-2xs text-ink-faint">
               <span className="flex items-center gap-1.5">
@@ -125,38 +134,23 @@ export function EvidencePanel({
             {ev?.synthetic && (
               <span className="chip border-degraded/45 bg-degraded/10 text-degraded">Demo / synthetic</span>
             )}
+            {hasSourceMoment(event) && (
+              <button
+                type="button"
+                className="btn-ghost btn-xs"
+                onClick={() => setMomentFor(showMoment ? null : event.id)}
+                title={`Play ${event.videoFile ?? 'the source video'} at this moment`}
+              >
+                <Play size={10} className="mr-1 inline" aria-hidden />
+                {showMoment ? 'Back to frame' : `Play from ${formatVideoOffset(event.videoOffsetSec)}`}
+              </button>
+            )}
           </span>
         </figcaption>
       </figure>
 
       <div className="grid gap-3.5 sm:grid-cols-2">
-        <figure className="overflow-hidden rounded border border-line bg-black">
-          {ev?.plateCropUrl && !plateError ? (
-            <img
-              key={ev.plateCropUrl}
-              src={ev.plateCropUrl}
-              alt={event.plate}
-              className="flex h-20 w-full items-center justify-center object-contain font-mono text-2xl font-bold tracking-widest text-white"
-              loading="lazy"
-              decoding="async"
-              onError={() => setFailedPlate(ev.plateCropUrl!)}
-            />
-          ) : ev?.plateCropUrl && plateError ? (
-            <div className="grid h-20 place-items-center gap-1 bg-surface-2 p-2 text-center">
-              <p className="font-mono text-xs font-bold tracking-widest text-ink">{prettyPlate(event.plate)}</p>
-              <p className="text-[10px] text-ink-faint">Plate crop unavailable</p>
-              <button type="button" className="text-[10px] underline" onClick={() => setFailedPlate(null)}>Retry plate crop</button>
-            </div>
-          ) : (
-            <div className="grid h-20 place-items-center bg-surface-2 text-2xs text-ink-faint">
-              {isUpload ? 'Plate crop not saved for uploads' : 'No plate crop'}
-            </div>
-          )}
-          <figcaption className="border-t border-line bg-surface-1 px-3 py-1.5 text-[10px] text-ink-faint">
-            <ScanLine size={10} className="mr-1 inline" aria-hidden /> ANPR crop
-            {isUpload && <span className="ml-1 text-ink-faint">(vehicle crop only)</span>}
-          </figcaption>
-        </figure>
+        <PlateReadCard event={event} />
 
         <dl className="grid grid-cols-2 content-start gap-x-3 gap-y-2 text-2xs">
           <dt className="text-ink-faint">Plate</dt>

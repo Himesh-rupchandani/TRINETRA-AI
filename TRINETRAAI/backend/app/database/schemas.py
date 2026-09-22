@@ -291,6 +291,11 @@ class VehicleEventResponse(TRINETRASchema):
     # Manually-uploaded CCTV video provenance (None for live-camera sightings).
     video_file: Optional[str] = None
     video_offset_sec: Optional[float] = None
+    # Which stored analysis video + frame index the crop was taken from. The
+    # evidence panel needs these to open the exact source moment; a vehicle
+    # crop is stored for these sightings, never a separate plate crop.
+    video_id: Optional[str] = None
+    frame_number: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
