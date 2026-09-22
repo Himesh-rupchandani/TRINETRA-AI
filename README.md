@@ -19,38 +19,11 @@
   <b>Sub-Second ANPR</b> • <b>Statewide 80,000-Camera Scalability</b> • <b>99.98% Bandwidth Reduction</b> • <b>BSA 2023 Court Admissibility</b>
 </p>
 
----
-
-### 🌐 Live Platform Overview
-<img src="docs/screenshots/01-dashboard-hero.png" width="100%" alt="TRINETRA AI Command Center Dashboard" />
 
 </div>
 
 ---
 
-## 📑 Table of Contents
-- [Executive Summary for Hackathon Judges](#-executive-summary-for-hackathon-judges)
-- [Why Existing Solutions Fail (The 80,000 Camera Math)](#-why-existing-solutions-fail-the-80000-camera-math)
-- [Key Features & System Capabilities](#-key-features--system-capabilities)
-  - [1. Command & Control Center](#1-command--control-center)
-  - [2. Multi-Feed Live Surveillance Grid](#2-multi-feed-live-surveillance-grid)
-  - [3. Multi-Video Forensic Analysis & Cloud Ingest](#3-multi-video-forensic-analysis--cloud-ingest)
-  - [4. Real-Time Vehicle Sighting Logs](#4-real-time-vehicle-sighting-logs)
-  - [5. Statewide GIS Geospatial Network](#5-statewide-gis-geospatial-network)
-  - [6. Deep-Dive Plate Extraction & OCR](#6-deep-dive-plate-extraction--ocr)
-  - [7. Journey Reconstruction & Speed Forensics](#7-journey-reconstruction--speed-forensics)
-- [System Architecture](#-system-architecture)
-- [Legal Compliance & Court Admissibility](#-legal-compliance--court-admissibility)
-- [Tech Stack](#-tech-stack)
-- [Quick Start Guide](#-quick-start-guide)
-  - [1-Click Docker Deployment](#option-a--docker-compose-recommended)
-  - [Local Manual Setup](#option-b--local-development)
-  - [Standalone Detection Package](#option-c--standalone-detection-module)
-- [Testing & Quality Assurance](#-testing--quality-assurance)
-- [API Reference](#-api-reference)
-- [Team & Acknowledgments](#-team--acknowledgments)
-
----
 
 ## 🎯 Executive Summary for Hackathon Judges
 
