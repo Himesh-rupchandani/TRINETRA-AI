@@ -59,6 +59,10 @@ export interface VehicleEventDto {
   plate_raw?: string | null;
   plate_number?: string | null;
   plate_confidence?: number | null;
+  /** Vehicle detector score for the box this sighting came from. */
+  vehicle_confidence?: number | null;
+  /** Source-frame pixels, `[x1, y1, x2, y2]`. */
+  bbox?: number[] | null;
   plate_status?: VehicleEvent['plateStatus'] | null;
   vehicle_class?: string | null;
   event_time: string;
@@ -68,6 +72,9 @@ export interface VehicleEventDto {
   watchlist_match?: boolean;
   video_file?: string | null;
   video_offset_sec?: number | null;
+  /** Multi-video analysis provenance: which stored video + frame index. */
+  video_id?: string | null;
+  frame_number?: number | null;
   created_at?: string;
 }
 
@@ -298,6 +305,19 @@ function pct(conf?: number | null): number {
   return Math.round(Math.min(Math.max(conf, 0), 1) * 1000) / 10;
 }
 
+/**
+ * A detector box is only usable when it is four finite numbers with a positive
+ * area; anything else (legacy rows, truncated JSON) renders no overlay at all
+ * rather than a box guessed from partial data.
+ */
+function asBbox(box?: number[] | null): VehicleEvent['bbox'] {
+  if (!Array.isArray(box) || box.length !== 4) return undefined;
+  const [x1, y1, x2, y2] = box.map(Number);
+  if (![x1, y1, x2, y2].every((n) => Number.isFinite(n))) return undefined;
+  if (x2 <= x1 || y2 <= y1) return undefined;
+  return [x1, y1, x2, y2];
+}
+
 export function toCamera(dto: CameraItemDto): Camera {
   return {
     id: (dto.id ?? dto.camera_id ?? '').toLowerCase(),
@@ -347,7 +367,10 @@ export function toVehicleEvent(
     vehicleId: dto.vehicle_track_id ?? undefined,
     plate: plate ?? '',
     plateConfidence: pct(dto.plate_confidence),
+    plateRaw: dto.plate_raw ?? undefined,
     plateStatus: dto.plate_status ?? undefined,
+    vehicleConfidence: dto.vehicle_confidence != null ? pct(dto.vehicle_confidence) : undefined,
+    bbox: asBbox(dto.bbox),
     timestamp: dto.event_time,
     latitude: lat,
     longitude: lng,
@@ -360,6 +383,8 @@ export function toVehicleEvent(
     watchlistMatch: matched,
     videoFile: dto.video_file ?? undefined,
     videoOffsetSec: dto.video_offset_sec ?? undefined,
+    videoId: dto.video_id ?? undefined,
+    frameNumber: dto.frame_number ?? undefined,
   };
 }
 
