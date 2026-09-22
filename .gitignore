@@ -18,3 +18,7 @@ trinetra_detection.zip
 
 # Local verification scratch (models, traces, reports stay out of Git)
 .cache/
+.tmp-box-review/
+*.db
+node_modules/
+
