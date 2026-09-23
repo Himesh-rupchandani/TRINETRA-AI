@@ -334,10 +334,10 @@ Interactive Swagger documentation is available at `/docs` when the backend is ru
 
 ## 👥 Team & Acknowledgments
 Team lead & Team Members:
-1. Ravi Gohel @https://github.com/ravigohel142996
-2. Himesh Rupchandani @https://github.com/Himesh-rupchandani
-3. Subh Anant
---
+1. Ravi Gohel -- @https://github.com/ravigohel142996
+2. Himesh Rupchandani -- @https://github.com/Himesh-rupchandani
+3. Subh Anant -- @https://github.com/subhanant
+
 
 Developed with dedication for the **Gujarat Police Innovation Hackathon 2026**.  
 Special thanks to mentors, department officials, and open-source contributors in the computer vision community.
