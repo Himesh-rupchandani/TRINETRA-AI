@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
+import { CopyrightFooter } from '@/components/layout/CopyrightFooter';
 import { TopNav } from '@/components/layout/TopNav';
 import { HeroBanner } from '@/components/layout/HeroBanner';
 import { AlertBanner } from '@/components/layout/AlertBanner';
@@ -47,6 +48,7 @@ export function MainLayout() {
       <main id="main" className="min-h-0 flex-1">
         <Outlet />
       </main>
+      <CopyrightFooter />
       <LiveAlertToaster />
       <LivePlateToaster />
       <Tour />
