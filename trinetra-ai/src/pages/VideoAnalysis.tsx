@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Cctv, Layers, Loader2, Play, RefreshCcw, Video } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { analysisUnavailableReason, type AnalysisHealth } from '@/lib/analysisReadiness';
+import { get } from '@/services/api';
 import { Panel, EmptyState, ErrorState } from '@/components/common/Panel';
 import { AddVideosPanel } from '@/components/analysis/AddVideosPanel';
 import { VideoSourceList } from '@/components/analysis/VideoSourceList';
@@ -24,6 +26,7 @@ export default function VideoAnalysis() {
   const [status, setStatus] = useState<AnalysisStatus | null>(null);
   const [results, setResults] = useState<AnalysisResults | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -45,6 +48,13 @@ export default function VideoAnalysis() {
       const s = await refreshStatus();
       if (s.totalVideos > 0) await refreshResults();
       setError(null);
+      // Health is advisory; old backends may not expose the readiness fields.
+      // The run endpoint remains the authority and performs its own check.
+      try {
+        setUnavailableReason(analysisUnavailableReason(await get<AnalysisHealth>('/health')));
+      } catch {
+        setUnavailableReason(null);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Request failed');
     } finally {
@@ -55,6 +65,14 @@ export default function VideoAnalysis() {
   useEffect(() => {
     void refreshAll();
   }, [refreshAll]);
+
+  // If the initial load failed while the service was waking up, recover the
+  // page as well as the global health banner without requiring a reload.
+  useEffect(() => {
+    if (status !== null || !error) return;
+    const timer = window.setInterval(() => void refreshAll(), 45_000);
+    return () => window.clearInterval(timer);
+  }, [status, error, refreshAll]);
 
   // Poll while any video is being downloaded/queued/processed.
   const busy = status?.status === 'PROCESSING';
@@ -127,7 +145,7 @@ export default function VideoAnalysis() {
               type="button"
               className="btn-primary"
               onClick={startAnalysis}
-              disabled={starting || busy || analysable.length === 0}
+              disabled={starting || busy || analysable.length === 0 || !!unavailableReason}
             >
               {starting || busy ? (
                 <>
@@ -148,6 +166,12 @@ export default function VideoAnalysis() {
           {error && (
             <div className="panel">
               <ErrorState message={error} onRetry={() => void refreshAll()} />
+            </div>
+          )}
+
+          {unavailableReason && (
+            <div role="status" className="panel border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              <strong>Video analysis unavailable:</strong> {unavailableReason} Use Refresh to recheck after the backend is upgraded or recovers.
             </div>
           )}
 

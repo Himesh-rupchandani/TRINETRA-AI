@@ -52,7 +52,8 @@ export function BackendCheck() {
     try {
       const res = await fetch(path, {
         headers: { accept: 'application/json' },
-        signal: timeoutSignal(8_000),
+        // Render services can take longer than eight seconds to wake from sleep.
+        signal: timeoutSignal(30_000),
       });
       status = res.status;
       contentType = res.headers.get('content-type') ?? '';
@@ -72,6 +73,13 @@ export function BackendCheck() {
     if ((import.meta.env.VITE_DEPLOY_CHECK ?? 'true') === 'false') return;
     void probe();
   }, [probe]);
+
+  // Recover the banner after transient cold starts or brief backend restarts.
+  useEffect(() => {
+    if (verdict?.state !== 'UNREACHABLE') return;
+    const timer = window.setInterval(() => void probe(), 45_000);
+    return () => window.clearInterval(timer);
+  }, [verdict?.state, probe]);
 
   if (config.useMocks || !verdict || verdict.state === 'OK' || !verdict.message) return null;
   const state = verdict.state as Exclude<BackendState, 'OK'>;

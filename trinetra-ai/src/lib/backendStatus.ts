@@ -87,7 +87,7 @@ export function classifyHealthProbe(probe: HealthProbe): BackendVerdict {
   if (status === 0) {
     return {
       state: 'UNREACHABLE',
-      message: `Could not reach ${path} on ${origin} at all — the browser got no response from the server.`,
+      message: `Could not reach ${path} from ${origin}. The backend may be starting, offline, or blocked by CORS or your network. If the direct health URL works but this page does not, check that the backend allows this frontend origin in CORS_ORIGINS. The check will retry automatically.`,
     };
   }
 

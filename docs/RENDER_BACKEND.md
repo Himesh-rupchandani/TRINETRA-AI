@@ -225,3 +225,35 @@ heavy preflight imports and the API/player remains available with live AI paused
 for memory. This is an explicit capability reduction, not a claim that full
 YOLO/OCR now fits a Free instance. Increase the service's compute memory or use a
 larger ML host for full detection. No paid service change is made automatically.
+
+## Video Analysis: health URL works but the browser says “API unreachable”
+
+A direct health response only proves that the API answered that request. The
+browser can still block a cross-origin response, or the service may have been
+asleep when the page first loaded. On the machine running the browser, check
+both the response and the CORS preflight (replace the origin if using a
+trusted custom domain):
+
+```sh
+curl -i -H 'Origin: https://trinetraai-sigma.vercel.app' https://trinetraai-backend-6ih1.onrender.com/api/health
+curl -i -X OPTIONS -H 'Origin: https://trinetraai-sigma.vercel.app' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type' \
+  https://trinetraai-backend-6ih1.onrender.com/api/analysis/run
+```
+
+Both responses must allow the frontend origin via `Access-Control-Allow-Origin`;
+the preflight must also allow the requested method and headers. If not, set
+Render's `CORS_ORIGINS` to a JSON list containing the exact frontend origin,
+then redeploy/restart the **existing** Render service. Check the browser's
+Network/Console for CORS, network errors, and cold-start timeouts. Do not open
+CORS to all origins as a substitute for protecting the API.
+
+The health response also reports `resource_budget`. If it says
+`INSUFFICIENT_MEMORY`, the API can list videos but the YOLO/OCR pipeline cannot
+safely run. Upgrade the existing service to a suitably sized instance, or use
+a properly provisioned ML backend; do not disable the memory guard just to
+make the warning disappear. The budget is an admission check, not proof that
+models, OCR, storage, or actual analysis work. Uploads and evidence also need
+appropriate durable storage. After deploying any changes, test an actual small
+video end to end.

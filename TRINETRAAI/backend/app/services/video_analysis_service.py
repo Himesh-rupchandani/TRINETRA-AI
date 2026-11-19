@@ -34,6 +34,7 @@ from typing import Dict, List, Optional
 from ..core.vision import cv2
 
 from ..core.config import settings
+from ..core.resource_budget import inference_budget
 from ..core.logging_config import logger
 from ..core.paths import BACKEND_ROOT, analysis_root, evidence_root
 from ..database.database import SessionLocal
@@ -408,6 +409,9 @@ def start_analysis(db, video_ids: Optional[List[str]] = None) -> List[VideoSourc
             "image to analyse videos. Videos you uploaded are listed below "
             "and will be processed when the pipeline runs on a CV-enabled host."
         )
+    budget = inference_budget()
+    if not budget["allowed"]:
+        raise AnalysisError(budget["reason"] or "Analysis is unavailable due to backend memory pressure.")
     q = db.query(VideoSource)
     if video_ids:
         q = q.filter(VideoSource.video_id.in_(video_ids))
@@ -488,12 +492,19 @@ def _run_video(video_id: str) -> None:
         # deterministic and reproducible.
         anchor = video.started_at
 
-        vehicle_detection_service._ensure_model()
-        detector_ok = vehicle_detection_service._model is not None
+        budget = inference_budget()
+        if not budget["allowed"]:
+            video.status = FAILED
+            video.error = budget["reason"] or "Analysis is unavailable due to backend memory pressure."
+            video.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            return
+
+        detector_ok = vehicle_detection_service._ensure_model() is not None
         ocr_ok = ocr_service.available
         notes = []
         if not detector_ok:
-            notes.append("Vehicle detection model unavailable — install ultralytics + torch (CPU).")
+            notes.append(vehicle_detection_service.last_error or "Vehicle detection model unavailable — install ultralytics + torch (CPU).")
         if not ocr_ok:
             notes.append("No OCR engine installed — plates stay Unknown. Install rapidocr-onnxruntime.")
         if notes:
