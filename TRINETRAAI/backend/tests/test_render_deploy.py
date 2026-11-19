@@ -137,3 +137,32 @@ def test_render_scripts_are_root_scoped_single_worker_and_non_destructive():
     assert 'render_preflight.py' in start
     assert 'seed_demo' not in start and 'rm -' not in start
     subprocess.run(['bash','-n', str(ROOT/'scripts/render_build.sh'), str(ROOT/'scripts/render_start.sh')], check=True)
+
+
+def test_cors_production_and_preflight_allow_expected_origins():
+    from app.main import app
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from starlette.middleware.cors import CORSMiddleware
+
+    middleware = next(m for m in app.user_middleware if m.cls is CORSMiddleware)
+    isolated = FastAPI()
+    isolated.add_middleware(CORSMiddleware, **{**middleware.kwargs, 'allow_origins': []})
+
+    @isolated.get('/api/health')
+    def health():
+        return {'status': 'healthy'}
+
+    with TestClient(isolated) as client:
+        for origin in ('https://trinetraai-sigma.vercel.app', 'http://localhost:5173', 'http://127.0.0.1:5173'):
+            response = client.get('/api/health', headers={'Origin': origin})
+            assert response.headers['access-control-allow-origin'] == origin
+            preflight = client.options('/api/health', headers={
+                'Origin': origin, 'Access-Control-Request-Method': 'POST',
+                'Access-Control-Request-Headers': 'content-type',
+            })
+            assert preflight.status_code == 200
+            assert preflight.headers['access-control-allow-origin'] == origin
+        for origin in ('https://evil.example', 'https://trinetraai-sigma.vercel.app.evil.test'):
+            response = client.get('/api/health', headers={'Origin': origin})
+            assert 'access-control-allow-origin' not in response.headers

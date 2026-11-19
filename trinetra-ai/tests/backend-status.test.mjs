@@ -85,6 +85,8 @@ test('no response at all => UNREACHABLE', () => {
   const verdict = classifyHealthProbe({ status: 0, contentType: '', body: '', origin: ORIGIN });
   eq(verdict.state, 'UNREACHABLE');
   includes(verdict.message, 'Could not reach');
+  includes(verdict.message, 'CORS_ORIGINS');
+  includes(verdict.message, 'retry automatically');
 });
 
 test('live but pre-fix build (no components.demo_data) => STALE_BUILD', () => {
